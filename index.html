@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ficha de Juego — Panel del Tipster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --pitch:#0F3D2E;
+    --pitch-dark:#0A2B20;
+    --ink:#14201D;
+    --chalk:#F5F2EA;
+    --paper:#FFFFFF;
+    --amber:#D9A441;
+    --win:#3E8E5A;
+    --loss:#B23A2E;
+    --line:#D8D2C2;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--chalk);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.display{font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:0.02em;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  header.top{
+    background:var(--pitch);
+    color:var(--chalk);
+    padding:18px 20px 14px;
+    position:sticky; top:0; z-index:20;
+    box-shadow:0 2px 10px rgba(0,0,0,0.15);
+  }
+  header.top .brand{display:flex; align-items:center; gap:10px;}
+  header.top .arc{width:26px;height:26px;border:3px solid var(--amber); border-radius:0 100% 0 0; border-left:none; border-bottom:none; transform:rotate(0deg);}
+  header.top h1{font-size:19px; margin:0; font-weight:600; letter-spacing:0.06em;}
+  header.top p{margin:2px 0 0; font-size:11.5px; color:#C9D8CF; font-family:'Inter',sans-serif; text-transform:none; letter-spacing:0;}
+
+  nav.tabs{
+    display:flex; overflow-x:auto; gap:2px;
+    background:var(--pitch-dark);
+    padding:0 4px;
+  }
+  nav.tabs button{
+    flex:0 0 auto;
+    background:transparent; border:none; color:#9DB6A8;
+    padding:10px 14px 9px; font-family:'Oswald'; font-size:12.5px; letter-spacing:0.05em;
+    cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;
+    text-transform:uppercase;
+  }
+  nav.tabs button .num{font-family:'JetBrains Mono'; color:var(--amber); margin-right:6px; font-size:11px;}
+  nav.tabs button.active{color:#fff; border-bottom-color:var(--amber);}
+
+  main{max-width:920px; margin:0 auto; padding:18px 14px 60px;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .card{
+    background:var(--paper); border:1px solid var(--line); border-radius:6px;
+    padding:16px; margin-bottom:14px;
+  }
+  .card h2{font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:8px;}
+  .card h2 .tag{background:var(--pitch); color:var(--amber); font-family:'JetBrains Mono'; font-size:10px; padding:2px 6px; border-radius:3px; letter-spacing:0.05em;}
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
+  @media(max-width:520px){.grid3{grid-template-columns:1fr 1fr;} .grid2{grid-template-columns:1fr;}}
+
+  label{display:block; font-size:11px; color:#6b6155; margin-bottom:3px; font-weight:600; text-transform:uppercase; letter-spacing:0.03em;}
+  input,select{
+    width:100%; padding:8px 9px; border:1px solid var(--line); border-radius:4px;
+    background:var(--chalk); font-family:'JetBrains Mono'; font-size:13px; color:var(--ink);
+    margin-bottom:10px;
+  }
+  input:focus,select:focus{outline:2px solid var(--amber); outline-offset:1px;}
+
+  button.btn{
+    background:var(--pitch); color:#fff; border:none; padding:10px 16px;
+    border-radius:4px; font-family:'Oswald'; font-size:13px; letter-spacing:0.04em;
+    text-transform:uppercase; cursor:pointer;
+  }
+  button.btn:hover{background:var(--pitch-dark);}
+  button.btn.amber{background:var(--amber); color:var(--pitch-dark);}
+  button.btn.ghost{background:transparent; color:var(--loss); border:1px solid var(--loss); padding:6px 10px; font-size:11px;}
+
+  table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  th{text-align:left; font-family:'Oswald'; font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:#6b6155; border-bottom:2px solid var(--line); padding:6px 5px;}
+  td{padding:7px 5px; border-bottom:1px solid var(--line); font-family:'JetBrains Mono';}
+  tr:last-child td{border-bottom:none;}
+  .pos{color:var(--win); font-weight:700;}
+  .neg{color:var(--loss); font-weight:700;}
+
+  .statgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-bottom:14px;}
+  .stat{background:var(--pitch); color:#fff; border-radius:6px; padding:12px; position:relative; overflow:hidden;}
+  .stat .val{font-family:'Oswald'; font-size:22px; font-weight:600;}
+  .stat .lbl{font-size:10px; text-transform:uppercase; letter-spacing:0.05em; color:#B9CCC0; margin-top:2px;}
+
+  .arcwrap{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+  .arc-gauge{position:relative; width:120px; height:120px;}
+  .result-box{background:var(--chalk); border:1px dashed var(--line); border-radius:6px; padding:12px; margin-top:8px;}
+  .ev-pos{color:var(--win); font-family:'Oswald'; font-weight:600;}
+  .ev-neg{color:var(--loss); font-family:'Oswald'; font-weight:600;}
+  .hint{font-size:11.5px; color:#7a7062; line-height:1.5; margin-top:4px;}
+  .divider{border:none; border-top:1px solid var(--line); margin:14px 0;}
+  .empty{text-align:center; padding:30px 10px; color:#9a8f7d; font-size:13px;}
+  .chip{display:inline-block; background:var(--pitch); color:#fff; font-family:'JetBrains Mono'; font-size:10px; padding:2px 7px; border-radius:10px; margin-left:6px;}
+</style>
+</head>
+<body>
+
+<div id="setupOverlay" style="position:fixed; inset:0; background:var(--chalk); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px;">
+  <div class="card" style="max-width:480px; width:100%;">
+    <h2><span class="tag">Paso 1</span> Conecta tu base de datos</h2>
+    <p class="hint">Este panel guarda tus datos en tu propio proyecto de Supabase (gratuito) para que se sincronicen entre PC y móvil. Solo hace falta hacerlo una vez.</p>
+    <ol class="hint" style="padding-left:18px;">
+      <li>Crea una cuenta gratis en <strong>supabase.com</strong> y un proyecto nuevo.</li>
+      <li>En el proyecto, ve a <strong>SQL Editor</strong> y ejecuta esto una vez:
+        <pre style="background:var(--pitch-dark); color:#fff; padding:10px; border-radius:4px; font-size:11px; overflow-x:auto; margin:6px 0;">create table tipster_data (
+  id text primary key,
+  data jsonb,
+  updated_at timestamptz default now()
+);
+alter table tipster_data enable row level security;
+create policy "public read" on tipster_data for select using (true);
+create policy "public write" on tipster_data for insert with check (true);
+create policy "public update" on tipster_data for update using (true);</pre>
+      </li>
+      <li>Ve a <strong>Project Settings → API</strong> y copia la "Project URL" y la clave "anon public" aquí abajo.</li>
+    </ol>
+    <label>Project URL</label>
+    <input id="setup_url" placeholder="https://tuproyecto.supabase.co">
+    <label>Anon public key</label>
+    <input id="setup_key" placeholder="eyJhbGciOi...">
+    <button class="btn amber" onclick="saveSupabaseConfig()">Conectar</button>
+    <div class="result-box" id="setupResult" style="display:none;"></div>
+    <p class="hint" style="margin-top:10px;">Nota: con esta configuración simple, cualquiera con tu URL y clave podría leer o escribir tus datos. Para uso personal es un riesgo bajo (no hay contraseñas ni datos bancarios), pero no compartas esa clave públicamente.</p>
+  </div>
+</div>
+
+<div id="appRoot" style="display:none;">
+
+<header class="top">
+  <div class="brand"><div class="arc"></div><h1>Panel del Tipster</h1></div>
+  <p>Primera · Segunda · 1ª RFEF (Grupo 1) — corners, goles y 1X2, siempre en pre-partido</p>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-view="dashboard" class="active"><span class="num">01</span>Panel</button>
+  <button data-view="teams"><span class="num">02</span>Equipos</button>
+  <button data-view="corners"><span class="num">03</span>Corners</button>
+  <button data-view="goals"><span class="num">04</span>1X2 / Goles</button>
+  <button data-view="bets"><span class="num">05</span>Apuestas</button>
+  <button data-view="bankroll"><span class="num">06</span>Banca</button>
+</nav>
+
+<main>
+
+  <!-- DASHBOARD -->
+  <div class="view active" id="view-dashboard">
+    <div class="statgrid" id="dashStats"></div>
+    <div class="card">
+      <h2><span class="tag">Evolución</span> Banca acumulada</h2>
+      <canvas id="bankChart" height="140"></canvas>
+    </div>
+    <div class="card">
+      <h2><span class="tag">Detalle</span> Rendimiento por mercado</h2>
+      <table id="marketTable"><thead><tr><th>Mercado</th><th>Apuestas</th><th>Aciertos</th><th>ROI</th><th>CLV medio</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <!-- TEAMS -->
+  <div class="view" id="view-teams">
+    <div class="card">
+      <h2><span class="tag">Auto</span> Importar temporada (CSV)</h2>
+      <p class="hint">Sube el CSV de una temporada y calculamos las medias de córners y goles por equipo, casa/fuera, automáticamente. Se fusiona con lo que ya tengas guardado (media ponderada por partidos).</p>
+      <p class="hint"><strong>Dónde conseguirlo:</strong> Primera/Segunda → football-data.co.uk (columnas HomeTeam, AwayTeam, FTHG, FTAG, HC, AC). 1ª RFEF Grupo 1 → footystats.org/es/spain/primera-division-rfef-group-1 (botón "Descargar datos en CSV"). Cualquier CSV con esas columnas (en inglés o español) sirve.</p>
+      <div class="grid3">
+        <div><label>Liga de este archivo</label>
+          <select id="imp_liga"><option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Otra</option></select>
+        </div>
+        <div><label>Temporada (ej. 25/26)</label><input id="imp_temporada" type="text" placeholder="25/26"></div>
+        <div><label>Peso</label><input id="imp_weight" type="number" step="0.5" value="1" min="0.5"></div>
+      </div>
+      <div><label>Archivo CSV</label><input id="imp_file" type="file" accept=".csv,text/csv"></div>
+      <p class="hint">Si vuelves a subir el CSV de una temporada que ya tenías (mismo nombre de liga + temporada), <strong>se sustituye</strong> automáticamente — nunca se suma encima. Así puedes resubir la 25/26 cada semana sin duplicar nada.</p>
+      <button class="btn amber" onclick="importCSV()">Importar / actualizar</button>
+      <div class="result-box" id="importResult" style="display:none;"></div>
+      <hr class="divider">
+      <p class="hint" style="margin-top:-6px;"><strong>Temporadas cargadas</strong></p>
+      <table id="importsTable"><thead><tr><th>Liga</th><th>Temporada</th><th>Peso</th><th>Partidos</th><th></th></tr></thead><tbody></tbody></table>
+      <div class="empty" id="importsEmpty" style="display:none;">Todavía no has importado ninguna temporada.</div>
+    </div>
+    <div class="card">
+      <h2><span class="tag">Nuevo</span> Ficha de equipo (manual)</h2>
+      <p class="hint">Introduce medias por partido (no acumulados). Estas fichas alimentan directamente las calculadoras de Corners y Goles.</p>
+      <div class="grid2">
+        <div><label>Nombre del equipo</label><input id="t_name" placeholder="Ej. Racing de Ferrol"></div>
+        <div><label>Liga</label>
+          <select id="t_liga">
+            <option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Otra</option>
+          </select>
+        </div>
+      </div>
+      <hr class="divider">
+      <p class="hint" style="margin-top:-6px;"><strong>Corners (media por partido)</strong></p>
+      <div class="grid3">
+        <div><label>Córners a favor · Casa</label><input id="t_cfh" type="number" step="0.1" placeholder="5.8"></div>
+        <div><label>Córners en contra · Casa</label><input id="t_cah" type="number" step="0.1" placeholder="3.9"></div>
+        <div><label>Partidos jugados casa</label><input id="t_mh" type="number" step="1" placeholder="15"></div>
+        <div><label>Córners a favor · Fuera</label><input id="t_cfa" type="number" step="0.1" placeholder="4.6"></div>
+        <div><label>Córners en contra · Fuera</label><input id="t_caa" type="number" step="0.1" placeholder="5.2"></div>
+        <div><label>Partidos jugados fuera</label><input id="t_ma" type="number" step="1" placeholder="15"></div>
+      </div>
+      <hr class="divider">
+      <p class="hint" style="margin-top:-6px;"><strong>Goles (media por partido)</strong></p>
+      <div class="grid3">
+        <div><label>Goles a favor · Casa</label><input id="t_gfh" type="number" step="0.1" placeholder="1.6"></div>
+        <div><label>Goles en contra · Casa</label><input id="t_gah" type="number" step="0.1" placeholder="0.9"></div>
+        <div></div>
+        <div><label>Goles a favor · Fuera</label><input id="t_gfa" type="number" step="0.1" placeholder="1.1"></div>
+        <div><label>Goles en contra · Fuera</label><input id="t_gaa" type="number" step="0.1" placeholder="1.4"></div>
+        <div></div>
+      </div>
+      <button class="btn amber" onclick="saveTeam()">Guardar ficha</button>
+    </div>
+    <div class="card">
+      <h2><span class="tag">Base</span> Equipos guardados</h2>
+      <table id="teamsTable"><thead><tr><th>Equipo</th><th>Liga</th><th>Corners C/F</th><th>Goles C/F</th><th></th></tr></thead><tbody></tbody></table>
+      <div class="empty" id="teamsEmpty" style="display:none;">Aún no has añadido ningún equipo. Empieza por el que juegue este fin de semana.</div>
+    </div>
+  </div>
+
+  <!-- CORNERS MODEL -->
+  <div class="view" id="view-corners">
+    <div class="card">
+      <h2><span class="tag">Modelo</span> Córners — Poisson</h2>
+      <p class="hint">λ_local = media(córners a favor del local en casa, córners en contra del visitante fuera) — y análogo para el visitante. Se suman para el total del partido.</p>
+      <div class="grid2">
+        <div><label>Equipo local</label><select id="c_home"></select></div>
+        <div><label>Equipo visitante</label><select id="c_away"></select></div>
+      </div>
+      <button class="btn" onclick="loadCornersFromTeams()">Cargar medias de la ficha</button>
+      <hr class="divider">
+      <div class="grid2">
+        <div><label>λ esperado — Local</label><input id="c_lh" type="number" step="0.1"></div>
+        <div><label>λ esperado — Visitante</label><input id="c_la" type="number" step="0.1"></div>
+      </div>
+      <div class="grid3">
+        <div><label>Línea over/under (total)</label><input id="c_line" type="number" step="0.5" value="9.5"></div>
+        <div><label>Cuota Over</label><input id="c_oddOver" type="number" step="0.01" placeholder="1.90"></div>
+        <div><label>Cuota Under</label><input id="c_oddUnder" type="number" step="0.01" placeholder="1.90"></div>
+      </div>
+      <button class="btn amber" onclick="calcCorners()">Calcular</button>
+      <div class="result-box" id="cornersResult" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- GOALS / 1X2 MODEL -->
+  <div class="view" id="view-goals">
+    <div class="card">
+      <h2><span class="tag">Modelo</span> Goles y 1X2 — Poisson bivariante simplificado</h2>
+      <p class="hint">λ_local = media(goles a favor local en casa, goles en contra visitante fuera). Matriz de resultados 0–6 goles por equipo.</p>
+      <div class="grid2">
+        <div><label>Equipo local</label><select id="g_home"></select></div>
+        <div><label>Equipo visitante</label><select id="g_away"></select></div>
+      </div>
+      <button class="btn" onclick="loadGoalsFromTeams()">Cargar medias de la ficha</button>
+      <hr class="divider">
+      <div class="grid2">
+        <div><label>λ esperado — Goles local</label><input id="g_lh" type="number" step="0.1"></div>
+        <div><label>λ esperado — Goles visitante</label><input id="g_la" type="number" step="0.1"></div>
+      </div>
+      <div class="grid3">
+        <div><label>Cuota 1</label><input id="g_odd1" type="number" step="0.01" placeholder="2.10"></div>
+        <div><label>Cuota X</label><input id="g_oddX" type="number" step="0.01" placeholder="3.30"></div>
+        <div><label>Cuota 2</label><input id="g_odd2" type="number" step="0.01" placeholder="3.40"></div>
+      </div>
+      <div class="grid2">
+        <div><label>Línea goles O/U</label><input id="g_line" type="number" step="0.5" value="2.5"></div>
+        <div><label>Cuota Over goles</label><input id="g_oddOver" type="number" step="0.01" placeholder="1.85"></div>
+      </div>
+      <button class="btn amber" onclick="calcGoals()">Calcular</button>
+      <div class="result-box" id="goalsResult" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- BETS LOG -->
+  <div class="view" id="view-bets">
+    <div class="card">
+      <h2><span class="tag">Registro</span> Nueva apuesta</h2>
+      <div class="grid3">
+        <div><label>Fecha</label><input id="b_date" type="date"></div>
+        <div><label>Liga</label>
+          <select id="b_liga"><option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Otra</option></select>
+        </div>
+        <div><label>Mercado</label>
+          <select id="b_market"><option>Corners</option><option>1X2</option><option>Goles O/U</option><option>Otro</option></select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div><label>Partido</label><input id="b_match" placeholder="Racing Ferrol - Deportivo"></div>
+        <div><label>Selección</label><input id="b_pick" placeholder="Over 9.5 corners"></div>
+      </div>
+      <div class="grid3">
+        <div><label>Cuota contratada</label><input id="b_odd" type="number" step="0.01"></div>
+        <div><label>Stake (€)</label><input id="b_stake" type="number" step="0.5"></div>
+        <div><label>Cuota de cierre (CLV, opcional)</label><input id="b_close" type="number" step="0.01"></div>
+      </div>
+      <label>Resultado</label>
+      <select id="b_status"><option value="pending">Pendiente</option><option value="win">Ganada</option><option value="loss">Perdida</option><option value="void">Anulada</option></select>
+      <button class="btn amber" onclick="addBet()">Añadir apuesta</button>
+    </div>
+    <div class="card">
+      <h2><span class="tag">Historial</span> Todas las apuestas</h2>
+      <table id="betsTable"><thead><tr><th>Fecha</th><th>Partido</th><th>Mercado</th><th>Cuota</th><th>Stake</th><th>CLV</th><th>Estado</th><th>P/L</th><th></th></tr></thead><tbody></tbody></table>
+      <div class="empty" id="betsEmpty" style="display:none;">Todavía no has registrado ninguna apuesta.</div>
+    </div>
+  </div>
+
+  <!-- BANKROLL -->
+  <div class="view" id="view-bankroll">
+    <div class="card">
+      <h2><span class="tag">Tus datos</span> Copia de seguridad</h2>
+      <p class="hint">Todo lo que guarda este panel (equipos, temporadas importadas, apuestas, banca) se queda asociado a tu cuenta mientras uses este artefacto. Si quieres tener tus datos en un archivo propio — para guardarlos, moverlos a otro sitio, o no depender de esto — expórtalos aquí cuando quieras.</p>
+      <button class="btn amber" onclick="exportBackup()">Descargar copia de seguridad (.json)</button>
+      <hr class="divider">
+      <label>Restaurar desde un archivo .json</label>
+      <input id="restore_file" type="file" accept=".json,application/json">
+      <button class="btn" onclick="importBackup()">Restaurar (sustituye todo lo actual)</button>
+      <div class="result-box" id="restoreResult" style="display:none;"></div>
+      <hr class="divider">
+      <button class="btn ghost" style="color:var(--pitch); border-color:var(--pitch);" onclick="disconnectSupabase()">Cambiar de base de datos</button>
+    </div>
+    <div class="card">
+      <h2><span class="tag">Config</span> Banca inicial</h2>
+      <div class="grid2">
+        <div><label>Banca inicial (€)</label><input id="bk_initial" type="number" step="10"></div>
+        <div><label>Fracción de Kelly a usar</label>
+          <select id="bk_fraction"><option value="1">Kelly completo (agresivo)</option><option value="0.5">Medio Kelly</option><option value="0.25" selected>Cuarto de Kelly (recomendado)</option></select>
+        </div>
+      </div>
+      <button class="btn" onclick="saveBankrollConfig()">Guardar</button>
+    </div>
+    <div class="card">
+      <h2><span class="tag">Calculadora</span> Stake por Kelly</h2>
+      <div class="grid3">
+        <div><label>Probabilidad estimada (%)</label><input id="k_prob" type="number" step="1" placeholder="55"></div>
+        <div><label>Cuota</label><input id="k_odd" type="number" step="0.01" placeholder="1.90"></div>
+        <div><label>Banca actual (€)</label><input id="k_bank" type="number" step="10"></div>
+      </div>
+      <button class="btn amber" onclick="calcKelly()">Calcular stake</button>
+      <div class="result-box" id="kellyResult" style="display:none;"></div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+// ---------- utilidades Poisson ----------
+function factorial(n){let r=1; for(let i=2;i<=n;i++) r*=i; return r;}
+function poissonPMF(k,lambda){return Math.exp(-lambda)*Math.pow(lambda,k)/factorial(k);}
+function poissonCDF(k,lambda){let s=0; for(let i=0;i<=k;i++) s+=poissonPMF(i,lambda); return s;}
+function poissonOver(line,lambda){ // line like 9.5
+  const k = Math.floor(line);
+  return 1 - poissonCDF(k,lambda);
+}
+function fmtPct(x){return (x*100).toFixed(1)+'%';}
+function evFromProb(prob,odd){return (prob*odd - 1);}
+
+// ---------- app state ----------
+let TEAMS = [];
+let MANUAL_TEAMS = [];
+let SEASON_IMPORTS = []; // {id, liga, temporada, weight, groups}
+let BETS = [];
+let BANKCFG = {initial:1000, fraction:0.25};
+function blankSide(){ return {mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0}; }
+
+// ---------- Supabase storage layer ----------
+let sbClient = null;
+function getSupabaseConfig(){
+  try{
+    const url = localStorage.getItem('tipster_sb_url');
+    const key = localStorage.getItem('tipster_sb_key');
+    return (url && key) ? {url,key} : null;
+  }catch(e){ return null; }
+}
+function saveSupabaseConfig(){
+  const url = document.getElementById('setup_url').value.trim();
+  const key = document.getElementById('setup_key').value.trim();
+  const box = document.getElementById('setupResult');
+  box.style.display='block';
+  if(!url || !key){ box.innerHTML = '<p class="ev-neg">Rellena la URL y la clave.</p>'; return; }
+  try{
+    localStorage.setItem('tipster_sb_url', url);
+    localStorage.setItem('tipster_sb_key', key);
+  }catch(e){
+    box.innerHTML = '<p class="ev-neg">Tu navegador no permite guardar la configuración (¿modo privado?).</p>';
+    return;
+  }
+  location.reload();
+}
+async function loadState(){
+  try{
+    const { data, error } = await sbClient.from('tipster_data').select('data').eq('id','main').maybeSingle();
+    if(error) throw error;
+    return data ? data.data : null;
+  }catch(e){
+    console.error('Supabase load error', e);
+    alert('No se ha podido conectar con tu base de datos. Revisa la URL/clave o vuelve a configurarlas.');
+    return null;
+  }
+}
+async function saveState(){
+  try{
+    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, bets: BETS, bankroll: BANKCFG };
+    const { error } = await sbClient.from('tipster_data').upsert({ id:'main', data: payload, updated_at: new Date().toISOString() });
+    if(error) throw error;
+  }catch(e){
+    console.error('Supabase save error', e);
+  }
+}
+async function persistTeamSources(){ await saveState(); }
+
+// ---------- teams ----------
+function recomputeTeams(){
+  const map = {};
+  function ensure(liga,name){
+    const key = liga+'||'+name.toLowerCase();
+    if(!map[key]) map[key] = {name, liga, home:blankSide(), away:blankSide()};
+    return map[key];
+  }
+  function addSide(entry, side, sums, weight){
+    const s = entry[side];
+    s.mp += (sums.mp||0)*weight; s.gf += (sums.gf||0)*weight; s.ga += (sums.ga||0)*weight;
+    s.cmp += (sums.cmp||0)*weight; s.cf += (sums.cf||0)*weight; s.ca += (sums.ca||0)*weight;
+  }
+  MANUAL_TEAMS.forEach(t=>{
+    const e = ensure(t.liga, t.name);
+    addSide(e,'home', {mp:t.mh, gf:t.gfh*t.mh, ga:t.gah*t.mh, cmp:t.mh, cf:t.cfh*t.mh, ca:t.cah*t.mh}, 1);
+    addSide(e,'away', {mp:t.ma, gf:t.gfa*t.ma, ga:t.gaa*t.ma, cmp:t.ma, cf:t.cfa*t.ma, ca:t.caa*t.ma}, 1);
+  });
+  SEASON_IMPORTS.forEach(imp=>{
+    Object.entries(imp.groups).forEach(([name,g])=>{
+      const e = ensure(imp.liga, name);
+      addSide(e,'home', g.home, imp.weight);
+      addSide(e,'away', g.away, imp.weight);
+    });
+  });
+  const prevIds = {};
+  TEAMS.forEach(t=>{ prevIds[t.liga+'||'+t.name.toLowerCase()] = t.id; });
+  TEAMS = Object.values(map).map(e=>{
+    const key = e.liga+'||'+e.name.toLowerCase();
+    return {
+      id: prevIds[key] || (Date.now().toString()+Math.random().toString(36).slice(2,6)),
+      name: e.name, liga: e.liga,
+      mh: e.home.mp, ma: e.away.mp,
+      cfh: e.home.cmp ? e.home.cf/e.home.cmp : 0,
+      cah: e.home.cmp ? e.home.ca/e.home.cmp : 0,
+      cfa: e.away.cmp ? e.away.cf/e.away.cmp : 0,
+      caa: e.away.cmp ? e.away.ca/e.away.cmp : 0,
+      gfh: e.home.mp ? e.home.gf/e.home.mp : 0,
+      gah: e.home.mp ? e.home.ga/e.home.mp : 0,
+      gfa: e.away.mp ? e.away.gf/e.away.mp : 0,
+      gaa: e.away.mp ? e.away.ga/e.away.mp : 0,
+    };
+  });
+}
+
+// ---------- tabs ----------
+document.getElementById('tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+btn.dataset.view).classList.add('active');
+  if(btn.dataset.view==='dashboard') renderDashboard();
+});
+
+// ---------- CSV season import ----------
+const CSV_ALIASES = {
+  home: ['hometeam','home','local','equipolocal','home_team'],
+  away: ['awayteam','away','visitante','equipovisitante','away_team'],
+  fthg: ['fthg','homegoals','golouloclal','goleslocal','home_goals','hg'],
+  ftag: ['ftag','awaygoals','golesvisitante','away_goals','ag'],
+  hc:   ['hc','homecorners','cornerslocal','corners_home'],
+  ac:   ['ac','awaycorners','cornersvisitante','corners_away']
+};
+function findCol(headers, aliases){
+  const norm = headers.map(h=>h.trim().toLowerCase().replace(/\s+/g,''));
+  for(const a of aliases){
+    const idx = norm.indexOf(a);
+    if(idx!==-1) return idx;
+  }
+  return -1;
+}
+function parseCSVText(text){
+  const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
+  if(!lines.length) return {rows:[], missingCorners:false};
+  const headers = lines[0].split(',');
+  const iHome = findCol(headers, CSV_ALIASES.home);
+  const iAway = findCol(headers, CSV_ALIASES.away);
+  const iFthg = findCol(headers, CSV_ALIASES.fthg);
+  const iFtag = findCol(headers, CSV_ALIASES.ftag);
+  const iHc = findCol(headers, CSV_ALIASES.hc);
+  const iAc = findCol(headers, CSV_ALIASES.ac);
+  if(iHome===-1 || iAway===-1 || iFthg===-1 || iFtag===-1){
+    return {rows:null, error:'No se han encontrado las columnas de equipos/goles esperadas (HomeTeam, AwayTeam, FTHG, FTAG).'};
+  }
+  const rows = [];
+  for(let i=1;i<lines.length;i++){
+    const cols = lines[i].split(',');
+    const home = (cols[iHome]||'').trim();
+    const away = (cols[iAway]||'').trim();
+    const fthg = parseInt(cols[iFthg]);
+    const ftag = parseInt(cols[iFtag]);
+    if(!home || !away || isNaN(fthg) || isNaN(ftag)) continue;
+    const hc = iHc!==-1 ? parseInt(cols[iHc]) : NaN;
+    const ac = iAc!==-1 ? parseInt(cols[iAc]) : NaN;
+    rows.push({home,away,fthg,ftag,hc:isNaN(hc)?null:hc, ac:isNaN(ac)?null:ac});
+  }
+  return {rows, missingCorners: iHc===-1 || iAc===-1};
+}
+function aggregateRows(rows){
+  const groups = {}; // name -> {home:{mp,gf,ga,cmp,cf,ca}, away:{...}}
+  function ensure(name){
+    if(!groups[name]) groups[name] = {
+      home:{mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0},
+      away:{mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0}
+    };
+    return groups[name];
+  }
+  rows.forEach(r=>{
+    const h = ensure(r.home), a = ensure(r.away);
+    h.home.mp++; h.home.gf+=r.fthg; h.home.ga+=r.ftag;
+    a.away.mp++; a.away.gf+=r.ftag; a.away.ga+=r.fthg;
+    if(r.hc!==null && r.ac!==null){
+      h.home.cmp++; h.home.cf+=r.hc; h.home.ca+=r.ac;
+      a.away.cmp++; a.away.cf+=r.ac; a.away.ca+=r.hc;
+    }
+  });
+  return groups;
+}
+async function importCSV(){
+  const fileInput = document.getElementById('imp_file');
+  const liga = document.getElementById('imp_liga').value;
+  const temporada = document.getElementById('imp_temporada').value.trim();
+  const weight = parseFloat(document.getElementById('imp_weight').value) || 1;
+  const box = document.getElementById('importResult');
+  if(!temporada){ alert('Ponle un nombre a la temporada (ej. 25/26) para poder actualizarla luego'); return; }
+  if(!fileInput.files.length){ alert('Selecciona un archivo CSV'); return; }
+  const file = fileInput.files[0];
+  const text = await file.text();
+  const parsed = parseCSVText(text);
+  box.style.display = 'block';
+  if(parsed.error){ box.innerHTML = `<p class="ev-neg">${parsed.error}</p>`; return; }
+  const groups = aggregateRows(parsed.rows);
+  const key = liga.toLowerCase()+'||'+temporada.toLowerCase();
+  const existingIdx = SEASON_IMPORTS.findIndex(i => (i.liga.toLowerCase()+'||'+i.temporada.toLowerCase())===key);
+  const record = { id: existingIdx!==-1 ? SEASON_IMPORTS[existingIdx].id : Date.now().toString(), liga, temporada, weight, groups };
+  const wasReplace = existingIdx!==-1;
+  if(existingIdx!==-1) SEASON_IMPORTS[existingIdx] = record; else SEASON_IMPORTS.push(record);
+  await persistTeamSources();
+  recomputeTeams();
+  renderTeams();
+  box.innerHTML = `<p><strong>${parsed.rows.length}</strong> partidos procesados de ${liga} ${temporada}${wasReplace ? ' — se ha <strong>sustituido</strong> la versión anterior de esta temporada.' : '.'}</p>
+    ${parsed.missingCorners ? '<p class="hint">Este archivo no traía columnas de córners (HC/AC) — solo se han importado los goles de estos partidos.</p>' : ''}`;
+  fileInput.value = '';
+}
+
+// ---------- teams ----------
+async function saveTeam(){
+  const name = document.getElementById('t_name').value.trim();
+  if(!name){ alert('Ponle nombre al equipo'); return; }
+  const team = {
+    id: Date.now().toString(),
+    name, liga: document.getElementById('t_liga').value,
+    cfh: parseFloat(document.getElementById('t_cfh').value)||0,
+    cah: parseFloat(document.getElementById('t_cah').value)||0,
+    mh: parseFloat(document.getElementById('t_mh').value)||0,
+    cfa: parseFloat(document.getElementById('t_cfa').value)||0,
+    caa: parseFloat(document.getElementById('t_caa').value)||0,
+    ma: parseFloat(document.getElementById('t_ma').value)||0,
+    gfh: parseFloat(document.getElementById('t_gfh').value)||0,
+    gah: parseFloat(document.getElementById('t_gah').value)||0,
+    gfa: parseFloat(document.getElementById('t_gfa').value)||0,
+    gaa: parseFloat(document.getElementById('t_gaa').value)||0,
+  };
+  MANUAL_TEAMS.push(team);
+  await persistTeamSources();
+  ['t_name','t_cfh','t_cah','t_mh','t_cfa','t_caa','t_ma','t_gfh','t_gah','t_gfa','t_gaa'].forEach(id=>document.getElementById(id).value='');
+  recomputeTeams();
+  renderTeams();
+}
+async function deleteTeam(liga, name){
+  MANUAL_TEAMS = MANUAL_TEAMS.filter(t=>!(t.liga===liga && t.name.toLowerCase()===name.toLowerCase()));
+  SEASON_IMPORTS.forEach(imp=>{
+    if(imp.liga===liga){
+      Object.keys(imp.groups).forEach(n=>{ if(n.toLowerCase()===name.toLowerCase()) delete imp.groups[n]; });
+    }
+  });
+  await persistTeamSources();
+  recomputeTeams();
+  renderTeams();
+}
+async function deleteImport(id){
+  SEASON_IMPORTS = SEASON_IMPORTS.filter(i=>i.id!==id);
+  await persistTeamSources();
+  recomputeTeams();
+  renderTeams();
+}
+function renderTeams(){
+  const tbody = document.querySelector('#teamsTable tbody');
+  tbody.innerHTML='';
+  document.getElementById('teamsEmpty').style.display = TEAMS.length? 'none':'block';
+  [...TEAMS].sort((a,b)=>a.name.localeCompare(b.name)).forEach(t=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="mono" style="font-family:Inter;font-weight:600;">${t.name}</td>
+      <td>${t.liga}</td>
+      <td>${t.cfh.toFixed(1)}/${t.cah.toFixed(1)} · ${t.cfa.toFixed(1)}/${t.caa.toFixed(1)}</td>
+      <td>${t.gfh.toFixed(1)}/${t.gah.toFixed(1)} · ${t.gfa.toFixed(1)}/${t.gaa.toFixed(1)}</td>
+      <td><button class="btn ghost" onclick="deleteTeam('${t.liga.replace(/'/g,"\\'")}','${t.name.replace(/'/g,"\\'")}')">Borrar</button></td>`;
+    tbody.appendChild(tr);
+  });
+  renderImports();
+  refreshTeamSelects();
+}
+function renderImports(){
+  const tbody = document.querySelector('#importsTable tbody');
+  if(!tbody) return;
+  tbody.innerHTML='';
+  document.getElementById('importsEmpty').style.display = SEASON_IMPORTS.length? 'none':'block';
+  SEASON_IMPORTS.forEach(imp=>{
+    const nMatches = Object.keys(imp.groups).length ? Object.values(imp.groups).reduce((s,g)=>s+g.home.mp,0) : 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${imp.liga}</td><td>${imp.temporada}</td><td>${imp.weight}</td><td>${nMatches}</td>
+      <td><button class="btn ghost" onclick="deleteImport('${imp.id}')">Borrar</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+function refreshTeamSelects(){
+  ['c_home','c_away','g_home','g_away'].forEach(id=>{
+    const sel = document.getElementById(id);
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— manual —</option>' + TEAMS.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+    if(TEAMS.find(t=>t.id===current)) sel.value = current;
+  });
+}
+
+// ---------- corners model ----------
+function loadCornersFromTeams(){
+  const h = TEAMS.find(t=>t.id===document.getElementById('c_home').value);
+  const a = TEAMS.find(t=>t.id===document.getElementById('c_away').value);
+  if(!h || !a){ alert('Selecciona local y visitante de tu base de equipos'); return; }
+  const lh = (h.cfh + a.caa)/2;
+  const la = (a.cfa + h.cah)/2;
+  document.getElementById('c_lh').value = lh.toFixed(2);
+  document.getElementById('c_la').value = la.toFixed(2);
+}
+function calcCorners(){
+  const lh = parseFloat(document.getElementById('c_lh').value);
+  const la = parseFloat(document.getElementById('c_la').value);
+  if(!lh || !la){ alert('Faltan las lambdas'); return; }
+  const total = lh+la;
+  const line = parseFloat(document.getElementById('c_line').value);
+  const pOver = poissonOver(line,total);
+  const pUnder = 1-pOver;
+  const oddOver = parseFloat(document.getElementById('c_oddOver').value);
+  const oddUnder = parseFloat(document.getElementById('c_oddUnder').value);
+  let html = `<div class="grid3">
+    <div><div class="hint">Total esperado (córners)</div><div class="display" style="font-size:24px;">${total.toFixed(2)}</div></div>
+    <div><div class="hint">P(Over ${line})</div><div class="display" style="font-size:24px;">${fmtPct(pOver)}</div></div>
+    <div><div class="hint">P(Under ${line})</div><div class="display" style="font-size:24px;">${fmtPct(pUnder)}</div></div>
+  </div><hr class="divider">`;
+  if(oddOver){
+    const ev = evFromProb(pOver,oddOver);
+    html += `<p>Over @ ${oddOver}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
+  }
+  if(oddUnder){
+    const ev = evFromProb(pUnder,oddUnder);
+    html += `<p>Under @ ${oddUnder}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
+  }
+  html += `<p class="hint">EV positivo no garantiza acierto en un solo partido — es una ventaja estadística que solo se demuestra en volumen. Registra la apuesta en el Panel 05 para hacer seguimiento real.</p>`;
+  const box = document.getElementById('cornersResult');
+  box.style.display='block'; box.innerHTML = html;
+}
+
+// ---------- goals / 1x2 model ----------
+function loadGoalsFromTeams(){
+  const h = TEAMS.find(t=>t.id===document.getElementById('g_home').value);
+  const a = TEAMS.find(t=>t.id===document.getElementById('g_away').value);
+  if(!h || !a){ alert('Selecciona local y visitante de tu base de equipos'); return; }
+  const lh = (h.gfh + a.gaa)/2;
+  const la = (a.gfa + h.gah)/2;
+  document.getElementById('g_lh').value = lh.toFixed(2);
+  document.getElementById('g_la').value = la.toFixed(2);
+}
+function calcGoals(){
+  const lh = parseFloat(document.getElementById('g_lh').value);
+  const la = parseFloat(document.getElementById('g_la').value);
+  if(!lh || !la){ alert('Faltan las lambdas'); return; }
+  let p1=0,pX=0,p2=0;
+  const matrix=[];
+  for(let i=0;i<=8;i++){
+    matrix[i]=[];
+    for(let j=0;j<=8;j++){
+      const p = poissonPMF(i,lh)*poissonPMF(j,la);
+      matrix[i][j]=p;
+      if(i>j) p1+=p; else if(i===j) pX+=p; else p2+=p;
+    }
+  }
+  const line = parseFloat(document.getElementById('g_line').value);
+  const lineFloor = Math.floor(line);
+  let pUnderGoals = 0;
+  for(let i=0;i<=8;i++) for(let j=0;j<=8;j++) if(i+j<=lineFloor) pUnderGoals += matrix[i][j];
+  const pOverGoals = 1-pUnderGoals;
+
+  let html = `<div class="grid3">
+    <div><div class="hint">P(1)</div><div class="display" style="font-size:22px;">${fmtPct(p1)}</div></div>
+    <div><div class="hint">P(X)</div><div class="display" style="font-size:22px;">${fmtPct(pX)}</div></div>
+    <div><div class="hint">P(2)</div><div class="display" style="font-size:22px;">${fmtPct(p2)}</div></div>
+  </div>
+  <p class="hint">Goles esperados: ${(lh+la).toFixed(2)} · P(Over ${line}) ${fmtPct(pOverGoals)} · P(Under ${line}) ${fmtPct(pUnderGoals)}</p>
+  <hr class="divider">`;
+  const o1 = parseFloat(document.getElementById('g_odd1').value);
+  const oX = parseFloat(document.getElementById('g_oddX').value);
+  const o2 = parseFloat(document.getElementById('g_odd2').value);
+  const oOver = parseFloat(document.getElementById('g_oddOver').value);
+  const rows = [['1',p1,o1],['X',pX,oX],['2',p2,o2],['Over '+line,pOverGoals,oOver]];
+  rows.forEach(([label,prob,odd])=>{
+    if(odd){
+      const ev = evFromProb(prob,odd);
+      html += `<p>${label} @ ${odd}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
+    }
+  });
+  html += `<p class="hint">Modelo Poisson independiente (sin ajuste Dixon-Coles de correlación en marcadores bajos) — suficiente para detectar valor grueso; para afinar 0-0/1-0/1-1 se puede añadir el factor τ más adelante.</p>`;
+  const box = document.getElementById('goalsResult');
+  box.style.display='block'; box.innerHTML = html;
+}
+
+// ---------- bets log ----------
+async function addBet(){
+  const odd = parseFloat(document.getElementById('b_odd').value);
+  const stake = parseFloat(document.getElementById('b_stake').value);
+  if(!odd || !stake){ alert('Cuota y stake son obligatorios'); return; }
+  const bet = {
+    id: Date.now().toString(),
+    date: document.getElementById('b_date').value || new Date().toISOString().slice(0,10),
+    liga: document.getElementById('b_liga').value,
+    market: document.getElementById('b_market').value,
+    match: document.getElementById('b_match').value,
+    pick: document.getElementById('b_pick').value,
+    odd, stake,
+    close: parseFloat(document.getElementById('b_close').value)||null,
+    status: document.getElementById('b_status').value
+  };
+  BETS.push(bet);
+  await saveState();
+  ['b_match','b_pick','b_odd','b_stake','b_close'].forEach(id=>document.getElementById(id).value='');
+  renderBets();
+}
+async function updateBetStatus(id,status){
+  const b = BETS.find(x=>x.id===id); if(b) b.status=status;
+  await saveState();
+  renderBets();
+}
+async function deleteBet(id){
+  BETS = BETS.filter(b=>b.id!==id);
+  await saveState();
+  renderBets();
+}
+function betPL(b){
+  if(b.status==='win') return b.stake*(b.odd-1);
+  if(b.status==='loss') return -b.stake;
+  return 0;
+}
+function betCLV(b){
+  if(!b.close) return null;
+  return (b.odd/b.close - 1)*100;
+}
+function renderBets(){
+  const tbody = document.querySelector('#betsTable tbody');
+  tbody.innerHTML='';
+  document.getElementById('betsEmpty').style.display = BETS.length? 'none':'block';
+  [...BETS].sort((a,b)=>b.date.localeCompare(a.date)).forEach(b=>{
+    const pl = betPL(b);
+    const clv = betCLV(b);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${b.date}</td>
+      <td style="font-family:Inter;">${b.match}<br><span class="hint">${b.pick}</span></td>
+      <td>${b.market}</td>
+      <td>${b.odd}</td>
+      <td>${b.stake}€</td>
+      <td>${clv!==null ? (clv>0?'+':'')+clv.toFixed(1)+'%' : '—'}</td>
+      <td>
+        <select onchange="updateBetStatus('${b.id}',this.value)" style="margin:0;padding:3px 4px;font-size:11px;">
+          <option value="pending" ${b.status==='pending'?'selected':''}>Pendiente</option>
+          <option value="win" ${b.status==='win'?'selected':''}>Ganada</option>
+          <option value="loss" ${b.status==='loss'?'selected':''}>Perdida</option>
+          <option value="void" ${b.status==='void'?'selected':''}>Anulada</option>
+        </select>
+      </td>
+      <td class="${pl>0?'pos':pl<0?'neg':''}">${pl.toFixed(2)}€</td>
+      <td><button class="btn ghost" onclick="deleteBet('${b.id}')">×</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ---------- bankroll / kelly ----------
+async function saveBankrollConfig(){
+  BANKCFG = {
+    initial: parseFloat(document.getElementById('bk_initial').value)||BANKCFG.initial,
+    fraction: parseFloat(document.getElementById('bk_fraction').value)
+  };
+  await saveState();
+  alert('Banca guardada');
+  renderDashboard();
+}
+function calcKelly(){
+  const prob = parseFloat(document.getElementById('k_prob').value)/100;
+  const odd = parseFloat(document.getElementById('k_odd').value);
+  const bank = parseFloat(document.getElementById('k_bank').value) || BANKCFG.initial;
+  if(!prob || !odd){ alert('Faltan probabilidad y cuota'); return; }
+  const b = odd-1;
+  const kellyFull = (prob*b - (1-prob)) / b;
+  const kellyUsed = Math.max(0, kellyFull * BANKCFG.fraction);
+  const stake = kellyUsed * bank;
+  const ev = evFromProb(prob,odd);
+  const box = document.getElementById('kellyResult');
+  box.style.display='block';
+  box.innerHTML = `<p>EV: <span class="${ev>0?'ev-pos':'ev-neg'}">${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>
+    <p>Kelly completo: ${(kellyFull*100).toFixed(2)}% de la banca</p>
+    <p>Kelly usado (fracción ${BANKCFG.fraction}): <strong class="display" style="font-size:20px;">${stake>0?stake.toFixed(2)+'€':'0€ — no apostar, EV negativo'}</strong></p>`;
+}
+
+// ---------- dashboard ----------
+let bankChartInstance = null;
+function renderDashboard(){
+  const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
+  const totalStaked = settled.reduce((s,b)=>s+b.stake,0);
+  const totalPL = settled.reduce((s,b)=>s+betPL(b),0);
+  const roi = totalStaked? (totalPL/totalStaked*100) : 0;
+  const wins = settled.filter(b=>b.status==='win').length;
+  const winRate = settled.length? (wins/settled.length*100) : 0;
+  const clvVals = BETS.map(betCLV).filter(v=>v!==null);
+  const avgClv = clvVals.length? clvVals.reduce((a,b)=>a+b,0)/clvVals.length : null;
+  const bank = BANKCFG.initial + totalPL;
+
+  document.getElementById('dashStats').innerHTML = `
+    <div class="stat"><div class="val">${bank.toFixed(0)}€</div><div class="lbl">Banca actual</div></div>
+    <div class="stat"><div class="val" style="color:${roi>=0?'#8FD9A8':'#F0A79A'}">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="lbl">ROI</div></div>
+    <div class="stat"><div class="val">${winRate.toFixed(0)}%</div><div class="lbl">Aciertos (${wins}/${settled.length})</div></div>
+    <div class="stat"><div class="val">${avgClv!==null ? (avgClv>0?'+':'')+avgClv.toFixed(1)+'%' : '—'}</div><div class="lbl">CLV medio</div></div>
+  `;
+
+  // evolution chart
+  const sorted = [...settled].sort((a,b)=>a.date.localeCompare(b.date));
+  let running = BANKCFG.initial;
+  const labels=['Inicio']; const data=[running];
+  sorted.forEach(b=>{ running += betPL(b); labels.push(b.date); data.push(running); });
+  const ctx = document.getElementById('bankChart');
+  if(bankChartInstance) bankChartInstance.destroy();
+  bankChartInstance = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[{ data, borderColor:'#0F3D2E', backgroundColor:'rgba(217,164,65,0.15)', fill:true, tension:0.15, pointRadius:2 }] },
+    options:{ plugins:{legend:{display:false}}, scales:{ y:{ grid:{color:'#eee'} }, x:{ grid:{display:false} } } }
+  });
+
+  // by market
+  const markets = {};
+  settled.forEach(b=>{
+    if(!markets[b.market]) markets[b.market]={n:0,wins:0,staked:0,pl:0,clv:[]};
+    const m = markets[b.market];
+    m.n++; m.staked+=b.stake; m.pl+=betPL(b);
+    if(b.status==='win') m.wins++;
+    const c = betCLV(b); if(c!==null) m.clv.push(c);
+  });
+  const tbody = document.querySelector('#marketTable tbody');
+  tbody.innerHTML='';
+  Object.entries(markets).forEach(([name,m])=>{
+    const mroi = m.staked? (m.pl/m.staked*100):0;
+    const mclv = m.clv.length? m.clv.reduce((a,b)=>a+b,0)/m.clv.length : null;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="font-family:Inter;font-weight:600;">${name}</td><td>${m.n}</td><td>${m.wins}</td>
+      <td class="${mroi>=0?'pos':'neg'}">${mroi>=0?'+':''}${mroi.toFixed(1)}%</td>
+      <td>${mclv!==null?(mclv>0?'+':'')+mclv.toFixed(1)+'%':'—'}</td>`;
+    tbody.appendChild(tr);
+  });
+  if(!Object.keys(markets).length){
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">Aún no hay apuestas resueltas.</td></tr>`;
+  }
+}
+
+// ---------- backup / restore ----------
+function exportBackup(){
+  const data = {
+    exportedAt: new Date().toISOString(),
+    manualTeams: MANUAL_TEAMS,
+    seasonImports: SEASON_IMPORTS,
+    bets: BETS,
+    bankroll: BANKCFG
+  };
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'panel-tipster-backup-' + new Date().toISOString().slice(0,10) + '.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+async function importBackup(){
+  const fileInput = document.getElementById('restore_file');
+  const box = document.getElementById('restoreResult');
+  box.style.display = 'block';
+  if(!fileInput.files.length){ alert('Selecciona un archivo .json de copia de seguridad'); return; }
+  if(!confirm('Esto sustituirá todos los datos actuales del panel por los del archivo. ¿Continuar?')){ return; }
+  try{
+    const text = await fileInput.files[0].text();
+    const data = JSON.parse(text);
+    MANUAL_TEAMS = data.manualTeams || [];
+    SEASON_IMPORTS = data.seasonImports || [];
+    BETS = data.bets || [];
+    BANKCFG = data.bankroll || {initial:1000, fraction:0.25};
+    await saveState();
+    recomputeTeams();
+    document.getElementById('bk_initial').value = BANKCFG.initial;
+    document.getElementById('bk_fraction').value = BANKCFG.fraction;
+    renderTeams(); renderBets(); renderDashboard();
+    box.innerHTML = `<p class="ev-pos">Restaurado correctamente (copia del ${data.exportedAt ? data.exportedAt.slice(0,10) : 'archivo'}).</p>`;
+  }catch(e){
+    box.innerHTML = `<p class="ev-neg">No se ha podido leer el archivo. ¿Seguro que es una copia de seguridad exportada desde aquí?</p>`;
+  }
+  fileInput.value = '';
+}
+
+function disconnectSupabase(){
+  if(!confirm('Esto solo olvida la conexión guardada en este navegador (tus datos siguen a salvo en Supabase). ¿Continuar?')) return;
+  try{
+    localStorage.removeItem('tipster_sb_url');
+    localStorage.removeItem('tipster_sb_key');
+  }catch(e){}
+  location.reload();
+}
+
+// ---------- boot ----------
+async function boot(){
+  const cfg = getSupabaseConfig();
+  if(!cfg){
+    document.getElementById('setupOverlay').style.display = 'flex';
+    document.getElementById('appRoot').style.display = 'none';
+    return;
+  }
+  sbClient = supabase.createClient(cfg.url, cfg.key);
+  const state = await loadState();
+  if(state){
+    MANUAL_TEAMS = state.manualTeams || [];
+    SEASON_IMPORTS = state.seasonImports || [];
+    BETS = state.bets || [];
+    BANKCFG = state.bankroll || {initial:1000, fraction:0.25};
+  }
+  recomputeTeams();
+  document.getElementById('bk_initial').value = BANKCFG.initial;
+  document.getElementById('bk_fraction').value = BANKCFG.fraction;
+  document.getElementById('b_date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('setupOverlay').style.display = 'none';
+  document.getElementById('appRoot').style.display = 'block';
+  renderTeams();
+  renderBets();
+  renderDashboard();
+}
+boot();
+</script>
+</body>
+</html>
