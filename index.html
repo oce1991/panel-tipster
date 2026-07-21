@@ -250,6 +250,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <div><label>Equipo visitante</label><select id="c_away"></select></div>
       </div>
       <button class="btn" onclick="loadMatchFromTeams()">Cargar medias de la ficha (córners + goles)</button>
+      <div class="hint" id="ligaStatsInfo" style="margin-top:8px;"></div>
     </div>
 
     <div class="card">
@@ -429,7 +430,27 @@ async function saveState(){
 async function persistTeamSources(){ await saveState(); }
 
 // ---------- teams ----------
+let LEAGUE_STATS = {}; // liga -> {slope, meanGoals, meanCorners, n}
+function recomputeLeagueStats(){
+  const acc = {};
+  SEASON_IMPORTS.forEach(imp=>{
+    if(!imp.regression || !imp.regression.n) return;
+    const w = imp.weight;
+    if(!acc[imp.liga]) acc[imp.liga] = {n:0,sumX:0,sumY:0,sumXY:0,sumX2:0};
+    const a = acc[imp.liga]; const r = imp.regression;
+    a.n += r.n*w; a.sumX += r.sumX*w; a.sumY += r.sumY*w; a.sumXY += r.sumXY*w; a.sumX2 += r.sumX2*w;
+  });
+  LEAGUE_STATS = {};
+  Object.entries(acc).forEach(([liga,a])=>{
+    if(a.n < 20) return; // muestra minima para fiarse de la pendiente
+    const meanX = a.sumX/a.n, meanY = a.sumY/a.n;
+    const denom = a.n*a.sumX2 - a.sumX*a.sumX;
+    const slope = denom!==0 ? (a.n*a.sumXY - a.sumX*a.sumY)/denom : 0;
+    LEAGUE_STATS[liga] = {slope, meanGoals:meanX, meanCorners:meanY, n:Math.round(a.n)};
+  });
+}
 function recomputeTeams(){
+  recomputeLeagueStats();
   const map = {};
   function ensure(liga,name){
     const key = liga+'||'+name.toLowerCase();
@@ -527,6 +548,17 @@ function parseCSVText(text){
   }
   return {rows, missingCorners: iHc===-1 || iAc===-1};
 }
+function computeRegressionSums(rows){
+  let n=0,sumX=0,sumY=0,sumXY=0,sumX2=0;
+  rows.forEach(r=>{
+    if(r.hc!==null && r.ac!==null){
+      const x = r.fthg+r.ftag; // goles totales del partido
+      const y = r.hc+r.ac;     // corners totales del partido
+      n++; sumX+=x; sumY+=y; sumXY+=x*y; sumX2+=x*x;
+    }
+  });
+  return {n,sumX,sumY,sumXY,sumX2};
+}
 function aggregateRows(rows){
   const groups = {}; // name -> {home:{mp,gf,ga,cmp,cf,ca}, away:{...}}
   function ensure(name){
@@ -561,9 +593,10 @@ async function importCSV(){
   box.style.display = 'block';
   if(parsed.error){ box.innerHTML = `<p class="ev-neg">${parsed.error}</p>`; return; }
   const groups = aggregateRows(parsed.rows);
+  const regression = computeRegressionSums(parsed.rows);
   const key = liga.toLowerCase()+'||'+temporada.toLowerCase();
   const existingIdx = SEASON_IMPORTS.findIndex(i => (i.liga.toLowerCase()+'||'+i.temporada.toLowerCase())===key);
-  const record = { id: existingIdx!==-1 ? SEASON_IMPORTS[existingIdx].id : Date.now().toString(), liga, temporada, weight, groups };
+  const record = { id: existingIdx!==-1 ? SEASON_IMPORTS[existingIdx].id : Date.now().toString(), liga, temporada, weight, groups, regression };
   const wasReplace = existingIdx!==-1;
   if(existingIdx!==-1) SEASON_IMPORTS[existingIdx] = record; else SEASON_IMPORTS.push(record);
   await persistTeamSources();
@@ -672,6 +705,13 @@ function refreshMatchTeamSelects(){
     sel.innerHTML = '<option value="">— manual —</option>' + teamsInLiga.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
     if(teamsInLiga.find(t=>t.id===current)) sel.value = current;
   });
+  const infoEl = document.getElementById('ligaStatsInfo');
+  const stats = LEAGUE_STATS[liga];
+  if(infoEl){
+    infoEl.textContent = stats
+      ? `Relación real goles↔córners en ${liga}: cada gol de más sobre la media (${stats.meanGoals.toFixed(2)}) se asocia a ${stats.slope>=0?'+':''}${stats.slope.toFixed(2)} córners de media (calculado sobre ${stats.n} partidos importados).`
+      : `Aún no hay suficientes partidos con córners importados en ${liga || 'esta liga'} para calcular la relación goles↔córners (se necesitan ≥20).`;
+  }
 }
 
 // ---------- match analysis (corners + goals combined) ----------
@@ -694,7 +734,28 @@ function calcCorners(){
   const lh = parseFloat(document.getElementById('c_lh').value);
   const la = parseFloat(document.getElementById('c_la').value);
   if(!lh || !la){ alert('Faltan las lambdas'); return; }
-  const total = lh+la;
+  const baseTotal = lh+la;
+
+  // Ajuste por contexto de gol: usa la regresion real goles->corners de esa liga (calculada de tus propios CSV importados)
+  const liga = document.getElementById('m_liga').value;
+  const stats = LEAGUE_STATS[liga];
+  const glh = parseFloat(document.getElementById('g_lh').value);
+  const gla = parseFloat(document.getElementById('g_la').value);
+  const expectedGoals = (glh && gla) ? (glh+gla) : null;
+
+  let total = baseTotal;
+  let adjustNote = '';
+  if(stats && expectedGoals!==null){
+    let adjustedTotal = baseTotal + stats.slope*(expectedGoals - stats.meanGoals);
+    // limitar el ajuste para que no se dispare con muestras pequeñas o partidos extremos
+    adjustedTotal = Math.max(baseTotal*0.6, Math.min(baseTotal*1.6, adjustedTotal));
+    total = adjustedTotal;
+    const delta = adjustedTotal - baseTotal;
+    adjustNote = `<p class="hint">Ajuste por contexto de gol (${liga}, pendiente real ${stats.slope.toFixed(2)} córners/gol sobre ${stats.n} partidos): goles esperados ${expectedGoals.toFixed(2)} vs media de liga ${stats.meanGoals.toFixed(2)} → ${delta>=0?'+':''}${delta.toFixed(2)} córners. Base: ${baseTotal.toFixed(2)} → Ajustado: ${total.toFixed(2)}.</p>`;
+  } else if(!stats){
+    adjustNote = `<p class="hint">Aún no hay suficientes partidos importados con córners de esta liga para calcular el ajuste por contexto de gol (se necesitan al menos 20). Usando el total base.</p>`;
+  }
+
   const line = parseFloat(document.getElementById('c_line').value);
   const pOver = poissonOver(line,total);
   const pUnder = 1-pOver;
@@ -704,7 +765,9 @@ function calcCorners(){
     <div><div class="hint">Total esperado (córners)</div><div class="display" style="font-size:24px;">${total.toFixed(2)}</div></div>
     <div><div class="hint">P(Over ${line})</div><div class="display" style="font-size:24px;">${fmtPct(pOver)}</div></div>
     <div><div class="hint">P(Under ${line})</div><div class="display" style="font-size:24px;">${fmtPct(pUnder)}</div></div>
-  </div><hr class="divider">`;
+  </div>
+  ${adjustNote}
+  <hr class="divider">`;
   if(oddOver){
     const ev = evFromProb(pOver,oddOver);
     html += `<p>Over @ ${oddOver}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
