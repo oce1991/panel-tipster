@@ -430,23 +430,60 @@ async function saveState(){
 async function persistTeamSources(){ await saveState(); }
 
 // ---------- teams ----------
-let LEAGUE_STATS = {}; // liga -> {slope, meanGoals, meanCorners, n}
+let LEAGUE_STATS = {}; // liga -> {slope, meanGoals, meanCorners, n, rho, rhoN}
+function tauDC(x,y,lam,mu,rho){
+  if(x===0 && y===0) return 1 - lam*mu*rho;
+  if(x===0 && y===1) return 1 + lam*rho;
+  if(x===1 && y===0) return 1 + mu*rho;
+  if(x===1 && y===1) return 1 - rho;
+  return 1;
+}
+function fitRho(meanHome, meanAway, sc){
+  let bestRho = 0, bestErr = Infinity;
+  for(let rho=-0.3; rho<=0.3; rho+=0.005){
+    const cells = [[0,0,sc.c00],[1,0,sc.c10],[0,1,sc.c01],[1,1,sc.c11]];
+    let err = 0;
+    cells.forEach(([x,y,obsCount])=>{
+      const obsFreq = obsCount/sc.n;
+      const predFreq = tauDC(x,y,meanHome,meanAway,rho) * poissonPMF(x,meanHome) * poissonPMF(y,meanAway);
+      err += (predFreq-obsFreq)*(predFreq-obsFreq);
+    });
+    if(err < bestErr){ bestErr = err; bestRho = rho; }
+  }
+  return bestRho;
+}
 function recomputeLeagueStats(){
   const acc = {};
+  const accSc = {};
   SEASON_IMPORTS.forEach(imp=>{
-    if(!imp.regression || !imp.regression.n) return;
     const w = imp.weight;
-    if(!acc[imp.liga]) acc[imp.liga] = {n:0,sumX:0,sumY:0,sumXY:0,sumX2:0};
-    const a = acc[imp.liga]; const r = imp.regression;
-    a.n += r.n*w; a.sumX += r.sumX*w; a.sumY += r.sumY*w; a.sumXY += r.sumXY*w; a.sumX2 += r.sumX2*w;
+    if(imp.regression && imp.regression.n){
+      if(!acc[imp.liga]) acc[imp.liga] = {n:0,sumX:0,sumY:0,sumXY:0,sumX2:0};
+      const a = acc[imp.liga]; const r = imp.regression;
+      a.n += r.n*w; a.sumX += r.sumX*w; a.sumY += r.sumY*w; a.sumXY += r.sumXY*w; a.sumX2 += r.sumX2*w;
+    }
+    if(imp.scorelines && imp.scorelines.n){
+      if(!accSc[imp.liga]) accSc[imp.liga] = {n:0,sumHome:0,sumAway:0,c00:0,c10:0,c01:0,c11:0};
+      const s = accSc[imp.liga]; const sc = imp.scorelines;
+      s.n += sc.n*w; s.sumHome += sc.sumHome*w; s.sumAway += sc.sumAway*w;
+      s.c00 += sc.c00*w; s.c10 += sc.c10*w; s.c01 += sc.c01*w; s.c11 += sc.c11*w;
+    }
   });
   LEAGUE_STATS = {};
   Object.entries(acc).forEach(([liga,a])=>{
-    if(a.n < 20) return; // muestra minima para fiarse de la pendiente
+    if(a.n < 20) return; // muestra minima para fiarse de la pendiente corners
     const meanX = a.sumX/a.n, meanY = a.sumY/a.n;
     const denom = a.n*a.sumX2 - a.sumX*a.sumX;
     const slope = denom!==0 ? (a.n*a.sumXY - a.sumX*a.sumY)/denom : 0;
     LEAGUE_STATS[liga] = {slope, meanGoals:meanX, meanCorners:meanY, n:Math.round(a.n)};
+  });
+  Object.entries(accSc).forEach(([liga,s])=>{
+    if(s.n < 100) return; // muestra minima para fiarse del ajuste Dixon-Coles
+    const meanHome = s.sumHome/s.n, meanAway = s.sumAway/s.n;
+    const rho = fitRho(meanHome, meanAway, s);
+    if(!LEAGUE_STATS[liga]) LEAGUE_STATS[liga] = {};
+    LEAGUE_STATS[liga].rho = rho;
+    LEAGUE_STATS[liga].rhoN = Math.round(s.n);
   });
 }
 function recomputeTeams(){
@@ -548,6 +585,17 @@ function parseCSVText(text){
   }
   return {rows, missingCorners: iHc===-1 || iAc===-1};
 }
+function computeScorelineSums(rows){
+  let n=0, sumHome=0, sumAway=0, c00=0, c10=0, c01=0, c11=0;
+  rows.forEach(r=>{
+    n++; sumHome+=r.fthg; sumAway+=r.ftag;
+    if(r.fthg===0 && r.ftag===0) c00++;
+    else if(r.fthg===1 && r.ftag===0) c10++;
+    else if(r.fthg===0 && r.ftag===1) c01++;
+    else if(r.fthg===1 && r.ftag===1) c11++;
+  });
+  return {n, sumHome, sumAway, c00, c10, c01, c11};
+}
 function computeRegressionSums(rows){
   let n=0,sumX=0,sumY=0,sumXY=0,sumX2=0;
   rows.forEach(r=>{
@@ -594,9 +642,10 @@ async function importCSV(){
   if(parsed.error){ box.innerHTML = `<p class="ev-neg">${parsed.error}</p>`; return; }
   const groups = aggregateRows(parsed.rows);
   const regression = computeRegressionSums(parsed.rows);
+  const scorelines = computeScorelineSums(parsed.rows);
   const key = liga.toLowerCase()+'||'+temporada.toLowerCase();
   const existingIdx = SEASON_IMPORTS.findIndex(i => (i.liga.toLowerCase()+'||'+i.temporada.toLowerCase())===key);
-  const record = { id: existingIdx!==-1 ? SEASON_IMPORTS[existingIdx].id : Date.now().toString(), liga, temporada, weight, groups, regression };
+  const record = { id: existingIdx!==-1 ? SEASON_IMPORTS[existingIdx].id : Date.now().toString(), liga, temporada, weight, groups, regression, scorelines };
   const wasReplace = existingIdx!==-1;
   if(existingIdx!==-1) SEASON_IMPORTS[existingIdx] = record; else SEASON_IMPORTS.push(record);
   await persistTeamSources();
@@ -786,15 +835,33 @@ function calcGoals(){
   const lh = parseFloat(document.getElementById('g_lh').value);
   const la = parseFloat(document.getElementById('g_la').value);
   if(!lh || !la){ alert('Faltan las lambdas'); return; }
-  let p1=0,pX=0,p2=0;
-  const matrix=[];
+  const liga = document.getElementById('m_liga').value;
+  const stats = LEAGUE_STATS[liga];
+  const rho = (stats && typeof stats.rho === 'number') ? stats.rho : null;
+
+  let matrix=[];
   for(let i=0;i<=8;i++){
     matrix[i]=[];
     for(let j=0;j<=8;j++){
-      const p = poissonPMF(i,lh)*poissonPMF(j,la);
+      let p = poissonPMF(i,lh)*poissonPMF(j,la);
+      if(rho!==null && i<=1 && j<=1){
+        p *= tauDC(i,j,lh,la,rho);
+        if(p<0) p = 0;
+      }
       matrix[i][j]=p;
-      if(i>j) p1+=p; else if(i===j) pX+=p; else p2+=p;
     }
+  }
+  // renormalizar para que la matriz vuelva a sumar 1 tras el ajuste tau
+  let sumAll = 0;
+  for(let i=0;i<=8;i++) for(let j=0;j<=8;j++) sumAll += matrix[i][j];
+  if(sumAll>0){
+    for(let i=0;i<=8;i++) for(let j=0;j<=8;j++) matrix[i][j] /= sumAll;
+  }
+
+  let p1=0,pX=0,p2=0;
+  for(let i=0;i<=8;i++) for(let j=0;j<=8;j++){
+    const p = matrix[i][j];
+    if(i>j) p1+=p; else if(i===j) pX+=p; else p2+=p;
   }
   const line = parseFloat(document.getElementById('g_line').value);
   const lineFloor = Math.floor(line);
@@ -802,12 +869,17 @@ function calcGoals(){
   for(let i=0;i<=8;i++) for(let j=0;j<=8;j++) if(i+j<=lineFloor) pUnderGoals += matrix[i][j];
   const pOverGoals = 1-pUnderGoals;
 
+  const dcNote = rho!==null
+    ? `<p class="hint">Ajuste Dixon-Coles aplicado en ${liga} (ρ=${rho.toFixed(3)}, calculado sobre ${stats.rhoN} partidos reales): corrige la sobre/infra-estimación del Poisson simple en marcadores 0-0, 1-0, 0-1 y 1-1.</p>`
+    : `<p class="hint">Aún no hay suficientes partidos importados en ${liga || 'esta liga'} para ajustar Dixon-Coles (se necesitan ≥100) — usando Poisson independiente sin corrección.</p>`;
+
   let html = `<div class="grid3">
     <div><div class="hint">P(1)</div><div class="display" style="font-size:22px;">${fmtPct(p1)}</div></div>
     <div><div class="hint">P(X)</div><div class="display" style="font-size:22px;">${fmtPct(pX)}</div></div>
     <div><div class="hint">P(2)</div><div class="display" style="font-size:22px;">${fmtPct(p2)}</div></div>
   </div>
   <p class="hint">Goles esperados: ${(lh+la).toFixed(2)} · P(Over ${line}) ${fmtPct(pOverGoals)} · P(Under ${line}) ${fmtPct(pUnderGoals)}</p>
+  ${dcNote}
   <hr class="divider">`;
   const o1 = parseFloat(document.getElementById('g_odd1').value);
   const oX = parseFloat(document.getElementById('g_oddX').value);
@@ -820,7 +892,6 @@ function calcGoals(){
       html += `<p>${label} @ ${odd}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
     }
   });
-  html += `<p class="hint">Modelo Poisson independiente (sin ajuste Dixon-Coles de correlación en marcadores bajos) — suficiente para detectar valor grueso; para afinar 0-0/1-0/1-1 se puede añadir el factor τ más adelante.</p>`;
   const box = document.getElementById('goalsResult');
   box.style.display='block'; box.innerHTML = html;
 }
