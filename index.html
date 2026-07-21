@@ -154,10 +154,9 @@ create policy "public update" on tipster_data for update using (true);</pre>
 <nav class="tabs" id="tabs">
   <button data-view="dashboard" class="active"><span class="num">01</span>Panel</button>
   <button data-view="teams"><span class="num">02</span>Equipos</button>
-  <button data-view="corners"><span class="num">03</span>Corners</button>
-  <button data-view="goals"><span class="num">04</span>1X2 / Goles</button>
-  <button data-view="bets"><span class="num">05</span>Apuestas</button>
-  <button data-view="bankroll"><span class="num">06</span>Banca</button>
+  <button data-view="corners"><span class="num">03</span>Partido</button>
+  <button data-view="bets"><span class="num">04</span>Apuestas</button>
+  <button data-view="bankroll"><span class="num">05</span>Banca</button>
 </nav>
 
 <main>
@@ -232,22 +231,30 @@ create policy "public update" on tipster_data for update using (true);</pre>
     </div>
     <div class="card">
       <h2><span class="tag">Base</span> Equipos guardados</h2>
+      <div class="grid2">
+        <div><label>Filtrar por liga</label><select id="teamsFilter" onchange="renderTeams()"><option value="">Todas las ligas</option></select></div>
+        <div></div>
+      </div>
       <table id="teamsTable"><thead><tr><th>Equipo</th><th>Liga</th><th>Corners C/F</th><th>Goles C/F</th><th></th></tr></thead><tbody></tbody></table>
       <div class="empty" id="teamsEmpty" style="display:none;">Aún no has añadido ningún equipo. Empieza por el que juegue este fin de semana.</div>
     </div>
   </div>
 
-  <!-- CORNERS MODEL -->
+  <!-- MATCH ANALYSIS (CORNERS + GOALS UNIFIED) -->
   <div class="view" id="view-corners">
     <div class="card">
-      <h2><span class="tag">Modelo</span> Córners — Poisson</h2>
-      <p class="hint">λ_local = media(córners a favor del local en casa, córners en contra del visitante fuera) — y análogo para el visitante. Se suman para el total del partido.</p>
-      <div class="grid2">
+      <h2><span class="tag">Partido</span> Selecciona equipos</h2>
+      <div class="grid3">
+        <div><label>Liga</label><select id="m_liga" onchange="refreshMatchTeamSelects()"></select></div>
         <div><label>Equipo local</label><select id="c_home"></select></div>
         <div><label>Equipo visitante</label><select id="c_away"></select></div>
       </div>
-      <button class="btn" onclick="loadCornersFromTeams()">Cargar medias de la ficha</button>
-      <hr class="divider">
+      <button class="btn" onclick="loadMatchFromTeams()">Cargar medias de la ficha (córners + goles)</button>
+    </div>
+
+    <div class="card">
+      <h2><span class="tag">Modelo</span> Córners — Poisson</h2>
+      <p class="hint">λ_local = media(córners a favor del local en casa, córners en contra del visitante fuera) — y análogo para el visitante. Se suman para el total del partido.</p>
       <div class="grid2">
         <div><label>λ esperado — Local</label><input id="c_lh" type="number" step="0.1"></div>
         <div><label>λ esperado — Visitante</label><input id="c_la" type="number" step="0.1"></div>
@@ -257,22 +264,13 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <div><label>Cuota Over</label><input id="c_oddOver" type="number" step="0.01" placeholder="1.90"></div>
         <div><label>Cuota Under</label><input id="c_oddUnder" type="number" step="0.01" placeholder="1.90"></div>
       </div>
-      <button class="btn amber" onclick="calcCorners()">Calcular</button>
+      <button class="btn amber" onclick="calcCorners()">Calcular córners</button>
       <div class="result-box" id="cornersResult" style="display:none;"></div>
     </div>
-  </div>
 
-  <!-- GOALS / 1X2 MODEL -->
-  <div class="view" id="view-goals">
     <div class="card">
       <h2><span class="tag">Modelo</span> Goles y 1X2 — Poisson bivariante simplificado</h2>
       <p class="hint">λ_local = media(goles a favor local en casa, goles en contra visitante fuera). Matriz de resultados 0–6 goles por equipo.</p>
-      <div class="grid2">
-        <div><label>Equipo local</label><select id="g_home"></select></div>
-        <div><label>Equipo visitante</label><select id="g_away"></select></div>
-      </div>
-      <button class="btn" onclick="loadGoalsFromTeams()">Cargar medias de la ficha</button>
-      <hr class="divider">
       <div class="grid2">
         <div><label>λ esperado — Goles local</label><input id="g_lh" type="number" step="0.1"></div>
         <div><label>λ esperado — Goles visitante</label><input id="g_la" type="number" step="0.1"></div>
@@ -286,9 +284,10 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <div><label>Línea goles O/U</label><input id="g_line" type="number" step="0.5" value="2.5"></div>
         <div><label>Cuota Over goles</label><input id="g_oddOver" type="number" step="0.01" placeholder="1.85"></div>
       </div>
-      <button class="btn amber" onclick="calcGoals()">Calcular</button>
+      <button class="btn amber" onclick="calcGoals()">Calcular goles/1X2</button>
       <div class="result-box" id="goalsResult" style="display:none;"></div>
     </div>
+  </div>
   </div>
 
   <!-- BETS LOG -->
@@ -616,11 +615,22 @@ async function deleteImport(id){
   recomputeTeams();
   renderTeams();
 }
+function getLigasPresentes(){
+  return [...new Set(TEAMS.map(t=>t.liga))].sort();
+}
 function renderTeams(){
+  const filterSel = document.getElementById('teamsFilter');
+  const currentFilter = filterSel.value;
+  const ligas = getLigasPresentes();
+  filterSel.innerHTML = '<option value="">Todas las ligas</option>' + ligas.map(l=>`<option value="${l}">${l}</option>`).join('');
+  if(ligas.includes(currentFilter)) filterSel.value = currentFilter;
+  const activeFilter = filterSel.value;
+
   const tbody = document.querySelector('#teamsTable tbody');
   tbody.innerHTML='';
-  document.getElementById('teamsEmpty').style.display = TEAMS.length? 'none':'block';
-  [...TEAMS].sort((a,b)=>a.name.localeCompare(b.name)).forEach(t=>{
+  const visible = activeFilter ? TEAMS.filter(t=>t.liga===activeFilter) : TEAMS;
+  document.getElementById('teamsEmpty').style.display = visible.length? 'none':'block';
+  [...visible].sort((a,b)=> a.liga===b.liga ? a.name.localeCompare(b.name) : a.liga.localeCompare(b.liga)).forEach(t=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `<td class="mono" style="font-family:Inter;font-weight:600;">${t.name}</td>
       <td>${t.liga}</td>
@@ -646,24 +656,40 @@ function renderImports(){
   });
 }
 function refreshTeamSelects(){
-  ['c_home','c_away','g_home','g_away'].forEach(id=>{
+  const ligaSel = document.getElementById('m_liga');
+  const currentLiga = ligaSel.value;
+  const ligas = getLigasPresentes();
+  ligaSel.innerHTML = ligas.map(l=>`<option value="${l}">${l}</option>`).join('');
+  if(ligas.includes(currentLiga)) ligaSel.value = currentLiga;
+  refreshMatchTeamSelects();
+}
+function refreshMatchTeamSelects(){
+  const liga = document.getElementById('m_liga').value;
+  const teamsInLiga = TEAMS.filter(t=>t.liga===liga).sort((a,b)=>a.name.localeCompare(b.name));
+  ['c_home','c_away'].forEach(id=>{
     const sel = document.getElementById(id);
     const current = sel.value;
-    sel.innerHTML = '<option value="">— manual —</option>' + TEAMS.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
-    if(TEAMS.find(t=>t.id===current)) sel.value = current;
+    sel.innerHTML = '<option value="">— manual —</option>' + teamsInLiga.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+    if(teamsInLiga.find(t=>t.id===current)) sel.value = current;
   });
 }
 
-// ---------- corners model ----------
-function loadCornersFromTeams(){
+// ---------- match analysis (corners + goals combined) ----------
+function loadMatchFromTeams(){
   const h = TEAMS.find(t=>t.id===document.getElementById('c_home').value);
   const a = TEAMS.find(t=>t.id===document.getElementById('c_away').value);
   if(!h || !a){ alert('Selecciona local y visitante de tu base de equipos'); return; }
-  const lh = (h.cfh + a.caa)/2;
-  const la = (a.cfa + h.cah)/2;
-  document.getElementById('c_lh').value = lh.toFixed(2);
-  document.getElementById('c_la').value = la.toFixed(2);
+  const clh = (h.cfh + a.caa)/2;
+  const cla = (a.cfa + h.cah)/2;
+  document.getElementById('c_lh').value = clh.toFixed(2);
+  document.getElementById('c_la').value = cla.toFixed(2);
+  const glh = (h.gfh + a.gaa)/2;
+  const gla = (a.gfa + h.gah)/2;
+  document.getElementById('g_lh').value = glh.toFixed(2);
+  document.getElementById('g_la').value = gla.toFixed(2);
 }
+
+// ---------- corners model ----------
 function calcCorners(){
   const lh = parseFloat(document.getElementById('c_lh').value);
   const la = parseFloat(document.getElementById('c_la').value);
@@ -687,21 +713,12 @@ function calcCorners(){
     const ev = evFromProb(pUnder,oddUnder);
     html += `<p>Under @ ${oddUnder}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
   }
-  html += `<p class="hint">EV positivo no garantiza acierto en un solo partido — es una ventaja estadística que solo se demuestra en volumen. Registra la apuesta en el Panel 05 para hacer seguimiento real.</p>`;
+  html += `<p class="hint">EV positivo no garantiza acierto en un solo partido — es una ventaja estadística que solo se demuestra en volumen. Registra la apuesta en 04 Apuestas para hacer seguimiento real.</p>`;
   const box = document.getElementById('cornersResult');
   box.style.display='block'; box.innerHTML = html;
 }
 
 // ---------- goals / 1x2 model ----------
-function loadGoalsFromTeams(){
-  const h = TEAMS.find(t=>t.id===document.getElementById('g_home').value);
-  const a = TEAMS.find(t=>t.id===document.getElementById('g_away').value);
-  if(!h || !a){ alert('Selecciona local y visitante de tu base de equipos'); return; }
-  const lh = (h.gfh + a.gaa)/2;
-  const la = (a.gfa + h.gah)/2;
-  document.getElementById('g_lh').value = lh.toFixed(2);
-  document.getElementById('g_la').value = la.toFixed(2);
-}
 function calcGoals(){
   const lh = parseFloat(document.getElementById('g_lh').value);
   const la = parseFloat(document.getElementById('g_la').value);
