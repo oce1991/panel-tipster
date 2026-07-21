@@ -238,6 +238,21 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <table id="teamsTable"><thead><tr><th>Equipo</th><th>Liga</th><th>Corners C/F</th><th>Goles C/F</th><th></th></tr></thead><tbody></tbody></table>
       <div class="empty" id="teamsEmpty" style="display:none;">Aún no has añadido ningún equipo. Empieza por el que juegue este fin de semana.</div>
     </div>
+
+    <div class="card">
+      <h2><span class="tag">Ascensos/Descensos</span> Promocionar equipo entre ligas</h2>
+      <p class="hint">Para un recién ascendido o descendido: coge sus datos de su liga anterior y mézclalos con la media de la liga nueva (regresión a la media), porque normalmente no rinde igual en la nueva categoría.</p>
+      <div class="grid3">
+        <div><label>Equipo de origen</label><select id="promo_source" onchange="document.getElementById('promo_name').value = this.value.split('||')[1] || '';"></select></div>
+        <div><label>Liga destino</label>
+          <select id="promo_target"><option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Premier League</option><option>Ligue 1</option><option>Serie A</option><option>Eredivisie</option><option>Süper Lig</option><option>Championship</option><option>Otra</option></select>
+        </div>
+        <div><label>Peso a sus propios datos (%)</label><input id="promo_weight" type="number" step="5" value="50" min="0" max="100"></div>
+      </div>
+      <div><label>Nombre en la liga destino (por si cambia)</label><input id="promo_name" placeholder="Se rellena solo al elegir equipo"></div>
+      <button class="btn amber" onclick="promoteTeam()">Promocionar con regresión a la media</button>
+      <div class="result-box" id="promoResult" style="display:none;"></div>
+    </div>
   </div>
 
   <!-- MATCH ANALYSIS (CORNERS + GOALS UNIFIED) -->
@@ -656,6 +671,65 @@ async function importCSV(){
   fileInput.value = '';
 }
 
+function computeLigaAverage(liga){
+  const inLiga = TEAMS.filter(t=>t.liga===liga);
+  if(!inLiga.length) return null;
+  const fields = ['cfh','cah','cfa','caa','gfh','gah','gfa','gaa'];
+  const avg = {};
+  fields.forEach(f=>{ avg[f] = inLiga.reduce((s,t)=>s+t[f],0)/inLiga.length; });
+  return avg;
+}
+function refreshPromoSelect(){
+  const sel = document.getElementById('promo_source');
+  if(!sel) return;
+  const current = sel.value;
+  const sorted = [...TEAMS].sort((a,b)=> a.liga===b.liga ? a.name.localeCompare(b.name) : a.liga.localeCompare(b.liga));
+  sel.innerHTML = sorted.map(t=>`<option value="${t.liga}||${t.name}">${t.name} (${t.liga})</option>`).join('');
+  if([...sel.options].some(o=>o.value===current)) sel.value = current;
+  if(sel.value){
+    const name = sel.value.split('||')[1];
+    const nameInput = document.getElementById('promo_name');
+    if(nameInput && !nameInput.value) nameInput.value = name;
+  }
+}
+function promoteTeam(){
+  const srcVal = document.getElementById('promo_source').value;
+  if(!srcVal){ alert('No hay equipos en la base todavía'); return; }
+  const [srcLiga, srcName] = srcVal.split('||');
+  const source = TEAMS.find(t=>t.liga===srcLiga && t.name===srcName);
+  if(!source){ alert('No se ha encontrado el equipo de origen'); return; }
+  const targetLiga = document.getElementById('promo_target').value;
+  const weightPct = Math.max(0, Math.min(100, parseFloat(document.getElementById('promo_weight').value) || 50));
+  const w = weightPct/100;
+  const targetName = document.getElementById('promo_name').value.trim() || srcName;
+
+  const ligaAvg = computeLigaAverage(targetLiga);
+  const fields = ['cfh','cah','cfa','caa','gfh','gah','gfa','gaa'];
+  const blended = {};
+  fields.forEach(f=>{
+    const avgVal = ligaAvg ? ligaAvg[f] : source[f];
+    blended[f] = w*source[f] + (1-w)*avgVal;
+  });
+
+  const team = {
+    id: Date.now().toString(),
+    name: targetName, liga: targetLiga,
+    cfh: blended.cfh, cah: blended.cah, mh: 1,
+    cfa: blended.cfa, caa: blended.caa, ma: 1,
+    gfh: blended.gfh, gah: blended.gah,
+    gfa: blended.gfa, gaa: blended.gaa,
+  };
+  MANUAL_TEAMS.push(team);
+  persistTeamSources();
+  recomputeTeams();
+  renderTeams();
+  const box = document.getElementById('promoResult');
+  box.style.display='block';
+  box.innerHTML = ligaAvg
+    ? `<p class="ev-pos">${targetName} añadido a ${targetLiga}, mezclando ${weightPct}% sus datos propios (${srcLiga}) + ${100-weightPct}% la media de ${targetLiga}.</p>`
+    : `<p class="hint">${targetName} añadido a ${targetLiga} usando solo sus datos propios (${srcLiga}), porque aún no hay equipos en ${targetLiga} con los que calcular una media. En cuanto cargues más equipos de esa liga, puedes borrar y repetir esto para que se mezcle de verdad.</p>`;
+}
+
 // ---------- teams ----------
 async function saveTeam(){
   const name = document.getElementById('t_name').value.trim();
@@ -723,6 +797,7 @@ function renderTeams(){
   });
   renderImports();
   refreshTeamSelects();
+  refreshPromoSelect();
 }
 function renderImports(){
   const tbody = document.querySelector('#importsTable tbody');
