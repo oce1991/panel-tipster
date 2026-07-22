@@ -833,7 +833,7 @@ function refreshMatchTeamSelects(){
   const stats = LEAGUE_STATS[liga];
   if(infoEl){
     infoEl.textContent = stats
-      ? `Relación real goles↔córners en ${liga}: cada gol de más sobre la media (${stats.meanGoals.toFixed(2)}) se asocia a ${stats.slope>=0?'+':''}${stats.slope.toFixed(2)} córners de media (calculado sobre ${stats.n} partidos importados).`
+      ? `Relación real goles↔córners en ${liga}: cada gol de más sobre la media (${stats.meanGoals.toFixed(2)}) se asocia a ${stats.slope>=0?'+':''}${stats.slope.toFixed(4)} córners de media (calculado sobre ${stats.n} partidos importados).`
       : `Aún no hay suficientes partidos con córners importados en ${liga || 'esta liga'} para calcular la relación goles↔córners (se necesitan ≥20).`;
   }
 }
@@ -875,7 +875,7 @@ function calcCorners(){
     adjustedTotal = Math.max(baseTotal*0.6, Math.min(baseTotal*1.6, adjustedTotal));
     total = adjustedTotal;
     const delta = adjustedTotal - baseTotal;
-    adjustNote = `<p class="hint">Ajuste por contexto de gol (${liga}, pendiente real ${stats.slope.toFixed(2)} córners/gol sobre ${stats.n} partidos): goles esperados ${expectedGoals.toFixed(2)} vs media de liga ${stats.meanGoals.toFixed(2)} → ${delta>=0?'+':''}${delta.toFixed(2)} córners. Base: ${baseTotal.toFixed(2)} → Ajustado: ${total.toFixed(2)}.</p>`;
+    adjustNote = `<p class="hint">Ajuste por contexto de gol (${liga}, pendiente real ${stats.slope.toFixed(4)} córners/gol sobre ${stats.n} partidos): goles esperados ${expectedGoals.toFixed(2)} vs media de liga ${stats.meanGoals.toFixed(2)} → ${delta>=0?'+':''}${delta.toFixed(2)} córners. Base: ${baseTotal.toFixed(2)} → Ajustado: ${total.toFixed(2)}.</p>`;
   } else if(!stats){
     adjustNote = `<p class="hint">Aún no hay suficientes partidos importados con córners de esta liga para calcular el ajuste por contexto de gol (se necesitan al menos 20). Usando el total base.</p>`;
   }
