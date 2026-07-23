@@ -1025,7 +1025,9 @@ const TEAM_ALIASES = {
   'ud las palmas':'las palmas',
   'sd huesca':'huesca',
   'cd tenerife':'tenerife',
-  'sporting de gijon':'sp gijon', 'real sporting':'sp gijon',
+  'sporting de gijon':'sp gijon', 'real sporting':'sp gijon', 'sporting':'sp gijon',
+  'real sociedad b':'sociedad b',
+  'celta fortuna':'celta b',
 };
 function normalizeTeamName(s){
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,' ');
