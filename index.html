@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
     --pitch:#0F3D2E;
@@ -155,8 +156,9 @@ create policy "public update" on tipster_data for update using (true);</pre>
   <button data-view="dashboard" class="active"><span class="num">01</span>Panel</button>
   <button data-view="teams"><span class="num">02</span>Equipos</button>
   <button data-view="corners"><span class="num">03</span>Partido</button>
-  <button data-view="bets"><span class="num">04</span>Apuestas</button>
-  <button data-view="bankroll"><span class="num">05</span>Banca</button>
+  <button data-view="jornada"><span class="num">04</span>Jornada</button>
+  <button data-view="bets"><span class="num">05</span>Apuestas</button>
+  <button data-view="bankroll"><span class="num">06</span>Banca</button>
 </nav>
 
 <main>
@@ -306,6 +308,32 @@ create policy "public update" on tipster_data for update using (true);</pre>
   </div>
   </div>
 
+  <!-- JORNADA (CALENDARIO + ANALISIS AUTOMATICO) -->
+  <div class="view" id="view-jornada">
+    <div class="card">
+      <h2><span class="tag">Calendario</span> Importar jornadas (Excel/CSV)</h2>
+      <p class="hint">Crea un Excel con estas columnas exactas en la primera fila: <strong>Liga, Jornada, Fecha, Local, Visitante</strong>. Una fila por partido, para toda la temporada o solo las próximas jornadas. Al importar una liga, se sustituye todo su calendario anterior (para actualizar fechas o resultados de fixture, vuelve a subir el archivo entero de esa liga).</p>
+      <div class="grid2">
+        <div><label>Liga de este calendario</label>
+          <select id="fx_liga"><option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Premier League</option><option>Championship</option><option>Ligue 1</option><option>Serie A</option><option>Eredivisie</option><option>Süper Lig</option><option>Otra</option></select>
+        </div>
+        <div><label>Archivo (.xlsx o .csv)</label><input id="fx_file" type="file" accept=".xlsx,.xls,.csv"></div>
+      </div>
+      <button class="btn amber" onclick="importFixtures()">Importar calendario</button>
+      <div class="result-box" id="fixturesImportResult" style="display:none;"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="tag">Próxima</span> Jornada a analizar</h2>
+      <div class="grid2">
+        <div><label>Liga</label><select id="jr_liga" onchange="refreshJornadaSelect()"></select></div>
+        <div><label>Jornada</label><select id="jr_jornada" onchange="renderJornada()"></select></div>
+      </div>
+      <div id="jornadaMatches"></div>
+      <div class="empty" id="jornadaEmpty" style="display:none;">No hay calendario importado todavía para esta liga.</div>
+    </div>
+  </div>
+
   <!-- BETS LOG -->
   <div class="view" id="view-bets">
     <div class="card">
@@ -396,6 +424,7 @@ let MANUAL_TEAMS = [];
 let SEASON_IMPORTS = []; // {id, liga, temporada, weight, groups}
 let BETS = [];
 let BANKCFG = {initial:1000, fraction:0.25};
+let FIXTURES = []; // {id, liga, jornada, fecha, local, visitante}
 function blankSide(){ return {mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0}; }
 
 // ---------- Supabase storage layer ----------
@@ -435,7 +464,7 @@ async function loadState(){
 }
 async function saveState(){
   try{
-    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, bets: BETS, bankroll: BANKCFG };
+    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, bets: BETS, bankroll: BANKCFG, fixtures: FIXTURES };
     const { error } = await sbClient.from('tipster_data').upsert({ id:'main', data: payload, updated_at: new Date().toISOString() });
     if(error) throw error;
   }catch(e){
@@ -971,6 +1000,152 @@ function calcGoals(){
   box.style.display='block'; box.innerHTML = html;
 }
 
+// ---------- fixture calendar (jornadas) ----------
+function findTeamInLiga(name, liga){
+  if(!name) return null;
+  const n = name.trim().toLowerCase();
+  return TEAMS.find(t=>t.liga===liga && t.name.trim().toLowerCase()===n) || null;
+}
+function predictCorners(homeTeam, awayTeam, liga, line){
+  const clh = (homeTeam.cfh + awayTeam.caa)/2;
+  const cla = (awayTeam.cfa + homeTeam.cah)/2;
+  const baseTotal = clh+cla;
+  const glh = (homeTeam.gfh + awayTeam.gaa)/2;
+  const gla = (awayTeam.gfa + homeTeam.gah)/2;
+  const expectedGoals = glh+gla;
+  const stats = LEAGUE_STATS[liga];
+  let total = baseTotal;
+  if(stats && typeof stats.slope==='number'){
+    let adjustedTotal = baseTotal + stats.slope*(expectedGoals - stats.meanGoals);
+    adjustedTotal = Math.max(baseTotal*0.6, Math.min(baseTotal*1.6, adjustedTotal));
+    total = adjustedTotal;
+  }
+  const pOver = poissonOver(line, total);
+  return { baseTotal, total, pOver, pUnder: 1-pOver, expectedGoals };
+}
+function predictGoals(homeTeam, awayTeam, liga, line){
+  const lh = (homeTeam.gfh + awayTeam.gaa)/2;
+  const la = (awayTeam.gfa + homeTeam.gah)/2;
+  const stats = LEAGUE_STATS[liga];
+  const rho = (stats && typeof stats.rho === 'number') ? stats.rho : null;
+  let matrix=[];
+  for(let i=0;i<=8;i++){
+    matrix[i]=[];
+    for(let j=0;j<=8;j++){
+      let p = poissonPMF(i,lh)*poissonPMF(j,la);
+      if(rho!==null && i<=1 && j<=1){ p *= tauDC(i,j,lh,la,rho); if(p<0) p=0; }
+      matrix[i][j]=p;
+    }
+  }
+  let sumAll=0;
+  for(let i=0;i<=8;i++) for(let j=0;j<=8;j++) sumAll+=matrix[i][j];
+  if(sumAll>0) for(let i=0;i<=8;i++) for(let j=0;j<=8;j++) matrix[i][j]/=sumAll;
+  let p1=0,pX=0,p2=0;
+  for(let i=0;i<=8;i++) for(let j=0;j<=8;j++){ const p=matrix[i][j]; if(i>j) p1+=p; else if(i===j) pX+=p; else p2+=p; }
+  const lineFloor = Math.floor(line);
+  let pUnder=0;
+  for(let i=0;i<=8;i++) for(let j=0;j<=8;j++) if(i+j<=lineFloor) pUnder+=matrix[i][j];
+  return { lh, la, p1, pX, p2, pOver: 1-pUnder, pUnder, rho };
+}
+async function importFixtures(){
+  const fileInput = document.getElementById('fx_file');
+  const liga = document.getElementById('fx_liga').value;
+  const box = document.getElementById('fixturesImportResult');
+  box.style.display='block';
+  if(!fileInput.files.length){ alert('Selecciona un archivo .xlsx o .csv'); return; }
+  try{
+    const file = fileInput.files[0];
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+    if(!rows.length){ box.innerHTML = '<p class="ev-neg">El archivo está vacío.</p>'; return; }
+    const headers = Object.keys(rows[0]).map(h=>h.trim().toLowerCase());
+    const findKey = (aliases) => {
+      const orig = Object.keys(rows[0]);
+      for(const a of aliases){ const idx = headers.indexOf(a); if(idx!==-1) return orig[idx]; }
+      return null;
+    };
+    const kJornada = findKey(['jornada','matchday','gameweek','week']);
+    const kFecha = findKey(['fecha','date']);
+    const kLocal = findKey(['local','home','hometeam','equipolocal']);
+    const kVisitante = findKey(['visitante','away','awayteam','equipovisitante']);
+    if(!kLocal || !kVisitante){
+      box.innerHTML = '<p class="ev-neg">No encuentro las columnas Local/Visitante. Revisa que la primera fila tenga esos nombres exactos.</p>';
+      return;
+    }
+    const parsed = rows.map(r=>({
+      id: Date.now().toString()+Math.random().toString(36).slice(2,6),
+      liga,
+      jornada: kJornada ? String(r[kJornada]).trim() : 'Sin jornada',
+      fecha: kFecha ? String(r[kFecha]).trim() : '',
+      local: String(r[kLocal]).trim(),
+      visitante: String(r[kVisitante]).trim()
+    })).filter(f=>f.local && f.visitante);
+    // sustituye todo el calendario previo de esta liga
+    FIXTURES = FIXTURES.filter(f=>f.liga!==liga).concat(parsed);
+    await saveState();
+    refreshJornadaSelect();
+    box.innerHTML = `<p class="ev-pos">${parsed.length} partidos importados para ${liga}. Se ha sustituido el calendario anterior de esta liga.</p>`;
+    fileInput.value = '';
+  }catch(e){
+    console.error(e);
+    box.innerHTML = '<p class="ev-neg">No se ha podido leer el archivo. ¿Es un .xlsx o .csv válido?</p>';
+  }
+}
+function refreshJornadaSelect(){
+  const ligaSel = document.getElementById('jr_liga');
+  if(!ligaSel) return;
+  const current = ligaSel.value;
+  const ligas = [...new Set(FIXTURES.map(f=>f.liga))].sort();
+  ligaSel.innerHTML = ligas.length ? ligas.map(l=>`<option value="${l}">${l}</option>`).join('') : '<option value="">— sin calendarios —</option>';
+  if(ligas.includes(current)) ligaSel.value = current;
+  refreshJornadaOptions();
+}
+function refreshJornadaOptions(){
+  const liga = document.getElementById('jr_liga').value;
+  const jornadaSel = document.getElementById('jr_jornada');
+  const current = jornadaSel.value;
+  const jornadas = [...new Set(FIXTURES.filter(f=>f.liga===liga).map(f=>f.jornada))]
+    .sort((a,b)=> (parseFloat(a)||0) - (parseFloat(b)||0));
+  jornadaSel.innerHTML = jornadas.map(j=>`<option value="${j}">${j}</option>`).join('');
+  if(jornadas.includes(current)) jornadaSel.value = current;
+  renderJornada();
+}
+function renderJornada(){
+  const liga = document.getElementById('jr_liga').value;
+  const jornada = document.getElementById('jr_jornada').value;
+  const container = document.getElementById('jornadaMatches');
+  const emptyEl = document.getElementById('jornadaEmpty');
+  const matches = FIXTURES.filter(f=>f.liga===liga && f.jornada===jornada);
+  emptyEl.style.display = matches.length ? 'none' : 'block';
+  container.innerHTML = '';
+  matches.forEach(fx=>{
+    const home = findTeamInLiga(fx.local, liga);
+    const away = findTeamInLiga(fx.visitante, liga);
+    const div = document.createElement('div');
+    div.className = 'result-box';
+    div.style.marginBottom = '10px';
+    if(!home || !away){
+      const faltan = [!home?fx.local:null, !away?fx.visitante:null].filter(Boolean).join(' y ');
+      div.innerHTML = `<p style="font-family:'Oswald'; font-weight:600;">${fx.local} vs ${fx.visitante}</p>
+        <p class="hint">${fx.fecha ? fx.fecha+' · ' : ''}No encuentro "${faltan}" en tu base de equipos de ${liga}. Añádelo en 02 Equipos (o promociónalo si es un ascendido) para que aparezca aquí el análisis automático.</p>`;
+      container.appendChild(div);
+      return;
+    }
+    const corners = predictCorners(home, away, liga, 9.5);
+    const goals = predictGoals(home, away, liga, 2.5);
+    div.innerHTML = `
+      <p style="font-family:'Oswald'; font-weight:600; font-size:15px;">${fx.local} vs ${fx.visitante} ${fx.fecha ? `<span class="hint" style="font-family:Inter;">— ${fx.fecha}</span>`:''}</p>
+      <div class="grid3">
+        <div><div class="hint">Córners esp. (ajustado)</div><div class="display" style="font-size:18px;">${corners.total.toFixed(2)}</div></div>
+        <div><div class="hint">P(1) / P(X) / P(2)</div><div class="display" style="font-size:15px;">${fmtPct(goals.p1)} / ${fmtPct(goals.pX)} / ${fmtPct(goals.p2)}</div></div>
+        <div><div class="hint">Goles esp. · Over 2.5</div><div class="display" style="font-size:15px;">${(goals.lh+goals.la).toFixed(2)} · ${fmtPct(goals.pOver)}</div></div>
+      </div>`;
+    container.appendChild(div);
+  });
+}
+
 // ---------- bets log ----------
 async function addBet(){
   const odd = parseFloat(document.getElementById('b_odd').value);
@@ -1192,6 +1367,7 @@ async function boot(){
     SEASON_IMPORTS = state.seasonImports || [];
     BETS = state.bets || [];
     BANKCFG = state.bankroll || {initial:1000, fraction:0.25};
+    FIXTURES = state.fixtures || [];
   }
   recomputeTeams();
   document.getElementById('bk_initial').value = BANKCFG.initial;
@@ -1202,6 +1378,7 @@ async function boot(){
   renderTeams();
   renderBets();
   renderDashboard();
+  refreshJornadaSelect();
 }
 boot();
 </script>
