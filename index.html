@@ -1001,10 +1001,54 @@ function calcGoals(){
 }
 
 // ---------- fixture calendar (jornadas) ----------
+const TEAM_ALIASES = {
+  // variantes habituales de calendarios oficiales -> nombre usado en football-data.co.uk
+  'atletico de madrid':'ath madrid', 'atletico madrid':'ath madrid', 'atleti':'ath madrid',
+  'athletic bilbao':'ath bilbao', 'athletic club':'ath bilbao', 'athletic':'ath bilbao',
+  'deportivo':'la coruna', 'deportivo la coruna':'la coruna', 'deportivo de la coruna':'la coruna',
+  'celta de vigo':'celta', 'real celta':'celta',
+  'real sociedad':'sociedad',
+  'rayo vallecano':'vallecano', 'rayo':'vallecano',
+  'racing':'racing santander', 'racing de santander':'racing santander', 'racing santander':'racing santander',
+  'real betis':'betis', 'betis balompie':'betis',
+  'espanyol':'espanol', 'rcd espanyol':'espanol',
+  'malaga cf':'malaga',
+  'real valladolid':'valladolid',
+  'granada cf':'granada',
+  'cadiz cf':'cadiz',
+  'sd eibar':'eibar',
+  'real zaragoza':'zaragoza',
+  'ud almeria':'almeria',
+  'cd leganes':'leganes',
+  'rcd mallorca':'mallorca',
+  'girona fc':'girona',
+  'ud las palmas':'las palmas',
+  'sd huesca':'huesca',
+  'cd tenerife':'tenerife',
+  'sporting de gijon':'sp gijon', 'real sporting':'sp gijon',
+};
+function normalizeTeamName(s){
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,' ');
+}
 function findTeamInLiga(name, liga){
   if(!name) return null;
-  const n = name.trim().toLowerCase();
-  return TEAMS.find(t=>t.liga===liga && t.name.trim().toLowerCase()===n) || null;
+  const n = normalizeTeamName(name);
+  const candidates = TEAMS.filter(t=>t.liga===liga);
+  // 1. coincidencia exacta normalizada
+  let found = candidates.find(t=>normalizeTeamName(t.name)===n);
+  if(found) return found;
+  // 2. via alias conocido
+  const aliased = TEAM_ALIASES[n];
+  if(aliased){
+    found = candidates.find(t=>normalizeTeamName(t.name)===aliased);
+    if(found) return found;
+  }
+  // 3. coincidencia parcial (uno contiene al otro) como ultimo recurso
+  found = candidates.find(t=>{
+    const tn = normalizeTeamName(t.name);
+    return tn.includes(n) || n.includes(tn);
+  });
+  return found || null;
 }
 function predictCorners(homeTeam, awayTeam, liga, line){
   const clh = (homeTeam.cfh + awayTeam.caa)/2;
