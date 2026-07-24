@@ -1028,9 +1028,23 @@ const TEAM_ALIASES = {
   'sporting de gijon':'sp gijon', 'real sporting':'sp gijon', 'sporting':'sp gijon',
   'real sociedad b':'sociedad b',
   'celta fortuna':'celta b',
+  // 1a RFEF Grupo 1 (calendario 26/27 -> nombre en base de datos)
+  'arenas':'arenas getxo',
+  'bilbao athletic':'ath bilbao b',
+  'racing ferrol':'racing club ferrol',
+  'merida':'merida ad',
+  'ud ourense':'ourense cf',
+  'unionistas salamanca':'unionistas',
+  // 1a RFEF Grupo 2 (calendario 26/27 -> nombre en base de datos)
+  'atletico de madrid b':'ath madrid b',
+  'europa':'ce europa',
+  'ibiza':'ud ibiza',
+  'juventud torremolinos':'torremolinos',
+  'nastic':'gimnastic',
+  'real murcia':'murcia',
 };
 function normalizeTeamName(s){
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,' ');
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[.,]/g,'').trim().replace(/\s+/g,' ');
 }
 function findTeamInLiga(name, liga){
   if(!name) return null;
