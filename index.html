@@ -199,6 +199,18 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <div class="empty" id="importsEmpty" style="display:none;">Todavía no has importado ninguna temporada.</div>
     </div>
     <div class="card">
+      <h2><span class="tag">Masivo</span> Importar fichas de equipo (Excel/CSV)</h2>
+      <p class="hint">Para cargar de golpe las medias de córners y goles de todos los equipos de una liga (por ejemplo, transcritas de otra web). Columnas esperadas en la primera fila: <strong>Equipo, CF Casa, CA Casa, CF Fuera, CA Fuera, GF Casa, GA Casa, GF Fuera, GA Fuera</strong> (si el archivo trae una columna "Liga" por fila, se usa esa; si no, se aplica la liga que elijas abajo a todas las filas). Si un equipo ya existe con ese nombre en esa liga, se sustituye su ficha entera — no se promedia con lo anterior.</p>
+      <div class="grid2">
+        <div><label>Liga (si el archivo no trae columna Liga)</label>
+          <select id="bulk_liga"><option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Premier League</option><option>Championship</option><option>Ligue 1</option><option>Serie A</option><option>Eredivisie</option><option>Süper Lig</option><option>Otra</option></select>
+        </div>
+        <div><label>Archivo (.xlsx o .csv)</label><input id="bulk_file" type="file" accept=".xlsx,.xls,.csv"></div>
+      </div>
+      <button class="btn amber" onclick="importBulkTeams()">Importar fichas</button>
+      <div class="result-box" id="bulkImportResult" style="display:none;"></div>
+    </div>
+    <div class="card">
       <h2><span class="tag">Nuevo</span> Ficha de equipo (manual)</h2>
       <p class="hint">Introduce medias por partido (no acumulados). Estas fichas alimentan directamente las calculadoras de Corners y Goles.</p>
       <div class="grid2">
@@ -998,6 +1010,69 @@ function calcGoals(){
   });
   const box = document.getElementById('goalsResult');
   box.style.display='block'; box.innerHTML = html;
+}
+
+// ---------- bulk team stats import ----------
+async function importBulkTeams(){
+  const fileInput = document.getElementById('bulk_file');
+  const defaultLiga = document.getElementById('bulk_liga').value;
+  const box = document.getElementById('bulkImportResult');
+  box.style.display = 'block';
+  if(!fileInput.files.length){ alert('Selecciona un archivo .xlsx o .csv'); return; }
+  try{
+    const file = fileInput.files[0];
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+    if(!rows.length){ box.innerHTML = '<p class="ev-neg">El archivo está vacío.</p>'; return; }
+    const headers = Object.keys(rows[0]);
+    const normHeaders = headers.map(h=>h.trim().toLowerCase());
+    const findKey = (aliases) => {
+      for(const a of aliases){ const idx = normHeaders.indexOf(a); if(idx!==-1) return headers[idx]; }
+      return null;
+    };
+    const kEquipo = findKey(['equipo','nombre','team','name']);
+    const kLiga = findKey(['liga','league']);
+    const kCfh = findKey(['cf casa','cfh','corners a favor casa']);
+    const kCah = findKey(['ca casa','cah','corners en contra casa']);
+    const kCfa = findKey(['cf fuera','cfa','corners a favor fuera']);
+    const kCaa = findKey(['ca fuera','caa','corners en contra fuera']);
+    const kGfh = findKey(['gf casa','gfh','goles a favor casa']);
+    const kGah = findKey(['ga casa','gah','goles en contra casa']);
+    const kGfa = findKey(['gf fuera','gfa','goles a favor fuera']);
+    const kGaa = findKey(['ga fuera','gaa','goles en contra fuera']);
+    if(!kEquipo){
+      box.innerHTML = '<p class="ev-neg">No encuentro una columna "Equipo" en el archivo.</p>';
+      return;
+    }
+    const num = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+    let created = 0, updated = 0;
+    rows.forEach(r=>{
+      const name = String(r[kEquipo]||'').trim();
+      if(!name) return;
+      const liga = kLiga ? String(r[kLiga]||'').trim() || defaultLiga : defaultLiga;
+      const team = {
+        id: Date.now().toString()+Math.random().toString(36).slice(2,6),
+        name, liga,
+        cfh: num(r[kCfh]), cah: num(r[kCah]), mh: 1,
+        cfa: num(r[kCfa]), caa: num(r[kCaa]), ma: 1,
+        gfh: num(r[kGfh]), gah: num(r[kGah]),
+        gfa: num(r[kGfa]), gaa: num(r[kGaa]),
+      };
+      const existingIdx = MANUAL_TEAMS.findIndex(t=>t.liga===liga && t.name.trim().toLowerCase()===name.toLowerCase());
+      if(existingIdx!==-1){ MANUAL_TEAMS[existingIdx] = team; updated++; }
+      else { MANUAL_TEAMS.push(team); created++; }
+    });
+    await persistTeamSources();
+    recomputeTeams();
+    renderTeams();
+    box.innerHTML = `<p class="ev-pos">${created} equipos nuevos, ${updated} sustituidos. Total procesado: ${created+updated}.</p>`;
+    fileInput.value = '';
+  }catch(e){
+    console.error(e);
+    box.innerHTML = '<p class="ev-neg">No se ha podido leer el archivo. ¿Es un .xlsx o .csv válido con esas columnas?</p>';
+  }
 }
 
 // ---------- fixture calendar (jornadas) ----------
