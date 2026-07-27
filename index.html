@@ -1195,7 +1195,7 @@ function predictGoals(homeTeam, awayTeam, liga, line){
 }
 async function importFixtures(){
   const fileInput = document.getElementById('fx_file');
-  const liga = document.getElementById('fx_liga').value;
+  const defaultLiga = document.getElementById('fx_liga').value;
   const box = document.getElementById('fixturesImportResult');
   box.style.display='block';
   if(!fileInput.files.length){ alert('Selecciona un archivo .xlsx o .csv'); return; }
@@ -1216,23 +1216,25 @@ async function importFixtures(){
     const kFecha = findKey(['fecha','date']);
     const kLocal = findKey(['local','home','hometeam','equipolocal']);
     const kVisitante = findKey(['visitante','away','awayteam','equipovisitante']);
+    const kLiga = findKey(['liga','league']);
     if(!kLocal || !kVisitante){
       box.innerHTML = '<p class="ev-neg">No encuentro las columnas Local/Visitante. Revisa que la primera fila tenga esos nombres exactos.</p>';
       return;
     }
     const parsed = rows.map(r=>({
       id: Date.now().toString()+Math.random().toString(36).slice(2,6),
-      liga,
+      liga: kLiga ? (String(r[kLiga]).trim() || defaultLiga) : defaultLiga,
       jornada: kJornada ? String(r[kJornada]).trim() : 'Sin jornada',
       fecha: kFecha ? String(r[kFecha]).trim() : '',
       local: String(r[kLocal]).trim(),
       visitante: String(r[kVisitante]).trim()
     })).filter(f=>f.local && f.visitante);
-    // sustituye todo el calendario previo de esta liga
-    FIXTURES = FIXTURES.filter(f=>f.liga!==liga).concat(parsed);
+    // sustituye el calendario previo de cada liga presente en el archivo
+    const ligasEnArchivo = new Set(parsed.map(f=>f.liga));
+    FIXTURES = FIXTURES.filter(f=>!ligasEnArchivo.has(f.liga)).concat(parsed);
     await saveState();
     refreshJornadaSelect();
-    box.innerHTML = `<p class="ev-pos">${parsed.length} partidos importados para ${liga}. Se ha sustituido el calendario anterior de esta liga.</p>`;
+    box.innerHTML = `<p class="ev-pos">${parsed.length} partidos importados (${[...ligasEnArchivo].join(', ')}). Se ha sustituido el calendario anterior de esas ligas.</p>`;
     fileInput.value = '';
   }catch(e){
     console.error(e);
