@@ -477,11 +477,31 @@ async function loadState(){
 }
 async function saveState(){
   try{
-    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, bets: BETS, bankroll: BANKCFG, fixtures: FIXTURES, pickedMatches: [...PICKED_MATCHES] };
+    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, bets: BETS, bankroll: BANKCFG, fixtures: FIXTURES };
     const { error } = await sbClient.from('tipster_data').upsert({ id:'main', data: payload, updated_at: new Date().toISOString() });
     if(error) throw error;
   }catch(e){
     console.error('Supabase save error', e);
+  }
+}
+// Los picks se guardan en su propia fila, ligera, para que marcar un partido sea instantaneo
+// y no obligue a resubir equipos/temporadas/calendario completos cada vez.
+async function loadPicks(){
+  try{
+    const { data, error } = await sbClient.from('tipster_data').select('data').eq('id','picks').maybeSingle();
+    if(error) throw error;
+    return data ? (data.data.pickedMatches || []) : [];
+  }catch(e){
+    console.error('Supabase load picks error', e);
+    return [];
+  }
+}
+async function savePicks(){
+  try{
+    const { error } = await sbClient.from('tipster_data').upsert({ id:'picks', data:{ pickedMatches:[...PICKED_MATCHES] }, updated_at: new Date().toISOString() });
+    if(error) throw error;
+  }catch(e){
+    console.error('Supabase save picks error', e);
   }
 }
 async function persistTeamSources(){ await saveState(); }
@@ -1306,8 +1326,8 @@ function renderJornada(){
 async function toggleMatchPick(fxId){
   if(PICKED_MATCHES.has(fxId)) PICKED_MATCHES.delete(fxId);
   else PICKED_MATCHES.add(fxId);
-  await saveState();
   renderJornada();
+  await savePicks();
 }
 
 // ---------- bets log ----------
@@ -1532,8 +1552,8 @@ async function boot(){
     BETS = state.bets || [];
     BANKCFG = state.bankroll || {initial:1000, fraction:0.25};
     FIXTURES = state.fixtures || [];
-    PICKED_MATCHES = new Set(state.pickedMatches || []);
   }
+  PICKED_MATCHES = new Set(await loadPicks());
   recomputeTeams();
   document.getElementById('bk_initial').value = BANKCFG.initial;
   document.getElementById('bk_fraction').value = BANKCFG.fraction;
