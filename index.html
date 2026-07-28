@@ -1130,7 +1130,7 @@ const TEAM_ALIASES = {
   'real madrid castilla':'real madrid b',
 };
 function normalizeTeamName(s){
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[.,]/g,'').trim().replace(/\s+/g,' ');
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[.,]/g,'').replace(/-/g,' ').trim().replace(/\s+/g,' ');
 }
 function findTeamInLiga(name, liga){
   if(!name) return null;
