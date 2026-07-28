@@ -437,6 +437,7 @@ let SEASON_IMPORTS = []; // {id, liga, temporada, weight, groups}
 let BETS = [];
 let BANKCFG = {initial:1000, fraction:0.25};
 let FIXTURES = []; // {id, liga, jornada, fecha, local, visitante}
+let PICKED_MATCHES = new Set(); // ids de partidos marcados en Jornada
 function blankSide(){ return {mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0}; }
 
 // ---------- Supabase storage layer ----------
@@ -476,7 +477,7 @@ async function loadState(){
 }
 async function saveState(){
   try{
-    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, bets: BETS, bankroll: BANKCFG, fixtures: FIXTURES };
+    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, bets: BETS, bankroll: BANKCFG, fixtures: FIXTURES, pickedMatches: [...PICKED_MATCHES] };
     const { error } = await sbClient.from('tipster_data').upsert({ id:'main', data: payload, updated_at: new Date().toISOString() });
     if(error) throw error;
   }catch(e){
@@ -1283,15 +1284,30 @@ function renderJornada(){
     }
     const corners = predictCorners(home, away, liga, 9.5);
     const goals = predictGoals(home, away, liga, 2.5);
+    const isPicked = PICKED_MATCHES.has(fx.id);
+    div.style.cursor = 'pointer';
+    div.title = 'Haz clic para marcar/desmarcar este partido como pick';
+    if(isPicked){
+      div.style.background = '#39FF14';
+      div.style.borderColor = '#2ecc0f';
+      div.style.color = '#0A2B20';
+    }
+    div.onclick = () => toggleMatchPick(fx.id);
     div.innerHTML = `
-      <p style="font-family:'Oswald'; font-weight:600; font-size:15px;">${fx.local} vs ${fx.visitante} ${fx.fecha ? `<span class="hint" style="font-family:Inter;">— ${fx.fecha}</span>`:''}</p>
+      <p style="font-family:'Oswald'; font-weight:600; font-size:15px;">${fx.local} vs ${fx.visitante} ${fx.fecha ? `<span class="hint" style="font-family:Inter; ${isPicked?'color:#0A2B20;':''}">— ${fx.fecha}</span>`:''} ${isPicked ? '<span style="font-family:Oswald; font-size:11px;">★ MARCADO</span>' : ''}</p>
       <div class="grid3">
-        <div><div class="hint">Córners esp. (ajustado)</div><div class="display" style="font-size:18px;">${corners.total.toFixed(2)}</div></div>
-        <div><div class="hint">P(1) / P(X) / P(2)</div><div class="display" style="font-size:15px;">${fmtPct(goals.p1)} / ${fmtPct(goals.pX)} / ${fmtPct(goals.p2)}</div></div>
-        <div><div class="hint">Goles esp. · Over 2.5</div><div class="display" style="font-size:15px;">${(goals.lh+goals.la).toFixed(2)} · ${fmtPct(goals.pOver)}</div></div>
+        <div><div class="hint" style="${isPicked?'color:#0A2B20;':''}">Córners esp. (ajustado)</div><div class="display" style="font-size:18px; ${isPicked?'color:#0A2B20;':''}">${corners.total.toFixed(2)}</div></div>
+        <div><div class="hint" style="${isPicked?'color:#0A2B20;':''}">P(1) / P(X) / P(2)</div><div class="display" style="font-size:15px; ${isPicked?'color:#0A2B20;':''}">${fmtPct(goals.p1)} / ${fmtPct(goals.pX)} / ${fmtPct(goals.p2)}</div></div>
+        <div><div class="hint" style="${isPicked?'color:#0A2B20;':''}">Goles esp. · Over 2.5</div><div class="display" style="font-size:15px; ${isPicked?'color:#0A2B20;':''}">${(goals.lh+goals.la).toFixed(2)} · ${fmtPct(goals.pOver)}</div></div>
       </div>`;
     container.appendChild(div);
   });
+}
+async function toggleMatchPick(fxId){
+  if(PICKED_MATCHES.has(fxId)) PICKED_MATCHES.delete(fxId);
+  else PICKED_MATCHES.add(fxId);
+  await saveState();
+  renderJornada();
 }
 
 // ---------- bets log ----------
@@ -1516,6 +1532,7 @@ async function boot(){
     BETS = state.bets || [];
     BANKCFG = state.bankroll || {initial:1000, fraction:0.25};
     FIXTURES = state.fixtures || [];
+    PICKED_MATCHES = new Set(state.pickedMatches || []);
   }
   recomputeTeams();
   document.getElementById('bk_initial').value = BANKCFG.initial;
