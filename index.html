@@ -882,6 +882,17 @@ function refreshTeamSelects(){
   ligaSel.innerHTML = ligas.map(l=>`<option value="${l}">${l}</option>`).join('');
   if(ligas.includes(currentLiga)) ligaSel.value = currentLiga;
   refreshMatchTeamSelects();
+  refreshBetLigaSelect();
+}
+function refreshBetLigaSelect(){
+  const sel = document.getElementById('b_liga');
+  if(!sel) return;
+  const current = sel.value;
+  const baseLigas = ['Primera','Segunda','1ª RFEF - Grupo 1','1ª RFEF - Grupo 2','Premier League','Championship','Ligue 1','Serie A','Eredivisie','Süper Lig'];
+  const extra = [...new Set([...getLigasPresentes(), ...FIXTURES.map(f=>f.liga)])].filter(l=>!baseLigas.includes(l));
+  const allLigas = [...baseLigas, ...extra.sort(), 'Otra'];
+  sel.innerHTML = allLigas.map(l=>`<option value="${l}">${l}</option>`).join('');
+  if(allLigas.includes(current)) sel.value = current;
 }
 function refreshMatchTeamSelects(){
   const liga = document.getElementById('m_liga').value;
@@ -1256,6 +1267,7 @@ async function importFixtures(){
     FIXTURES = FIXTURES.filter(f=>!ligasEnArchivo.has(f.liga)).concat(parsed);
     await saveState();
     refreshJornadaSelect();
+    refreshBetLigaSelect();
     box.innerHTML = `<p class="ev-pos">${parsed.length} partidos importados (${[...ligasEnArchivo].join(', ')}). Se ha sustituido el calendario anterior de esas ligas.</p>`;
     fileInput.value = '';
   }catch(e){
