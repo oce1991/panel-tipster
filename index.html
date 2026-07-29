@@ -356,10 +356,11 @@ create policy "public update" on tipster_data for update using (true);</pre>
           <select id="b_liga"><option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Premier League</option><option>Championship</option><option>Ligue 1</option><option>Serie A</option><option>Eredivisie</option><option>Süper Lig</option><option>Otra</option></select>
         </div>
         <div><label>Mercado</label>
-          <select id="b_market"><option>Corners</option><option>1X2</option><option>Goles O/U</option><option>Otro</option></select>
+          <select id="b_market" onchange="refreshLineaOptions()"><option>Corners</option><option>1X2</option><option>Goles O/U</option><option>Otro</option></select>
         </div>
       </div>
-      <div class="grid2">
+      <div class="grid3">
+        <div><label>Línea</label><select id="b_linea" onchange="applyLineaToPick()"></select></div>
         <div><label>Partido</label><input id="b_match" placeholder="Racing Ferrol - Deportivo"></div>
         <div><label>Selección</label><input id="b_pick" placeholder="Over 9.5 corners"></div>
       </div>
@@ -1324,13 +1325,76 @@ function renderJornada(){
   });
 }
 async function toggleMatchPick(fxId){
-  if(PICKED_MATCHES.has(fxId)) PICKED_MATCHES.delete(fxId);
+  const wasPicked = PICKED_MATCHES.has(fxId);
+  if(wasPicked) PICKED_MATCHES.delete(fxId);
   else PICKED_MATCHES.add(fxId);
   renderJornada();
+  if(!wasPicked){
+    prefillBetFromFixture(fxId);
+  }
   await savePicks();
+}
+function prefillBetFromFixture(fxId){
+  const fx = FIXTURES.find(f=>f.id===fxId);
+  if(!fx) return;
+  const home = findTeamInLiga(fx.local, fx.liga);
+  const away = findTeamInLiga(fx.visitante, fx.liga);
+  document.getElementById('b_match').value = `${fx.local} - ${fx.visitante}`;
+  const ligaSel = document.getElementById('b_liga');
+  if([...ligaSel.options].some(o=>o.value===fx.liga)) ligaSel.value = fx.liga;
+  if(fx.fecha){
+    const parsed = parseFechaToISO(fx.fecha);
+    if(parsed) document.getElementById('b_date').value = parsed;
+  }
+  document.getElementById('b_market').value = 'Corners';
+  if(home && away){
+    const corners = predictCorners(home, away, fx.liga, 9.5);
+    const lineasDisponibles = [7.5,8.5,9.5,10.5];
+    const lineaSugerida = lineasDisponibles.reduce((best,l)=> Math.abs(l-corners.total) < Math.abs(best-corners.total) ? l : best);
+    refreshLineaOptions();
+    const sel = document.getElementById('b_linea');
+    const opt = `Over ${lineaSugerida} corners`;
+    if([...sel.options].some(o=>o.value===opt)) sel.value = opt;
+    applyLineaToPick();
+  } else {
+    refreshLineaOptions();
+  }
+}
+function parseFechaToISO(fecha){
+  // intenta dd/mm/yyyy
+  let m = fecha.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  return null;
 }
 
 // ---------- bets log ----------
+// ---------- linea dropdown (corners / goles / 1x2) ----------
+function refreshLineaOptions(){
+  const market = document.getElementById('b_market').value;
+  const sel = document.getElementById('b_linea');
+  let options = [];
+  if(market === 'Corners'){
+    [7.5,8.5,9.5,10.5].forEach(l=>{ options.push(`Over ${l} corners`); options.push(`Under ${l} corners`); });
+  } else if(market === 'Goles O/U'){
+    [0.5,1.5,2.5,3.5,4.5,5.5].forEach(l=>{ options.push(`Over ${l} goles`); options.push(`Under ${l} goles`); });
+  } else if(market === '1X2'){
+    options = ['1 (Local)','X (Empate)','2 (Visitante)'];
+  } else {
+    options = [];
+  }
+  if(options.length){
+    sel.style.display = '';
+    sel.innerHTML = options.map(o=>`<option>${o}</option>`).join('');
+  } else {
+    sel.style.display = 'none';
+    sel.innerHTML = '';
+  }
+  applyLineaToPick();
+}
+function applyLineaToPick(){
+  const sel = document.getElementById('b_linea');
+  if(sel.value) document.getElementById('b_pick').value = sel.value;
+}
 async function addBet(){
   const odd = parseFloat(document.getElementById('b_odd').value);
   const stake = parseFloat(document.getElementById('b_stake').value);
@@ -1564,6 +1628,7 @@ async function boot(){
   renderBets();
   renderDashboard();
   refreshJornadaSelect();
+  refreshLineaOptions();
 }
 boot();
 </script>
