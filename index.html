@@ -396,12 +396,14 @@ create policy "public update" on tipster_data for update using (true);</pre>
     </div>
     <div class="card">
       <h2><span class="tag">Config</span> Banca inicial</h2>
-      <div class="grid2">
+      <div class="grid3">
         <div><label>Banca inicial (€)</label><input id="bk_initial" type="number" step="10"></div>
         <div><label>Fracción de Kelly a usar</label>
           <select id="bk_fraction"><option value="1">Kelly completo (agresivo)</option><option value="0.5">Medio Kelly</option><option value="0.25" selected>Cuarto de Kelly (recomendado)</option></select>
         </div>
+        <div><label>EV mínimo para considerar apuesta (%)</label><input id="bk_minev" type="number" step="0.5" value="3"></div>
       </div>
+      <p class="hint">Por debajo de este EV, el modelo lo trata como ruido estadístico, no como ventaja real — se usa para colorear los partidos de la Jornada.</p>
       <button class="btn" onclick="saveBankrollConfig()">Guardar</button>
     </div>
     <div class="card">
@@ -436,7 +438,7 @@ let TEAMS = [];
 let MANUAL_TEAMS = [];
 let SEASON_IMPORTS = []; // {id, liga, temporada, weight, groups}
 let BETS = [];
-let BANKCFG = {initial:1000, fraction:0.25};
+let BANKCFG = {initial:1000, fraction:0.25, minEV:3};
 let FIXTURES = []; // {id, liga, jornada, fecha, local, visitante}
 let PICKED_MATCHES = new Set(); // ids de partidos marcados en Jornada
 function blankSide(){ return {mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0}; }
@@ -1302,6 +1304,7 @@ function renderJornada(){
   const matches = FIXTURES.filter(f=>f.liga===liga && f.jornada===jornada);
   emptyEl.style.display = matches.length ? 'none' : 'block';
   container.innerHTML = '';
+  const minEV = (BANKCFG.minEV!==undefined ? BANKCFG.minEV : 3) / 100;
   matches.forEach(fx=>{
     const home = findTeamInLiga(fx.local, liga);
     const away = findTeamInLiga(fx.visitante, liga);
@@ -1318,23 +1321,42 @@ function renderJornada(){
     const corners = predictCorners(home, away, liga, 9.5);
     const goals = predictGoals(home, away, liga, 2.5);
     const isPicked = PICKED_MATCHES.has(fx.id);
+    const odd = MATCH_ODDS[fx.id];
+    let evHtml = '';
+    if(odd){
+      const ev = evFromProb(corners.pOver, odd);
+      const isValue = ev >= minEV;
+      const evColor = isValue ? '#1a7a1a' : '#B23A2E';
+      evHtml = `<p style="margin:4px 0 0; font-family:'Oswald'; font-weight:600; color:${evColor};">EV Over ${9.5} @ ${odd}: ${ev>=0?'+':''}${(ev*100).toFixed(1)}% ${isValue ? '✅ supera tu umbral' : '⚠️ por debajo del umbral'}</p>`;
+    }
     div.style.cursor = 'pointer';
-    div.title = 'Haz clic para marcar/desmarcar este partido como pick';
+    div.title = 'Haz clic en la tarjeta (fuera del campo de cuota) para marcar/desmarcar este partido como pick';
     if(isPicked){
       div.style.background = '#39FF14';
       div.style.borderColor = '#2ecc0f';
       div.style.color = '#0A2B20';
     }
-    div.onclick = () => toggleMatchPick(fx.id);
+    div.onclick = (e) => { if(e.target.tagName!=='INPUT') toggleMatchPick(fx.id); };
     div.innerHTML = `
       <p style="font-family:'Oswald'; font-weight:600; font-size:15px;">${fx.local} vs ${fx.visitante} ${fx.fecha ? `<span class="hint" style="font-family:Inter; ${isPicked?'color:#0A2B20;':''}">— ${fx.fecha}</span>`:''} ${isPicked ? '<span style="font-family:Oswald; font-size:11px;">★ MARCADO</span>' : ''}</p>
       <div class="grid3">
         <div><div class="hint" style="${isPicked?'color:#0A2B20;':''}">Córners esp. (ajustado)</div><div class="display" style="font-size:18px; ${isPicked?'color:#0A2B20;':''}">${corners.total.toFixed(2)}</div></div>
         <div><div class="hint" style="${isPicked?'color:#0A2B20;':''}">P(1) / P(X) / P(2)</div><div class="display" style="font-size:15px; ${isPicked?'color:#0A2B20;':''}">${fmtPct(goals.p1)} / ${fmtPct(goals.pX)} / ${fmtPct(goals.p2)}</div></div>
         <div><div class="hint" style="${isPicked?'color:#0A2B20;':''}">Goles esp. · Over 2.5</div><div class="display" style="font-size:15px; ${isPicked?'color:#0A2B20;':''}">${(goals.lh+goals.la).toFixed(2)} · ${fmtPct(goals.pOver)}</div></div>
-      </div>`;
+      </div>
+      <div style="margin-top:8px; max-width:160px;">
+        <label style="${isPicked?'color:#0A2B20;':''}">Cuota Over 9.5 córners</label>
+        <input type="number" step="0.01" placeholder="1.90" value="${odd||''}" oninput="updateMatchOdd('${fx.id}', this.value)" style="margin-bottom:0;">
+      </div>
+      ${evHtml}`;
     container.appendChild(div);
   });
+}
+let MATCH_ODDS = {}; // {fixtureId: cuota} - solo en sesion, para ver el EV en vivo antes de decidir
+function updateMatchOdd(fxId, val){
+  const n = parseFloat(val);
+  if(n) MATCH_ODDS[fxId] = n; else delete MATCH_ODDS[fxId];
+  renderJornada();
 }
 async function toggleMatchPick(fxId){
   const wasPicked = PICKED_MATCHES.has(fxId);
@@ -1478,11 +1500,13 @@ function renderBets(){
 async function saveBankrollConfig(){
   BANKCFG = {
     initial: parseFloat(document.getElementById('bk_initial').value)||BANKCFG.initial,
-    fraction: parseFloat(document.getElementById('bk_fraction').value)
+    fraction: parseFloat(document.getElementById('bk_fraction').value),
+    minEV: parseFloat(document.getElementById('bk_minev').value) || 0
   };
   await saveState();
   alert('Banca guardada');
   renderDashboard();
+  renderJornada();
 }
 function calcKelly(){
   const prob = parseFloat(document.getElementById('k_prob').value)/100;
@@ -1590,11 +1614,12 @@ async function importBackup(){
     MANUAL_TEAMS = data.manualTeams || [];
     SEASON_IMPORTS = data.seasonImports || [];
     BETS = data.bets || [];
-    BANKCFG = data.bankroll || {initial:1000, fraction:0.25};
+    BANKCFG = data.bankroll || {initial:1000, fraction:0.25, minEV:3};
     await saveState();
     recomputeTeams();
     document.getElementById('bk_initial').value = BANKCFG.initial;
     document.getElementById('bk_fraction').value = BANKCFG.fraction;
+    document.getElementById('bk_minev').value = BANKCFG.minEV!==undefined ? BANKCFG.minEV : 3;
     renderTeams(); renderBets(); renderDashboard();
     box.innerHTML = `<p class="ev-pos">Restaurado correctamente (copia del ${data.exportedAt ? data.exportedAt.slice(0,10) : 'archivo'}).</p>`;
   }catch(e){
@@ -1626,13 +1651,14 @@ async function boot(){
     MANUAL_TEAMS = state.manualTeams || [];
     SEASON_IMPORTS = state.seasonImports || [];
     BETS = state.bets || [];
-    BANKCFG = state.bankroll || {initial:1000, fraction:0.25};
+    BANKCFG = state.bankroll || {initial:1000, fraction:0.25, minEV:3};
     FIXTURES = state.fixtures || [];
   }
   PICKED_MATCHES = new Set(await loadPicks());
   recomputeTeams();
   document.getElementById('bk_initial').value = BANKCFG.initial;
   document.getElementById('bk_fraction').value = BANKCFG.fraction;
+  document.getElementById('bk_minev').value = BANKCFG.minEV!==undefined ? BANKCFG.minEV : 3;
   document.getElementById('b_date').value = new Date().toISOString().slice(0,10);
   document.getElementById('setupOverlay').style.display = 'none';
   document.getElementById('appRoot').style.display = 'block';
