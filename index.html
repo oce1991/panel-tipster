@@ -309,6 +309,18 @@ create policy "public update" on tipster_data for update using (true);</pre>
     </div>
 
     <div class="card">
+      <h2><span class="tag">Modelo</span> Hándicap de córners (asiático)</h2>
+      <p class="hint">Usa las mismas λ de córners de arriba. Un hándicap de "Local -1.5" significa que el local necesita ganar el recuento de córners por 2 o más para cubrirlo. Introduce el hándicap desde el punto de vista del local (negativo si el local es favorito en córners).</p>
+      <div class="grid3">
+        <div><label>Hándicap local (ej. -1.5)</label><input id="hc_line" type="number" step="0.5" value="-1.5"></div>
+        <div><label>Cuota hándicap local</label><input id="hc_oddHome" type="number" step="0.01" placeholder="1.90"></div>
+        <div><label>Cuota hándicap visitante</label><input id="hc_oddAway" type="number" step="0.01" placeholder="1.90"></div>
+      </div>
+      <button class="btn amber" onclick="calcCornersHandicap()">Calcular hándicap</button>
+      <div class="result-box" id="handicapResult" style="display:none;"></div>
+    </div>
+
+    <div class="card">
       <h2><span class="tag">Modelo</span> Goles y 1X2 — Poisson bivariante simplificado</h2>
       <p class="hint">λ_local = media(goles a favor local en casa, goles en contra visitante fuera). Matriz de resultados 0–6 goles por equipo.</p>
       <div class="grid2">
@@ -1130,6 +1142,47 @@ function calcCorners(){
   }
   html += `<p class="hint">EV positivo no garantiza acierto en un solo partido — es una ventaja estadística que solo se demuestra en volumen. Registra la apuesta en 04 Apuestas para hacer seguimiento real.</p>`;
   const box = document.getElementById('cornersResult');
+  box.style.display='block'; box.innerHTML = html;
+}
+
+function cornerDiffProbability(lh, la, handicap){
+  // Distribucion de la diferencia D = corners_local - corners_visitante,
+  // por convolucion directa de dos Poisson independientes (sin necesitar Bessel/Skellam analitico)
+  const MAXK = 30;
+  let pCoverHome = 0; // P(D > -handicap), es decir el local cubre el handicap "handicap" (negativo si favorito)
+  for(let i=0;i<=MAXK;i++){
+    for(let j=0;j<=MAXK;j++){
+      const diff = i - j;
+      if(diff + handicap > 0){
+        pCoverHome += poissonPMF(i,lh)*poissonPMF(j,la);
+      }
+    }
+  }
+  return { pCoverHome, pCoverAway: 1-pCoverHome };
+}
+function calcCornersHandicap(){
+  const lh = parseFloat(document.getElementById('c_lh').value);
+  const la = parseFloat(document.getElementById('c_la').value);
+  if(!lh || !la){ alert('Faltan las lambdas de córners (calcula primero el modelo de córners de arriba)'); return; }
+  const handicap = parseFloat(document.getElementById('hc_line').value);
+  const { pCoverHome, pCoverAway } = cornerDiffProbability(lh, la, handicap);
+  const oddHome = parseFloat(document.getElementById('hc_oddHome').value);
+  const oddAway = parseFloat(document.getElementById('hc_oddAway').value);
+  let html = `<div class="grid3">
+    <div><div class="hint">Diferencia esperada (local-visitante)</div><div class="display" style="font-size:20px;">${(lh-la).toFixed(2)}</div></div>
+    <div><div class="hint">P(local cubre ${handicap>=0?'+':''}${handicap})</div><div class="display" style="font-size:20px;">${fmtPct(pCoverHome)}</div></div>
+    <div><div class="hint">P(visitante cubre ${-handicap>=0?'+':''}${(-handicap).toFixed(1)})</div><div class="display" style="font-size:20px;">${fmtPct(pCoverAway)}</div></div>
+  </div><hr class="divider">`;
+  if(oddHome){
+    const ev = evFromProb(pCoverHome,oddHome);
+    html += `<p>Local ${handicap>=0?'+':''}${handicap} @ ${oddHome}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
+  }
+  if(oddAway){
+    const ev = evFromProb(pCoverAway,oddAway);
+    html += `<p>Visitante ${-handicap>=0?'+':''}${(-handicap).toFixed(1)} @ ${oddAway}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
+  }
+  html += `<p class="hint">Calculado por convolución directa de las dos distribuciones Poisson de córners (no requiere datos adicionales, usa las mismas λ del modelo de córners).</p>`;
+  const box = document.getElementById('handicapResult');
   box.style.display='block'; box.innerHTML = html;
 }
 
