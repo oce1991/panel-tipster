@@ -5,21 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ficha de Juego — Panel del Tipster</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
-    --pitch:#0F3D2E;
-    --pitch-dark:#0A2B20;
-    --ink:#14201D;
-    --chalk:#F5F2EA;
-    --paper:#FFFFFF;
-    --amber:#D9A441;
-    --win:#3E8E5A;
-    --loss:#B23A2E;
-    --line:#D8D2C2;
+    --pitch:#0B0F14;
+    --pitch-dark:#050608;
+    --ink:#EDEFF2;
+    --chalk:#08090C;
+    --paper:#11161D;
+    --amber:#00E5C7;
+    --win:#00E5C7;
+    --loss:#FF3D81;
+    --line:#1C2530;
   }
   *{box-sizing:border-box;}
   body{
@@ -29,7 +29,7 @@
     font-family:'Inter',sans-serif;
     -webkit-font-smoothing:antialiased;
   }
-  h1,h2,h3,.display{font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:0.02em;}
+  h1,h2,h3,.display{font-family:'Space Grotesk',sans-serif; text-transform:uppercase; letter-spacing:0.02em;}
   .mono{font-family:'JetBrains Mono',monospace;}
 
   header.top{
@@ -42,7 +42,7 @@
   header.top .brand{display:flex; align-items:center; gap:10px;}
   header.top .arc{width:26px;height:26px;border:3px solid var(--amber); border-radius:0 100% 0 0; border-left:none; border-bottom:none; transform:rotate(0deg);}
   header.top h1{font-size:19px; margin:0; font-weight:600; letter-spacing:0.06em;}
-  header.top p{margin:2px 0 0; font-size:11.5px; color:#C9D8CF; font-family:'Inter',sans-serif; text-transform:none; letter-spacing:0;}
+  header.top p{margin:2px 0 0; font-size:11.5px; color:#5b6b7a; font-family:'Inter',sans-serif; text-transform:none; letter-spacing:0;}
 
   nav.tabs{
     display:flex; overflow-x:auto; gap:2px;
@@ -51,8 +51,8 @@
   }
   nav.tabs button{
     flex:0 0 auto;
-    background:transparent; border:none; color:#9DB6A8;
-    padding:10px 14px 9px; font-family:'Oswald'; font-size:12.5px; letter-spacing:0.05em;
+    background:transparent; border:none; color:#5b6b7a;
+    padding:10px 14px 9px; font-family:'Space Grotesk'; font-size:12.5px; letter-spacing:0.05em;
     cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;
     text-transform:uppercase;
   }
@@ -74,7 +74,7 @@
   .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
   @media(max-width:520px){.grid3{grid-template-columns:1fr 1fr;} .grid2{grid-template-columns:1fr;}}
 
-  label{display:block; font-size:11px; color:#6b6155; margin-bottom:3px; font-weight:600; text-transform:uppercase; letter-spacing:0.03em;}
+  label{display:block; font-size:11px; color:#8b95a1; margin-bottom:3px; font-weight:600; text-transform:uppercase; letter-spacing:0.03em;}
   input,select{
     width:100%; padding:8px 9px; border:1px solid var(--line); border-radius:4px;
     background:var(--chalk); font-family:'JetBrains Mono'; font-size:13px; color:var(--ink);
@@ -83,16 +83,17 @@
   input:focus,select:focus{outline:2px solid var(--amber); outline-offset:1px;}
 
   button.btn{
-    background:var(--pitch); color:#fff; border:none; padding:10px 16px;
-    border-radius:4px; font-family:'Oswald'; font-size:13px; letter-spacing:0.04em;
+    background:transparent; color:var(--ink); border:1px solid var(--line); padding:10px 16px;
+    border-radius:4px; font-family:'Space Grotesk'; font-size:13px; letter-spacing:0.04em;
     text-transform:uppercase; cursor:pointer;
   }
-  button.btn:hover{background:var(--pitch-dark);}
-  button.btn.amber{background:var(--amber); color:var(--pitch-dark);}
+  button.btn:hover{background:#161C24; border-color:var(--amber);}
+  button.btn.amber{background:var(--amber); color:#08090C; border:1px solid var(--amber); font-weight:700;}
+  button.btn.amber:hover{background:#33ffe0;}
   button.btn.ghost{background:transparent; color:var(--loss); border:1px solid var(--loss); padding:6px 10px; font-size:11px;}
 
   table{width:100%; border-collapse:collapse; font-size:12.5px;}
-  th{text-align:left; font-family:'Oswald'; font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:#6b6155; border-bottom:2px solid var(--line); padding:6px 5px;}
+  th{text-align:left; font-family:'Space Grotesk'; font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:#6b7f91; border-bottom:2px solid var(--line); padding:6px 5px;}
   td{padding:7px 5px; border-bottom:1px solid var(--line); font-family:'JetBrains Mono';}
   tr:last-child td{border-bottom:none;}
   .pos{color:var(--win); font-weight:700;}
@@ -100,17 +101,17 @@
 
   .statgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-bottom:14px;}
   .stat{background:var(--pitch); color:#fff; border-radius:6px; padding:12px; position:relative; overflow:hidden;}
-  .stat .val{font-family:'Oswald'; font-size:22px; font-weight:600;}
-  .stat .lbl{font-size:10px; text-transform:uppercase; letter-spacing:0.05em; color:#B9CCC0; margin-top:2px;}
+  .stat .val{font-family:'Space Grotesk'; font-size:22px; font-weight:600;}
+  .stat .lbl{font-size:10px; text-transform:uppercase; letter-spacing:0.05em; color:#7a8a9a; margin-top:2px;}
 
   .arcwrap{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
   .arc-gauge{position:relative; width:120px; height:120px;}
   .result-box{background:var(--chalk); border:1px dashed var(--line); border-radius:6px; padding:12px; margin-top:8px;}
-  .ev-pos{color:var(--win); font-family:'Oswald'; font-weight:600;}
-  .ev-neg{color:var(--loss); font-family:'Oswald'; font-weight:600;}
-  .hint{font-size:11.5px; color:#7a7062; line-height:1.5; margin-top:4px;}
+  .ev-pos{color:var(--win); font-family:'Space Grotesk'; font-weight:600;}
+  .ev-neg{color:var(--loss); font-family:'Space Grotesk'; font-weight:600;}
+  .hint{font-size:11.5px; color:#7a8a9a; line-height:1.5; margin-top:4px;}
   .divider{border:none; border-top:1px solid var(--line); margin:14px 0;}
-  .empty{text-align:center; padding:30px 10px; color:#9a8f7d; font-size:13px;}
+  .empty{text-align:center; padding:30px 10px; color:#5b6b7a; font-size:13px;}
   .chip{display:inline-block; background:var(--pitch); color:#fff; font-family:'JetBrains Mono'; font-size:10px; padding:2px 7px; border-radius:10px; margin-left:6px;}
 </style>
 </head>
@@ -1279,7 +1280,7 @@ function renderHeadToHead(homeName, awayName, liga){
     return `<tr><td>${m.d}</td><td style="font-family:Inter;">${golesTxt}${cornersTxt}</td></tr>`;
   }).join('');
   box.innerHTML = `<div class="result-box">
-    <p style="font-family:'Oswald'; font-weight:600;">Historial directo (${matches.length} partido${matches.length>1?'s':''})</p>
+    <p style="font-family:'Space Grotesk'; font-weight:600;">Historial directo (${matches.length} partido${matches.length>1?'s':''})</p>
     <p class="hint">Media en estos enfrentamientos: ${avgGoals.toFixed(2)} goles/partido${avgCorners!==null ? ` · ${avgCorners.toFixed(2)} córners/partido` : ' · sin datos de córners'}. Esto es informativo, no se mezcla automáticamente en el cálculo — úsalo con tu propio criterio.</p>
     <table style="margin-top:6px;"><tbody>${rows}</tbody></table>
   </div>`;
@@ -1758,7 +1759,7 @@ function renderJornada(){
     div.style.marginBottom = '10px';
     if(!home || !away){
       const faltan = [!home?fx.local:null, !away?fx.visitante:null].filter(Boolean).join(' y ');
-      div.innerHTML = `<p style="font-family:'Oswald'; font-weight:600;">${fx.local} vs ${fx.visitante}</p>
+      div.innerHTML = `<p style="font-family:'Space Grotesk'; font-weight:600;">${fx.local} vs ${fx.visitante}</p>
         <p class="hint">${fx.fecha ? fx.fecha+' · ' : ''}No encuentro "${faltan}" en tu base de equipos de ${liga}. Añádelo en 02 Equipos (o promociónalo si es un ascendido) para que aparezca aquí el análisis automático.</p>`;
       container.appendChild(div);
       return;
@@ -1771,8 +1772,8 @@ function renderJornada(){
     if(odd){
       const ev = evFromProb(corners.pOver, odd);
       const isValue = ev >= minEV;
-      const evColor = isValue ? '#1a7a1a' : '#B23A2E';
-      evHtml = `<p style="margin:4px 0 0; font-family:'Oswald'; font-weight:600; color:${evColor};">EV Over ${9.5} @ ${odd}: ${ev>=0?'+':''}${(ev*100).toFixed(1)}% ${isValue ? '✅ supera tu umbral' : '⚠️ por debajo del umbral'}</p>`;
+      const evColor = isValue ? '#00E5C7' : '#FF3D81';
+      evHtml = `<p style="margin:4px 0 0; font-family:'Space Grotesk'; font-weight:600; color:${evColor};">EV Over ${9.5} @ ${odd}: ${ev>=0?'+':''}${(ev*100).toFixed(1)}% ${isValue ? '✅ supera tu umbral' : '⚠️ por debajo del umbral'}</p>`;
     }
     div.style.cursor = 'pointer';
     div.title = 'Haz clic en la tarjeta (fuera del campo de cuota) para marcar/desmarcar este partido como pick';
@@ -1783,7 +1784,7 @@ function renderJornada(){
     }
     div.onclick = (e) => { if(e.target.tagName!=='INPUT') toggleMatchPick(fx.id); };
     div.innerHTML = `
-      <p style="font-family:'Oswald'; font-weight:600; font-size:15px;">${fx.local} vs ${fx.visitante} ${fx.fecha ? `<span class="hint" style="font-family:Inter; ${isPicked?'color:#0A2B20;':''}">— ${fx.fecha}</span>`:''} ${isPicked ? '<span style="font-family:Oswald; font-size:11px;">★ MARCADO</span>' : ''}</p>
+      <p style="font-family:'Space Grotesk'; font-weight:600; font-size:15px;">${fx.local} vs ${fx.visitante} ${fx.fecha ? `<span class="hint" style="font-family:Inter; ${isPicked?'color:#0A2B20;':''}">— ${fx.fecha}</span>`:''} ${isPicked ? '<span style="font-family:Space Grotesk; font-size:11px;">★ MARCADO</span>' : ''}</p>
       <div class="grid3">
         <div><div class="hint" style="${isPicked?'color:#0A2B20;':''}">Córners esp. (ajustado)</div><div class="display" style="font-size:18px; ${isPicked?'color:#0A2B20;':''}">${corners.total.toFixed(2)}</div></div>
         <div><div class="hint" style="${isPicked?'color:#0A2B20;':''}">P(1) / P(X) / P(2)</div><div class="display" style="font-size:15px; ${isPicked?'color:#0A2B20;':''}">${fmtPct(goals.p1)} / ${fmtPct(goals.pX)} / ${fmtPct(goals.p2)}</div></div>
@@ -2053,7 +2054,7 @@ function renderDashboard(){
 
   document.getElementById('dashStats').innerHTML = `
     <div class="stat"><div class="val">${bank.toFixed(0)}€</div><div class="lbl">Banca actual</div></div>
-    <div class="stat"><div class="val" style="color:${roi>=0?'#8FD9A8':'#F0A79A'}">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="lbl">ROI</div></div>
+    <div class="stat"><div class="val" style="color:${roi>=0?'#00E5C7':'#FF3D81'}">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="lbl">ROI</div></div>
     <div class="stat"><div class="val">${winRate.toFixed(0)}%</div><div class="lbl">Aciertos (${wins}/${settled.length})</div></div>
     <div class="stat"><div class="val">${avgClv!==null ? (avgClv>0?'+':'')+avgClv.toFixed(1)+'%' : '—'}</div><div class="lbl">CLV medio</div></div>
   `;
@@ -2067,7 +2068,7 @@ function renderDashboard(){
   if(bankChartInstance) bankChartInstance.destroy();
   bankChartInstance = new Chart(ctx, {
     type:'line',
-    data:{ labels, datasets:[{ data, borderColor:'#0F3D2E', backgroundColor:'rgba(217,164,65,0.15)', fill:true, tension:0.15, pointRadius:2 }] },
+    data:{ labels, datasets:[{ data, borderColor:'#00E5C7', backgroundColor:'rgba(0,229,199,0.12)', fill:true, tension:0.15, pointRadius:2 }] },
     options:{ plugins:{legend:{display:false}}, scales:{ y:{ grid:{color:'#eee'} }, x:{ grid:{display:false} } } }
   });
 
@@ -2132,8 +2133,8 @@ function renderCalibration(){
     type:'scatter',
     data:{
       datasets:[
-        { label:'Perfecto', data:[{x:0,y:0},{x:1,y:1}], showLine:true, borderColor:'#D8D2C2', borderDash:[4,4], pointRadius:0 },
-        { label:'Tu modelo', data: activeBuckets.map(b=>({x:b.sumProb/b.n, y:b.wins/b.n, r:Math.min(20,5+b.n)})), backgroundColor:'#D9A441', borderColor:'#0F3D2E' }
+        { label:'Perfecto', data:[{x:0,y:0},{x:1,y:1}], showLine:true, borderColor:'#2a3542', borderDash:[4,4], pointRadius:0 },
+        { label:'Tu modelo', data: activeBuckets.map(b=>({x:b.sumProb/b.n, y:b.wins/b.n, r:Math.min(20,5+b.n)})), backgroundColor:'#00E5C7', borderColor:'#08090C' }
       ]
     },
     options:{
