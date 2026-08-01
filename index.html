@@ -208,7 +208,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
     </div>
     <div class="card">
       <h2><span class="tag">Masivo</span> Importar fichas de equipo (Excel/CSV)</h2>
-      <p class="hint">Para cargar de golpe las medias de córners y goles de todos los equipos de una liga (por ejemplo, transcritas de otra web). Columnas esperadas en la primera fila: <strong>Equipo, CF Casa, CA Casa, CF Fuera, CA Fuera, GF Casa, GA Casa, GF Fuera, GA Fuera</strong> (si el archivo trae una columna "Liga" por fila, se usa esa; si no, se aplica la liga que elijas abajo a todas las filas). Si un equipo ya existe con ese nombre en esa liga, se sustituye su ficha entera — no se promedia con lo anterior.</p>
+      <p class="hint">Para cargar de golpe las medias de córners y goles de todos los equipos de una liga (por ejemplo, transcritas de otra web). Columnas esperadas en la primera fila: <strong>Equipo, CF Casa, CA Casa, CF Fuera, CA Fuera, GF Casa, GA Casa, GF Fuera, GA Fuera</strong> (y opcionalmente <strong>TC Casa, TA Casa, TC Fuera, TA Fuera</strong> para tarjetas) — si el archivo trae una columna "Liga" por fila, se usa esa; si no, se aplica la liga que elijas abajo a todas las filas. Si un equipo ya existe con ese nombre en esa liga, se sustituye su ficha entera — no se promedia con lo anterior.</p>
       <div class="grid2">
         <div><label>Liga (si el archivo no trae columna Liga)</label>
           <select id="bulk_liga"><option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Premier League</option><option>Championship</option><option>Ligue 1</option><option>Serie A</option><option>Eredivisie</option><option>Süper Lig</option><option>Bundesliga</option><option>Bundesliga 2</option><option>Otra</option></select>
@@ -247,6 +247,16 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <div></div>
         <div><label>Goles a favor · Fuera</label><input id="t_gfa" type="number" step="0.1" placeholder="1.1"></div>
         <div><label>Goles en contra · Fuera</label><input id="t_gaa" type="number" step="0.1" placeholder="1.4"></div>
+        <div></div>
+      </div>
+      <hr class="divider">
+      <p class="hint" style="margin-top:-6px;"><strong>Tarjetas (media por partido, opcional)</strong></p>
+      <div class="grid3">
+        <div><label>Tarjetas propias · Casa</label><input id="t_crfh" type="number" step="0.1" placeholder="2.1"></div>
+        <div><label>Tarjetas rival · Casa</label><input id="t_crah" type="number" step="0.1" placeholder="1.8"></div>
+        <div></div>
+        <div><label>Tarjetas propias · Fuera</label><input id="t_crfa" type="number" step="0.1" placeholder="2.4"></div>
+        <div><label>Tarjetas rival · Fuera</label><input id="t_craa" type="number" step="0.1" placeholder="2.0"></div>
         <div></div>
       </div>
       <button class="btn amber" onclick="saveTeam()">Guardar ficha</button>
@@ -321,6 +331,23 @@ create policy "public update" on tipster_data for update using (true);</pre>
     </div>
 
     <div class="card">
+      <h2><span class="tag">Modelo</span> Tarjetas — Poisson</h2>
+      <p class="hint">λ_local = media(tarjetas propias del local en casa, tarjetas del rival en contra del visitante fuera) — y análogo para el visitante. Requiere que tus fichas de equipo tengan datos de tarjetas (opcional, se rellena solo al reimportar CSV con columnas de amarillas/rojas, o a mano).</p>
+      <div class="grid2">
+        <div><label>λ esperado — Local</label><input id="cr_lh" type="number" step="0.1"></div>
+        <div><label>λ esperado — Visitante</label><input id="cr_la" type="number" step="0.1"></div>
+      </div>
+      <button class="btn" onclick="loadCardsFromTeams()">Cargar medias de tarjetas de la ficha</button>
+      <div class="grid3">
+        <div><label>Línea over/under (total)</label><input id="cr_line" type="number" step="0.5" value="4.5"></div>
+        <div><label>Cuota Over</label><input id="cr_oddOver" type="number" step="0.01" placeholder="1.90"></div>
+        <div><label>Cuota Under</label><input id="cr_oddUnder" type="number" step="0.01" placeholder="1.90"></div>
+      </div>
+      <button class="btn amber" onclick="calcCards()">Calcular tarjetas</button>
+      <div class="result-box" id="cardsResult" style="display:none;"></div>
+    </div>
+
+    <div class="card">
       <h2><span class="tag">Modelo</span> Goles y 1X2 — Poisson bivariante simplificado</h2>
       <p class="hint">λ_local = media(goles a favor local en casa, goles en contra visitante fuera). Matriz de resultados 0–6 goles por equipo.</p>
       <div class="grid2">
@@ -378,7 +405,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
           <select id="b_liga"><option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Premier League</option><option>Championship</option><option>Ligue 1</option><option>Serie A</option><option>Eredivisie</option><option>Süper Lig</option><option>Bundesliga</option><option>Bundesliga 2</option><option>Otra</option></select>
         </div>
         <div><label>Mercado</label>
-          <select id="b_market" onchange="refreshLineaOptions()"><option>Corners</option><option>1X2</option><option>Goles O/U</option><option>Otro</option></select>
+          <select id="b_market" onchange="refreshLineaOptions()"><option>Corners</option><option>1X2</option><option>Goles O/U</option><option>Tarjetas O/U</option><option>Otro</option></select>
         </div>
       </div>
       <div class="grid3">
@@ -463,7 +490,7 @@ let BETS = [];
 let BANKCFG = {initial:1000, fraction:0.25, minEV:3};
 let FIXTURES = []; // {id, liga, jornada, fecha, local, visitante}
 let PICKED_MATCHES = new Set(); // ids de partidos marcados en Jornada
-function blankSide(){ return {mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0}; }
+function blankSide(){ return {mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0,crmp:0,crf:0,cra:0}; }
 
 // ---------- Supabase storage layer ----------
 let sbClient = null;
@@ -629,11 +656,12 @@ function recomputeTeams(){
     const s = entry[side];
     s.mp += (sums.mp||0)*weight; s.gf += (sums.gf||0)*weight; s.ga += (sums.ga||0)*weight;
     s.cmp += (sums.cmp||0)*weight; s.cf += (sums.cf||0)*weight; s.ca += (sums.ca||0)*weight;
+    s.crmp += (sums.crmp||0)*weight; s.crf += (sums.crf||0)*weight; s.cra += (sums.cra||0)*weight;
   }
   MANUAL_TEAMS.forEach(t=>{
     const e = ensure(t.liga, t.name);
-    addSide(e,'home', {mp:t.mh, gf:t.gfh*t.mh, ga:t.gah*t.mh, cmp:t.mh, cf:t.cfh*t.mh, ca:t.cah*t.mh}, 1);
-    addSide(e,'away', {mp:t.ma, gf:t.gfa*t.ma, ga:t.gaa*t.ma, cmp:t.ma, cf:t.cfa*t.ma, ca:t.caa*t.ma}, 1);
+    addSide(e,'home', {mp:t.mh, gf:t.gfh*t.mh, ga:t.gah*t.mh, cmp:t.mh, cf:t.cfh*t.mh, ca:t.cah*t.mh, crmp:t.mh, crf:(t.crfh||0)*t.mh, cra:(t.crah||0)*t.mh}, 1);
+    addSide(e,'away', {mp:t.ma, gf:t.gfa*t.ma, ga:t.gaa*t.ma, cmp:t.ma, cf:t.cfa*t.ma, ca:t.caa*t.ma, crmp:t.ma, crf:(t.crfa||0)*t.ma, cra:(t.craa||0)*t.ma}, 1);
   });
   SEASON_IMPORTS.forEach(imp=>{
     Object.entries(imp.groups).forEach(([name,g])=>{
@@ -656,6 +684,10 @@ function recomputeTeams(){
       gah: e.home.mp ? e.home.ga/e.home.mp : 0,
       gfa: e.away.mp ? e.away.gf/e.away.mp : 0,
       gaa: e.away.mp ? e.away.ga/e.away.mp : 0,
+      crfh: e.home.crmp ? e.home.crf/e.home.crmp : 0,
+      crah: e.home.crmp ? e.home.cra/e.home.crmp : 0,
+      crfa: e.away.crmp ? e.away.crf/e.away.crmp : 0,
+      craa: e.away.crmp ? e.away.cra/e.away.crmp : 0,
     };
     let recentInfo = null;
     const logs = combinedLogs[e.liga];
@@ -692,8 +724,8 @@ function recomputeTeams(){
 const SHRINKAGE_K = 15; // "partidos" de peso que le damos a la media de liga frente a los datos propios del equipo
 function applyShrinkage(){
   const ligas = [...new Set(TEAMS.map(t=>t.liga))];
-  const FIELDS_HOME = ['cfh','cah','gfh','gah'];
-  const FIELDS_AWAY = ['cfa','caa','gfa','gaa'];
+  const FIELDS_HOME = ['cfh','cah','gfh','gah','crfh','crah'];
+  const FIELDS_AWAY = ['cfa','caa','gfa','gaa','crfa','craa'];
   ligas.forEach(liga=>{
     const inLiga = TEAMS.filter(t=>t.liga===liga);
     const avg = {};
@@ -706,7 +738,7 @@ function applyShrinkage(){
       avg[f] = totalA>0 ? inLiga.reduce((s,t)=>s+t[f]*(t.ma||0),0)/totalA : inLiga.reduce((s,t)=>s+t[f],0)/(inLiga.length||1);
     });
     inLiga.forEach(t=>{
-      t.rawStats = {cfh:t.cfh,cah:t.cah,cfa:t.cfa,caa:t.caa,gfh:t.gfh,gah:t.gah,gfa:t.gfa,gaa:t.gaa};
+      t.rawStats = {cfh:t.cfh,cah:t.cah,cfa:t.cfa,caa:t.caa,gfh:t.gfh,gah:t.gah,gfa:t.gfa,gaa:t.gaa,crfh:t.crfh,crah:t.crah,crfa:t.crfa,craa:t.craa};
       const nh = t.mh||0, na = t.ma||0;
       const wH = nh/(nh+SHRINKAGE_K);
       const wA = na/(na+SHRINKAGE_K);
@@ -735,6 +767,10 @@ const CSV_ALIASES = {
   ftag: ['ftag','awaygoals','golesvisitante','away_goals','ag'],
   hc:   ['hc','homecorners','cornerslocal','corners_home'],
   ac:   ['ac','awaycorners','cornersvisitante','corners_away'],
+  hy:   ['hy','homeyellow','amarillaslocal'],
+  ay:   ['ay','awayyellow','amarillasvisitante'],
+  hr:   ['hr','homered','rojaslocal'],
+  ar:   ['ar','awayred','rojasvisitante'],
   date: ['date','fecha']
 };
 function findCol(headers, aliases){
@@ -763,6 +799,10 @@ function parseCSVText(text){
   const iFtag = findCol(headers, CSV_ALIASES.ftag);
   const iHc = findCol(headers, CSV_ALIASES.hc);
   const iAc = findCol(headers, CSV_ALIASES.ac);
+  const iHy = findCol(headers, CSV_ALIASES.hy);
+  const iAy = findCol(headers, CSV_ALIASES.ay);
+  const iHr = findCol(headers, CSV_ALIASES.hr);
+  const iAr = findCol(headers, CSV_ALIASES.ar);
   const iDate = findCol(headers, CSV_ALIASES.date);
   if(iHome===-1 || iAway===-1 || iFthg===-1 || iFtag===-1){
     return {rows:null, error:'No se han encontrado las columnas de equipos/goles esperadas (HomeTeam, AwayTeam, FTHG, FTAG).'};
@@ -777,10 +817,20 @@ function parseCSVText(text){
     if(!home || !away || isNaN(fthg) || isNaN(ftag)) continue;
     const hc = iHc!==-1 ? parseInt(cols[iHc]) : NaN;
     const ac = iAc!==-1 ? parseInt(cols[iAc]) : NaN;
+    const hy = iHy!==-1 ? parseInt(cols[iHy]) : NaN;
+    const ay = iAy!==-1 ? parseInt(cols[iAy]) : NaN;
+    const hr = iHr!==-1 ? parseInt(cols[iHr]) : NaN;
+    const ar = iAr!==-1 ? parseInt(cols[iAr]) : NaN;
     const dateSort = iDate!==-1 ? parseDateToSortable(cols[iDate]||'') : null;
-    rows.push({home,away,fthg,ftag,hc:isNaN(hc)?null:hc, ac:isNaN(ac)?null:ac, dateSort});
+    rows.push({
+      home,away,fthg,ftag,
+      hc:isNaN(hc)?null:hc, ac:isNaN(ac)?null:ac,
+      hCards: (isNaN(hy)&&isNaN(hr)) ? null : (isNaN(hy)?0:hy)+(isNaN(hr)?0:hr),
+      aCards: (isNaN(ay)&&isNaN(ar)) ? null : (isNaN(ay)?0:ay)+(isNaN(ar)?0:ar),
+      dateSort
+    });
   }
-  return {rows, missingCorners: iHc===-1 || iAc===-1};
+  return {rows, missingCorners: iHc===-1 || iAc===-1, missingCards: iHy===-1 && iHr===-1};
 }
 function computeScorelineSums(rows){
   let n=0, sumHome=0, sumAway=0, c00=0, c10=0, c01=0, c11=0;
@@ -805,12 +855,9 @@ function computeRegressionSums(rows){
   return {n,sumX,sumY,sumXY,sumX2};
 }
 function aggregateRows(rows){
-  const groups = {}; // name -> {home:{mp,gf,ga,cmp,cf,ca}, away:{...}}
+  const groups = {}; // name -> {home:{mp,gf,ga,cmp,cf,ca,crmp,crf,cra}, away:{...}}
   function ensure(name){
-    if(!groups[name]) groups[name] = {
-      home:{mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0},
-      away:{mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0}
-    };
+    if(!groups[name]) groups[name] = { home: blankSide(), away: blankSide() };
     return groups[name];
   }
   rows.forEach(r=>{
@@ -820,6 +867,10 @@ function aggregateRows(rows){
     if(r.hc!==null && r.ac!==null){
       h.home.cmp++; h.home.cf+=r.hc; h.home.ca+=r.ac;
       a.away.cmp++; a.away.cf+=r.ac; a.away.ca+=r.hc;
+    }
+    if(r.hCards!==null && r.aCards!==null){
+      h.home.crmp++; h.home.crf+=r.hCards; h.home.cra+=r.aCards;
+      a.away.crmp++; a.away.crf+=r.aCards; a.away.cra+=r.hCards;
     }
   });
   return groups;
@@ -851,7 +902,7 @@ async function importCSV(){
     return;
   }
   const resultLines = [];
-  let anyMatchLog = false, anyMissingCorners = false;
+  let anyMatchLog = false, anyMissingCorners = false, anyHasCards = false;
   for(const file of files){
     const temporada = (files.length===1 && manualTemporada) ? manualTemporada : (extractSeasonFromFilename(file.name) || file.name.replace(/\.[^.]+$/,''));
     const text = await file.text();
@@ -869,18 +920,20 @@ async function importCSV(){
     }));
     if(matchLog.length) anyMatchLog = true;
     if(parsed.missingCorners) anyMissingCorners = true;
+    if(!parsed.missingCards) anyHasCards = true;
     const key = liga.toLowerCase()+'||'+temporada.toLowerCase();
     const existingIdx = SEASON_IMPORTS.findIndex(i => (i.liga.toLowerCase()+'||'+i.temporada.toLowerCase())===key);
     const record = { id: existingIdx!==-1 ? SEASON_IMPORTS[existingIdx].id : Date.now().toString()+Math.random().toString(36).slice(2,6), liga, temporada, weight, groups, regression, scorelines, matchLog };
     const wasReplace = existingIdx!==-1;
     if(existingIdx!==-1) SEASON_IMPORTS[existingIdx] = record; else SEASON_IMPORTS.push(record);
-    resultLines.push(`<p><strong>${file.name}</strong> → temporada <strong>${temporada}</strong>: ${parsed.rows.length} partidos${wasReplace ? ' (sustituida la anterior)' : ''}${parsed.missingCorners ? ' — sin córners' : ''}${matchLog.length ? ' — con fechas ✓' : ' — sin fechas'}</p>`);
+    resultLines.push(`<p><strong>${file.name}</strong> → temporada <strong>${temporada}</strong>: ${parsed.rows.length} partidos${wasReplace ? ' (sustituida la anterior)' : ''}${parsed.missingCorners ? ' — sin córners' : ''}${parsed.missingCards ? ' — sin tarjetas' : ' — con tarjetas ✓'}${matchLog.length ? ' — con fechas ✓' : ' — sin fechas'}</p>`);
   }
   await persistTeamSources();
   recomputeTeams();
   renderTeams();
   box.innerHTML = resultLines.join('') +
     (anyMissingCorners ? '<p class="hint">Algún archivo no traía columnas de córners (HC/AC) — de esos solo se han importado los goles.</p>' : '') +
+    (anyHasCards ? '<p class="hint">Tarjetas detectadas — ya puedes usar la calculadora de tarjetas en 03 Partido para estos equipos.</p>' : '<p class="hint">Ningún archivo traía columnas de tarjetas (amarillas/rojas) — el mercado de tarjetas no tendrá datos para estos equipos hasta que reimportes un CSV que las incluya.</p>') +
     (anyMatchLog ? '<p class="hint">Fechas detectadas — se usarán para calcular la forma reciente de cada equipo.</p>' : '<p class="hint">Ningún archivo traía columna de fecha reconocible — no se podrá calcular forma reciente con estos datos, solo la media de toda la temporada.</p>');
   fileInput.value = '';
 }
@@ -888,9 +941,9 @@ async function importCSV(){
 function computeLigaAverage(liga){
   const inLiga = TEAMS.filter(t=>t.liga===liga);
   if(!inLiga.length) return null;
-  const fields = ['cfh','cah','cfa','caa','gfh','gah','gfa','gaa'];
+  const fields = ['cfh','cah','cfa','caa','gfh','gah','gfa','gaa','crfh','crah','crfa','craa'];
   const avg = {};
-  fields.forEach(f=>{ avg[f] = inLiga.reduce((s,t)=>s+t[f],0)/inLiga.length; });
+  fields.forEach(f=>{ avg[f] = inLiga.reduce((s,t)=>s+(t[f]||0),0)/inLiga.length; });
   return avg;
 }
 function refreshPromoSelect(){
@@ -918,11 +971,12 @@ function promoteTeam(){
   const targetName = document.getElementById('promo_name').value.trim() || srcName;
 
   const ligaAvg = computeLigaAverage(targetLiga);
-  const fields = ['cfh','cah','cfa','caa','gfh','gah','gfa','gaa'];
+  const fields = ['cfh','cah','cfa','caa','gfh','gah','gfa','gaa','crfh','crah','crfa','craa'];
   const blended = {};
   fields.forEach(f=>{
-    const avgVal = ligaAvg ? ligaAvg[f] : source[f];
-    blended[f] = w*source[f] + (1-w)*avgVal;
+    const srcVal = source[f] || 0;
+    const avgVal = ligaAvg ? (ligaAvg[f]||0) : srcVal;
+    blended[f] = w*srcVal + (1-w)*avgVal;
   });
 
   const team = {
@@ -932,6 +986,8 @@ function promoteTeam(){
     cfa: blended.cfa, caa: blended.caa, ma: 1,
     gfh: blended.gfh, gah: blended.gah,
     gfa: blended.gfa, gaa: blended.gaa,
+    crfh: blended.crfh, crah: blended.crah,
+    crfa: blended.crfa, craa: blended.craa,
   };
   MANUAL_TEAMS.push(team);
   persistTeamSources();
@@ -961,10 +1017,14 @@ async function saveTeam(){
     gah: parseFloat(document.getElementById('t_gah').value)||0,
     gfa: parseFloat(document.getElementById('t_gfa').value)||0,
     gaa: parseFloat(document.getElementById('t_gaa').value)||0,
+    crfh: parseFloat(document.getElementById('t_crfh').value)||0,
+    crah: parseFloat(document.getElementById('t_crah').value)||0,
+    crfa: parseFloat(document.getElementById('t_crfa').value)||0,
+    craa: parseFloat(document.getElementById('t_craa').value)||0,
   };
   MANUAL_TEAMS.push(team);
   await persistTeamSources();
-  ['t_name','t_cfh','t_cah','t_mh','t_cfa','t_caa','t_ma','t_gfh','t_gah','t_gfa','t_gaa'].forEach(id=>document.getElementById(id).value='');
+  ['t_name','t_cfh','t_cah','t_mh','t_cfa','t_caa','t_ma','t_gfh','t_gah','t_gfa','t_gaa','t_crfh','t_crah','t_crfa','t_craa'].forEach(id=>document.getElementById(id).value='');
   recomputeTeams();
   renderTeams();
 }
@@ -1186,6 +1246,44 @@ function calcCornersHandicap(){
   box.style.display='block'; box.innerHTML = html;
 }
 
+// ---------- cards model ----------
+function loadCardsFromTeams(){
+  const h = TEAMS.find(t=>t.id===document.getElementById('c_home').value);
+  const a = TEAMS.find(t=>t.id===document.getElementById('c_away').value);
+  if(!h || !a){ alert('Selecciona local y visitante en el selector de arriba (Córners)'); return; }
+  const lh = ((h.crfh||0) + (a.craa||0))/2;
+  const la = ((a.crfa||0) + (h.crah||0))/2;
+  document.getElementById('cr_lh').value = lh.toFixed(2);
+  document.getElementById('cr_la').value = la.toFixed(2);
+}
+function calcCards(){
+  const lh = parseFloat(document.getElementById('cr_lh').value);
+  const la = parseFloat(document.getElementById('cr_la').value);
+  if(!lh || !la){ alert('Faltan las λ de tarjetas (pulsa "Cargar medias de tarjetas" o compruébalo, puede que tus fichas no tengan datos de tarjetas todavía)'); return; }
+  const total = lh+la;
+  const line = parseFloat(document.getElementById('cr_line').value);
+  const pOver = poissonOver(line, total);
+  const pUnder = 1-pOver;
+  const oddOver = parseFloat(document.getElementById('cr_oddOver').value);
+  const oddUnder = parseFloat(document.getElementById('cr_oddUnder').value);
+  let html = `<div class="grid3">
+    <div><div class="hint">Total esperado (tarjetas)</div><div class="display" style="font-size:24px;">${total.toFixed(2)}</div></div>
+    <div><div class="hint">P(Over ${line})</div><div class="display" style="font-size:24px;">${fmtPct(pOver)}</div></div>
+    <div><div class="hint">P(Under ${line})</div><div class="display" style="font-size:24px;">${fmtPct(pUnder)}</div></div>
+  </div><hr class="divider">`;
+  if(oddOver){
+    const ev = evFromProb(pOver,oddOver);
+    html += `<p>Over @ ${oddOver}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
+  }
+  if(oddUnder){
+    const ev = evFromProb(pUnder,oddUnder);
+    html += `<p>Under @ ${oddUnder}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
+  }
+  html += `<p class="hint">Modelo Poisson simple, sin ajustes adicionales (a diferencia de córners, aquí no hay Dixon-Coles ni ajuste por contexto de gol todavía).</p>`;
+  const box = document.getElementById('cardsResult');
+  box.style.display='block'; box.innerHTML = html;
+}
+
 // ---------- goals / 1x2 model ----------
 function calcGoals(){
   const lh = parseFloat(document.getElementById('g_lh').value);
@@ -1282,6 +1380,10 @@ async function importBulkTeams(){
     const kGah = findKey(['ga casa','gah','goles en contra casa']);
     const kGfa = findKey(['gf fuera','gfa','goles a favor fuera']);
     const kGaa = findKey(['ga fuera','gaa','goles en contra fuera']);
+    const kCrfh = findKey(['tc casa','crfh','tarjetas propias casa','tarjetas a favor casa']);
+    const kCrah = findKey(['ta casa','crah','tarjetas rival casa','tarjetas en contra casa']);
+    const kCrfa = findKey(['tc fuera','crfa','tarjetas propias fuera','tarjetas a favor fuera']);
+    const kCraa = findKey(['ta fuera','craa','tarjetas rival fuera','tarjetas en contra fuera']);
     if(!kEquipo){
       box.innerHTML = '<p class="ev-neg">No encuentro una columna "Equipo" en el archivo.</p>';
       return;
@@ -1299,6 +1401,8 @@ async function importBulkTeams(){
         cfa: num(r[kCfa]), caa: num(r[kCaa]), ma: 1,
         gfh: num(r[kGfh]), gah: num(r[kGah]),
         gfa: num(r[kGfa]), gaa: num(r[kGaa]),
+        crfh: num(r[kCrfh]), crah: num(r[kCrah]),
+        crfa: num(r[kCrfa]), craa: num(r[kCraa]),
       };
       const existingIdx = MANUAL_TEAMS.findIndex(t=>t.liga===liga && t.name.trim().toLowerCase()===name.toLowerCase());
       if(existingIdx!==-1){ MANUAL_TEAMS[existingIdx] = team; updated++; }
@@ -1628,6 +1732,8 @@ function refreshLineaOptions(){
     [7.5,8.5,9.5,10.5].forEach(l=>{ options.push(`Over ${l} corners`); options.push(`Under ${l} corners`); });
   } else if(market === 'Goles O/U'){
     [0.5,1.5,2.5,3.5,4.5,5.5].forEach(l=>{ options.push(`Over ${l} goles`); options.push(`Under ${l} goles`); });
+  } else if(market === 'Tarjetas O/U'){
+    [2.5,3.5,4.5,5.5,6.5].forEach(l=>{ options.push(`Over ${l} tarjetas`); options.push(`Under ${l} tarjetas`); });
   } else if(market === '1X2'){
     options = ['1 (Local)','X (Empate)','2 (Visitante)'];
   } else {
@@ -1653,6 +1759,17 @@ function computeModelProbForBet(){
   if(market === 'Corners'){
     const lh = parseFloat(document.getElementById('c_lh').value);
     const la = parseFloat(document.getElementById('c_la').value);
+    if(!lh || !la) return null;
+    const m = pick.match(/(over|under)\s*([\d.]+)/);
+    if(!m) return null;
+    const line = parseFloat(m[2]);
+    const total = lh+la;
+    const pOver = poissonOver(line, total);
+    return m[1]==='over' ? pOver : 1-pOver;
+  }
+  if(market === 'Tarjetas O/U'){
+    const lh = parseFloat(document.getElementById('cr_lh').value);
+    const la = parseFloat(document.getElementById('cr_la').value);
     if(!lh || !la) return null;
     const m = pick.match(/(over|under)\s*([\d.]+)/);
     if(!m) return null;
