@@ -174,6 +174,13 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <h2><span class="tag">Detalle</span> Rendimiento por mercado</h2>
       <table id="marketTable"><thead><tr><th>Mercado</th><th>Apuestas</th><th>Aciertos</th><th>ROI</th><th>CLV medio</th></tr></thead><tbody></tbody></table>
     </div>
+    <div class="card">
+      <h2><span class="tag">Calibración</span> ¿Acierta el modelo lo que dice?</h2>
+      <p class="hint">Compara la probabilidad que calculó el modelo con lo que realmente pasó, agrupado en tramos de 10%. Si el modelo dice "60-70%" y de verdad acierta ~6-7 de cada 10 veces en ese tramo, está bien calibrado. Necesita bastantes apuestas resueltas para ser fiable — con pocas, ignóralo.</p>
+      <canvas id="calibrationChart" height="160"></canvas>
+      <table id="calibrationTable" style="margin-top:10px;"><thead><tr><th>Tramo predicho</th><th>Apuestas</th><th>Media predicha</th><th>Acierto real</th></tr></thead><tbody></tbody></table>
+      <div class="empty" id="calibrationEmpty" style="display:none;">Aún no hay suficientes apuestas resueltas con probabilidad de modelo guardada.</div>
+    </div>
   </div>
 
   <!-- TEAMS -->
@@ -1497,6 +1504,7 @@ function prefillBetFromFixture(fxId){
   document.getElementById('b_market').value = 'Corners';
   if(home && away){
     const corners = predictCorners(home, away, fx.liga, 9.5);
+    const goals = predictGoals(home, away, fx.liga, 2.5);
     const lineasDisponibles = [7.5,8.5,9.5,10.5];
     const lineaSugerida = lineasDisponibles.reduce((best,l)=> Math.abs(l-corners.total) < Math.abs(best-corners.total) ? l : best);
     refreshLineaOptions();
@@ -1504,6 +1512,13 @@ function prefillBetFromFixture(fxId){
     const opt = `Over ${lineaSugerida} corners`;
     if([...sel.options].some(o=>o.value===opt)) sel.value = opt;
     applyLineaToPick();
+    // recalculamos las lambdas base de corners y goles tal cual las usa el modelo, para dejarlas en los campos ocultos que usa la calibracion
+    const clh = (home.cfh + away.caa)/2;
+    const cla = (away.cfa + home.cah)/2;
+    document.getElementById('c_lh').value = clh.toFixed(2);
+    document.getElementById('c_la').value = cla.toFixed(2);
+    document.getElementById('g_lh').value = goals.lh.toFixed(2);
+    document.getElementById('g_la').value = goals.la.toFixed(2);
   } else {
     refreshLineaOptions();
   }
@@ -1543,6 +1558,49 @@ function applyLineaToPick(){
   const sel = document.getElementById('b_linea');
   if(sel.value) document.getElementById('b_pick').value = sel.value;
 }
+function computeModelProbForBet(){
+  const market = document.getElementById('b_market').value;
+  const pick = (document.getElementById('b_pick').value || '').toLowerCase();
+  const liga = document.getElementById('b_liga').value;
+  if(market === 'Corners'){
+    const lh = parseFloat(document.getElementById('c_lh').value);
+    const la = parseFloat(document.getElementById('c_la').value);
+    if(!lh || !la) return null;
+    const m = pick.match(/(over|under)\s*([\d.]+)/);
+    if(!m) return null;
+    const line = parseFloat(m[2]);
+    const total = lh+la;
+    const pOver = poissonOver(line, total);
+    return m[1]==='over' ? pOver : 1-pOver;
+  }
+  if(market === 'Goles O/U'){
+    const lh = parseFloat(document.getElementById('g_lh').value);
+    const la = parseFloat(document.getElementById('g_la').value);
+    if(!lh || !la) return null;
+    const m = pick.match(/(over|under)\s*([\d.]+)/);
+    if(!m) return null;
+    const line = parseFloat(m[2]);
+    const lineFloor = Math.floor(line);
+    let pUnder = 0;
+    for(let i=0;i<=10;i++) for(let j=0;j<=10;j++) if(i+j<=lineFloor) pUnder += poissonPMF(i,lh)*poissonPMF(j,la);
+    return m[1]==='over' ? 1-pUnder : pUnder;
+  }
+  if(market === '1X2'){
+    const lh = parseFloat(document.getElementById('g_lh').value);
+    const la = parseFloat(document.getElementById('g_la').value);
+    if(!lh || !la) return null;
+    let p1=0,pX=0,p2=0;
+    for(let i=0;i<=10;i++) for(let j=0;j<=10;j++){
+      const p = poissonPMF(i,lh)*poissonPMF(j,la);
+      if(i>j) p1+=p; else if(i===j) pX+=p; else p2+=p;
+    }
+    if(pick.includes('local') || pick.trim()==='1') return p1;
+    if(pick.includes('empate') || pick.trim()==='x') return pX;
+    if(pick.includes('visitante') || pick.trim()==='2') return p2;
+    return null;
+  }
+  return null;
+}
 async function addBet(){
   const odd = parseFloat(document.getElementById('b_odd').value);
   const stake = parseFloat(document.getElementById('b_stake').value);
@@ -1556,22 +1614,26 @@ async function addBet(){
     pick: document.getElementById('b_pick').value,
     odd, stake,
     close: parseFloat(document.getElementById('b_close').value)||null,
-    status: document.getElementById('b_status').value
+    status: document.getElementById('b_status').value,
+    modelProb: computeModelProbForBet()
   };
   BETS.push(bet);
   await saveState();
   ['b_match','b_pick','b_odd','b_stake','b_close'].forEach(id=>document.getElementById(id).value='');
   renderBets();
+  renderCalibration();
 }
 async function updateBetStatus(id,status){
   const b = BETS.find(x=>x.id===id); if(b) b.status=status;
   await saveState();
   renderBets();
+  renderCalibration();
 }
 async function deleteBet(id){
   BETS = BETS.filter(b=>b.id!==id);
   await saveState();
   renderBets();
+  renderCalibration();
 }
 function betPL(b){
   if(b.status==='win') return b.stake*(b.odd-1);
@@ -1695,6 +1757,56 @@ function renderDashboard(){
   if(!Object.keys(markets).length){
     tbody.innerHTML = `<tr><td colspan="5" class="empty">Aún no hay apuestas resueltas.</td></tr>`;
   }
+  renderCalibration();
+}
+let calibrationChartInstance = null;
+function renderCalibration(){
+  const canvas = document.getElementById('calibrationChart');
+  if(!canvas) return;
+  const settled = BETS.filter(b=>(b.status==='win'||b.status==='loss') && typeof b.modelProb==='number');
+  const emptyEl = document.getElementById('calibrationEmpty');
+  const buckets = Array.from({length:10}, (_,i)=>({min:i*0.1, max:(i+1)*0.1, n:0, sumProb:0, wins:0}));
+  settled.forEach(b=>{
+    let idx = Math.floor(b.modelProb*10);
+    if(idx>9) idx=9; if(idx<0) idx=0;
+    const bucket = buckets[idx];
+    bucket.n++; bucket.sumProb += b.modelProb;
+    if(b.status==='win') bucket.wins++;
+  });
+  const activeBuckets = buckets.filter(b=>b.n>0);
+  emptyEl.style.display = activeBuckets.length ? 'none' : 'block';
+
+  const tbody = document.querySelector('#calibrationTable tbody');
+  tbody.innerHTML = '';
+  activeBuckets.forEach(b=>{
+    const avgPred = b.sumProb/b.n;
+    const actual = b.wins/b.n;
+    const diff = Math.abs(avgPred-actual);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${(b.min*100).toFixed(0)}-${(b.max*100).toFixed(0)}%</td><td>${b.n}</td>
+      <td>${(avgPred*100).toFixed(1)}%</td>
+      <td class="${diff<0.1?'pos':'neg'}">${(actual*100).toFixed(1)}%</td>`;
+    tbody.appendChild(tr);
+  });
+
+  if(calibrationChartInstance) calibrationChartInstance.destroy();
+  if(!activeBuckets.length) return;
+  calibrationChartInstance = new Chart(canvas, {
+    type:'scatter',
+    data:{
+      datasets:[
+        { label:'Perfecto', data:[{x:0,y:0},{x:1,y:1}], showLine:true, borderColor:'#D8D2C2', borderDash:[4,4], pointRadius:0 },
+        { label:'Tu modelo', data: activeBuckets.map(b=>({x:b.sumProb/b.n, y:b.wins/b.n, r:Math.min(20,5+b.n)})), backgroundColor:'#D9A441', borderColor:'#0F3D2E' }
+      ]
+    },
+    options:{
+      scales:{
+        x:{ min:0, max:1, title:{display:true, text:'Probabilidad predicha'}, ticks:{callback:v=>(v*100).toFixed(0)+'%'} },
+        y:{ min:0, max:1, title:{display:true, text:'Acierto real'}, ticks:{callback:v=>(v*100).toFixed(0)+'%'} }
+      },
+      plugins:{ legend:{display:true, labels:{boxWidth:12}} }
+    }
+  });
 }
 
 // ---------- backup / restore ----------
