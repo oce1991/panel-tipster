@@ -300,6 +300,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <div class="hint" id="ligaStatsInfo" style="margin-top:8px;"></div>
       <div class="hint" id="formaRecienteInfo" style="margin-top:4px;"></div>
       <div class="hint" id="confianzaInfo" style="margin-top:4px;"></div>
+      <div id="h2hInfo" style="margin-top:8px;"></div>
     </div>
 
     <div class="card">
@@ -1151,6 +1152,36 @@ function loadMatchFromTeams(){
     const pctOwn = w => (w*100).toFixed(0);
     confInfo.textContent = `Confianza por muestra — ${h.name} (${h.mh} partidos en casa, fiabilidad ${nivel(h.mh)}, ${pctOwn(h.shrinkWeightHome||0)}% datos propios / resto media de liga) · ${a.name} (${a.ma} partidos fuera, fiabilidad ${nivel(a.ma)}, ${pctOwn(a.shrinkWeightAway||0)}% datos propios / resto media de liga)`;
   }
+  renderHeadToHead(h.name, a.name, h.liga);
+}
+function getHeadToHead(teamAName, teamBName, liga){
+  const logs = buildCombinedMatchLogs()[liga] || [];
+  const a = teamAName.toLowerCase(), b = teamBName.toLowerCase();
+  const matches = logs.filter(m => (m.h.toLowerCase()===a && m.a.toLowerCase()===b) || (m.h.toLowerCase()===b && m.a.toLowerCase()===a));
+  matches.sort((x,y)=> y.d.localeCompare(x.d));
+  return matches;
+}
+function renderHeadToHead(homeName, awayName, liga){
+  const box = document.getElementById('h2hInfo');
+  if(!box) return;
+  const matches = getHeadToHead(homeName, awayName, liga);
+  if(!matches.length){
+    box.innerHTML = `<div class="result-box"><p class="hint">Sin enfrentamientos directos previos entre ${homeName} y ${awayName} en los datos importados.</p></div>`;
+    return;
+  }
+  const withCorners = matches.filter(m=>m.hc!==null && m.hc!==undefined);
+  const avgGoals = matches.reduce((s,m)=>s+m.hg+m.ag,0)/matches.length;
+  const avgCorners = withCorners.length ? withCorners.reduce((s,m)=>s+m.hc+m.ac,0)/withCorners.length : null;
+  const rows = matches.slice(0,10).map(m=>{
+    const golesTxt = `${m.h} ${m.hg}-${m.ag} ${m.a}`;
+    const cornersTxt = (m.hc!==null && m.hc!==undefined) ? ` (córners ${m.hc}-${m.ac})` : '';
+    return `<tr><td>${m.d}</td><td style="font-family:Inter;">${golesTxt}${cornersTxt}</td></tr>`;
+  }).join('');
+  box.innerHTML = `<div class="result-box">
+    <p style="font-family:'Oswald'; font-weight:600;">Historial directo (${matches.length} partido${matches.length>1?'s':''})</p>
+    <p class="hint">Media en estos enfrentamientos: ${avgGoals.toFixed(2)} goles/partido${avgCorners!==null ? ` · ${avgCorners.toFixed(2)} córners/partido` : ' · sin datos de córners'}. Esto es informativo, no se mezcla automáticamente en el cálculo — úsalo con tu propio criterio.</p>
+    <table style="margin-top:6px;"><tbody>${rows}</tbody></table>
+  </div>`;
 }
 
 // ---------- corners model ----------
