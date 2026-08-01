@@ -289,6 +289,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <button class="btn" onclick="loadMatchFromTeams()">Cargar medias de la ficha (córners + goles)</button>
       <div class="hint" id="ligaStatsInfo" style="margin-top:8px;"></div>
       <div class="hint" id="formaRecienteInfo" style="margin-top:4px;"></div>
+      <div class="hint" id="confianzaInfo" style="margin-top:4px;"></div>
     </div>
 
     <div class="card">
@@ -674,6 +675,34 @@ function recomputeTeams(){
       recentForm: recentInfo,
     };
   });
+  applyShrinkage();
+}
+const SHRINKAGE_K = 15; // "partidos" de peso que le damos a la media de liga frente a los datos propios del equipo
+function applyShrinkage(){
+  const ligas = [...new Set(TEAMS.map(t=>t.liga))];
+  const FIELDS_HOME = ['cfh','cah','gfh','gah'];
+  const FIELDS_AWAY = ['cfa','caa','gfa','gaa'];
+  ligas.forEach(liga=>{
+    const inLiga = TEAMS.filter(t=>t.liga===liga);
+    const avg = {};
+    const totalH = inLiga.reduce((s,t)=>s+(t.mh||0),0);
+    const totalA = inLiga.reduce((s,t)=>s+(t.ma||0),0);
+    FIELDS_HOME.forEach(f=>{
+      avg[f] = totalH>0 ? inLiga.reduce((s,t)=>s+t[f]*(t.mh||0),0)/totalH : inLiga.reduce((s,t)=>s+t[f],0)/(inLiga.length||1);
+    });
+    FIELDS_AWAY.forEach(f=>{
+      avg[f] = totalA>0 ? inLiga.reduce((s,t)=>s+t[f]*(t.ma||0),0)/totalA : inLiga.reduce((s,t)=>s+t[f],0)/(inLiga.length||1);
+    });
+    inLiga.forEach(t=>{
+      t.rawStats = {cfh:t.cfh,cah:t.cah,cfa:t.cfa,caa:t.caa,gfh:t.gfh,gah:t.gah,gfa:t.gfa,gaa:t.gaa};
+      const nh = t.mh||0, na = t.ma||0;
+      const wH = nh/(nh+SHRINKAGE_K);
+      const wA = na/(na+SHRINKAGE_K);
+      FIELDS_HOME.forEach(f=>{ t[f] = wH*t[f] + (1-wH)*avg[f]; });
+      FIELDS_AWAY.forEach(f=>{ t[f] = wA*t[f] + (1-wA)*avg[f]; });
+      t.shrinkWeightHome = wH; t.shrinkWeightAway = wA;
+    });
+  });
 }
 
 // ---------- tabs ----------
@@ -1043,6 +1072,12 @@ function loadMatchFromTeams(){
     if(a.recentForm && a.recentForm.away && a.recentForm.away.n>=3) parts.push(`${a.name} (visitante): forma reciente aplicada (últimos ${a.recentForm.away.n} fuera, ${RECENT_FORM_WEIGHT*100}% de peso)`);
     else parts.push(`${a.name} (visitante): sin forma reciente (usando solo media de temporada completa)`);
     info.textContent = parts.join(' · ');
+  }
+  const confInfo = document.getElementById('confianzaInfo');
+  if(confInfo){
+    const nivel = n => n>=25 ? 'buena' : (n>=10 ? 'media' : 'baja');
+    const pctOwn = w => (w*100).toFixed(0);
+    confInfo.textContent = `Confianza por muestra — ${h.name} (${h.mh} partidos en casa, fiabilidad ${nivel(h.mh)}, ${pctOwn(h.shrinkWeightHome||0)}% datos propios / resto media de liga) · ${a.name} (${a.ma} partidos fuera, fiabilidad ${nivel(a.ma)}, ${pctOwn(a.shrinkWeightAway||0)}% datos propios / resto media de liga)`;
   }
 }
 
