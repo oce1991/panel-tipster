@@ -194,6 +194,12 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <div><label>Peso</label><input id="auto_weight" type="number" step="0.5" value="3" min="0.5"></div>
       </div>
       <button class="btn amber" onclick="autoUpdateAllLeagues()">Actualizar todas las ligas ahora</button>
+      <div id="autoUpdateProgressWrap" style="display:none; margin-top:10px;">
+        <div style="background:var(--chalk); border:1px solid var(--line); border-radius:6px; height:22px; overflow:hidden;">
+          <div id="autoUpdateProgressBar" style="background:var(--amber); height:100%; width:0%; transition:width 0.2s;"></div>
+        </div>
+        <p class="hint" id="autoUpdateProgressText" style="margin-top:4px; text-align:center;"></p>
+      </div>
       <div class="result-box" id="autoUpdateResult" style="display:none;"></div>
     </div>
     <div class="card">
@@ -945,14 +951,24 @@ async function fetchViaCorsProxy(url){
 }
 async function autoUpdateAllLeagues(){
   const box = document.getElementById('autoUpdateResult');
+  const progressWrap = document.getElementById('autoUpdateProgressWrap');
+  const progressBar = document.getElementById('autoUpdateProgressBar');
+  const progressText = document.getElementById('autoUpdateProgressText');
   box.style.display = 'block';
   const seasonCode = (document.getElementById('auto_season').value.trim() || currentSeasonCode());
   if(!/^\d{4}$/.test(seasonCode)){ alert('El código de temporada debe tener 4 dígitos, ej. 2526'); return; }
   const temporada = seasonCode.slice(0,2)+'/'+seasonCode.slice(2);
   const weight = parseFloat(document.getElementById('auto_weight').value) || 3;
-  box.innerHTML = '<p class="hint">Actualizando, puede tardar unos segundos por liga...</p>';
+  const entries = Object.entries(LEAGUE_CODES);
+  const total = entries.length;
+  progressWrap.style.display = 'block';
+  progressBar.style.width = '0%';
+  progressText.textContent = `0 / ${total} ligas`;
+  box.innerHTML = '';
   const results = [];
-  for(const [liga, code] of Object.entries(LEAGUE_CODES)){
+  let done = 0;
+  for(const [liga, code] of entries){
+    progressText.textContent = `Actualizando ${liga}... (${done} / ${total})`;
     const url = `https://www.football-data.co.uk/mmz4281/${seasonCode}/${code}.csv`;
     try{
       const text = await fetchViaCorsProxy(url);
@@ -963,11 +979,16 @@ async function autoUpdateAllLeagues(){
     }catch(e){
       results.push(`<p class="ev-neg">${liga}: no se pudo actualizar automáticamente (${e.message}) — súbelo a mano si hace falta.</p>`);
     }
+    done++;
+    const pct = Math.round((done/total)*100);
+    progressBar.style.width = pct+'%';
+    progressText.textContent = `${done} / ${total} ligas (${pct}%)`;
+    box.innerHTML = results.join('');
   }
   await persistTeamSources();
   recomputeTeams();
   renderTeams();
-  box.innerHTML = results.join('');
+  progressText.textContent = `Completado: ${done} / ${total} ligas`;
 }
 async function importCSV(){
   const fileInput = document.getElementById('imp_file');
