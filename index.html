@@ -168,8 +168,20 @@ create policy "public update" on tipster_data for update using (true);</pre>
   <div class="view active" id="view-dashboard">
     <div class="statgrid" id="dashStats"></div>
     <div class="card">
+      <h2><span class="tag">Resumen</span> Tus picks activos (todas las ligas)</h2>
+      <p class="hint">Todos los partidos que tienes marcados en verde en Jornada, de todas las ligas, en un solo sitio.</p>
+      <div id="crossLeaguePicks"></div>
+      <div class="empty" id="crossLeagueEmpty" style="display:none;">No tienes ningún partido marcado todavía. Márcalos en 04 Jornada.</div>
+    </div>
+    <div class="card">
       <h2><span class="tag">Evolución</span> Banca acumulada</h2>
       <canvas id="bankChart" height="140"></canvas>
+    </div>
+    <div class="card">
+      <h2><span class="tag">Evolución</span> CLV por apuesta</h2>
+      <p class="hint">Cada punto es una apuesta con cuota de cierre registrada. Por encima de 0% significa que conseguiste mejor cuota que el cierre del mercado — la señal más fiable de que tienes ventaja real, más que el resultado de un partido suelto.</p>
+      <canvas id="clvChart" height="140"></canvas>
+      <div class="empty" id="clvEmpty" style="display:none;">Aún no tienes apuestas con cuota de cierre registrada.</div>
     </div>
     <div class="card">
       <h2><span class="tag">Detalle</span> Rendimiento por mercado</h2>
@@ -437,13 +449,31 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <div><label>Stake (€)</label><input id="b_stake" type="number" step="0.5"></div>
         <div><label>Cuota de cierre (CLV, opcional)</label><input id="b_close" type="number" step="0.01"></div>
       </div>
+      <label>Nota (por qué la haces, opcional)</label>
+      <input id="b_note" placeholder="Ej. buen ritmo de córners últimos partidos, rival sin su lateral titular...">
       <label>Resultado</label>
       <select id="b_status"><option value="pending">Pendiente</option><option value="win">Ganada</option><option value="loss">Perdida</option><option value="void">Anulada</option></select>
       <button class="btn amber" onclick="addBet()">Añadir apuesta</button>
     </div>
     <div class="card">
+      <h2><span class="tag">Comparador</span> Cuotas entre casas</h2>
+      <p class="hint">Pega la probabilidad que te dio el modelo (de 03 Partido o 04 Jornada) y la cuota de hasta 3 casas — te dice cuál te conviene y el EV de cada una.</p>
+      <div class="grid2">
+        <div><label>Probabilidad del modelo (%)</label><input id="cmp_prob" type="number" step="0.1" placeholder="62.5"></div>
+        <div></div>
+      </div>
+      <div class="grid3">
+        <div><label>Casa 1</label><input id="cmp_odd1" type="number" step="0.01" placeholder="1.90"></div>
+        <div><label>Casa 2</label><input id="cmp_odd2" type="number" step="0.01" placeholder="1.95"></div>
+        <div><label>Casa 3</label><input id="cmp_odd3" type="number" step="0.01" placeholder="1.85"></div>
+      </div>
+      <button class="btn amber" onclick="compareOdds()">Comparar</button>
+      <div class="result-box" id="oddsCompareResult" style="display:none;"></div>
+    </div>
+    <div class="card">
       <h2><span class="tag">Historial</span> Todas las apuestas</h2>
-      <table id="betsTable"><thead><tr><th>Fecha</th><th>Partido</th><th>Mercado</th><th>Cuota</th><th>Stake</th><th>CLV</th><th>Estado</th><th>P/L</th><th></th></tr></thead><tbody></tbody></table>
+      <button class="btn" onclick="exportBetsCSV()" style="margin-bottom:10px;">Exportar historial (CSV)</button>
+      <table id="betsTable"><thead><tr><th>Fecha</th><th>Partido</th><th>Mercado</th><th>Cuota</th><th>Stake</th><th>CLV</th><th>Nota</th><th>Estado</th><th>P/L</th><th></th></tr></thead><tbody></tbody></table>
       <div class="empty" id="betsEmpty" style="display:none;">Todavía no has registrado ninguna apuesta.</div>
     </div>
   </div>
@@ -1953,11 +1983,12 @@ async function addBet(){
     odd, stake,
     close: parseFloat(document.getElementById('b_close').value)||null,
     status: document.getElementById('b_status').value,
-    modelProb: computeModelProbForBet()
+    modelProb: computeModelProbForBet(),
+    note: document.getElementById('b_note').value.trim()
   };
   BETS.push(bet);
   await saveState();
-  ['b_match','b_pick','b_odd','b_stake','b_close'].forEach(id=>document.getElementById(id).value='');
+  ['b_match','b_pick','b_odd','b_stake','b_close','b_note'].forEach(id=>document.getElementById(id).value='');
   renderBets();
   renderCalibration();
 }
@@ -1996,6 +2027,7 @@ function renderBets(){
       <td>${b.odd}</td>
       <td>${b.stake}€</td>
       <td>${clv!==null ? (clv>0?'+':'')+clv.toFixed(1)+'%' : '—'}</td>
+      <td><input value="${(b.note||'').replace(/"/g,'&quot;')}" placeholder="—" style="margin:0; padding:4px 6px; font-size:11px; width:110px;" onchange="updateBetNote('${b.id}',this.value)"></td>
       <td>
         <select onchange="updateBetStatus('${b.id}',this.value)" style="margin:0;padding:3px 4px;font-size:11px;">
           <option value="pending" ${b.status==='pending'?'selected':''}>Pendiente</option>
@@ -2008,6 +2040,58 @@ function renderBets(){
       <td><button class="btn ghost" onclick="deleteBet('${b.id}')">×</button></td>`;
     tbody.appendChild(tr);
   });
+}
+async function updateBetNote(id, value){
+  const b = BETS.find(x=>x.id===id); if(b) b.note = value;
+  await saveState();
+}
+function compareOdds(){
+  const prob = parseFloat(document.getElementById('cmp_prob').value)/100;
+  if(!prob){ alert('Falta la probabilidad del modelo'); return; }
+  const odds = [
+    {label:'Casa 1', val: parseFloat(document.getElementById('cmp_odd1').value)},
+    {label:'Casa 2', val: parseFloat(document.getElementById('cmp_odd2').value)},
+    {label:'Casa 3', val: parseFloat(document.getElementById('cmp_odd3').value)},
+  ].filter(o=>o.val);
+  if(!odds.length){ alert('Mete al menos una cuota'); return; }
+  const best = odds.reduce((a,b)=> b.val>a.val ? b : a);
+  const worst = odds.reduce((a,b)=> b.val<a.val ? b : a);
+  const mejora = odds.length>1 ? ((best.val/worst.val-1)*100) : 0;
+  let html = '';
+  odds.forEach(o=>{
+    const ev = evFromProb(prob, o.val);
+    const isBest = o===best;
+    html += `<p style="${isBest?'font-weight:700;':''}">${o.label}: ${o.val} — EV <span class="${ev>0?'ev-pos':'ev-neg'}">${ev>0?'+':''}${(ev*100).toFixed(1)}%</span> ${isBest && odds.length>1 ? ' ⭐ mejor cuota':''}</p>`;
+  });
+  if(odds.length>1){
+    html += `<hr class="divider"><p class="hint">Elegir ${best.label} en vez de ${worst.label} te da un ${mejora.toFixed(1)}% más de cuota en esta apuesta — a la larga, esto es lo que más suma.</p>`;
+  }
+  const box = document.getElementById('oddsCompareResult');
+  box.style.display = 'block'; box.innerHTML = html;
+}
+function exportBetsCSV(){
+  if(!BETS.length){ alert('No hay apuestas que exportar todavía'); return; }
+  const headers = ['Fecha','Liga','Mercado','Partido','Seleccion','Cuota','Stake','CuotaCierre','CLV%','Estado','ProbabilidadModelo','Nota','P/L'];
+  const rows = [...BETS].sort((a,b)=>a.date.localeCompare(b.date)).map(b=>{
+    const clv = betCLV(b);
+    const pl = betPL(b);
+    return [
+      b.date, b.liga, b.market, b.match, b.pick, b.odd, b.stake, b.close||'',
+      clv!==null ? clv.toFixed(2) : '', b.status,
+      typeof b.modelProb==='number' ? (b.modelProb*100).toFixed(2) : '',
+      (b.note||'').replace(/"/g,'""'), pl.toFixed(2)
+    ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
+  });
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'historial-apuestas-' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ---------- bankroll / kelly ----------
@@ -2042,6 +2126,8 @@ function calcKelly(){
 // ---------- dashboard ----------
 let bankChartInstance = null;
 function renderDashboard(){
+  renderCrossLeaguePicks();
+  renderClvChart();
   const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
   const totalStaked = settled.reduce((s,b)=>s+b.stake,0);
   const totalPL = settled.reduce((s,b)=>s+betPL(b),0);
@@ -2069,7 +2155,7 @@ function renderDashboard(){
   bankChartInstance = new Chart(ctx, {
     type:'line',
     data:{ labels, datasets:[{ data, borderColor:'#00E5C7', backgroundColor:'rgba(0,229,199,0.12)', fill:true, tension:0.15, pointRadius:2 }] },
-    options:{ plugins:{legend:{display:false}}, scales:{ y:{ grid:{color:'#eee'} }, x:{ grid:{display:false} } } }
+    options:{ plugins:{legend:{display:false}}, scales:{ y:{ grid:{color:'#1C2530'}, ticks:{color:'#7a8a9a'} }, x:{ grid:{display:false}, ticks:{color:'#7a8a9a'} } } }
   });
 
   // by market
@@ -2096,6 +2182,59 @@ function renderDashboard(){
     tbody.innerHTML = `<tr><td colspan="5" class="empty">Aún no hay apuestas resueltas.</td></tr>`;
   }
   renderCalibration();
+}
+function renderCrossLeaguePicks(){
+  const container = document.getElementById('crossLeaguePicks');
+  const emptyEl = document.getElementById('crossLeagueEmpty');
+  if(!container) return;
+  const picked = FIXTURES.filter(f=>PICKED_MATCHES.has(f.id));
+  emptyEl.style.display = picked.length ? 'none' : 'block';
+  container.innerHTML = '';
+  picked.forEach(fx=>{
+    const home = findTeamInLiga(fx.local, fx.liga);
+    const away = findTeamInLiga(fx.visitante, fx.liga);
+    const div = document.createElement('div');
+    div.className = 'result-box';
+    div.style.marginBottom = '8px';
+    if(!home || !away){
+      div.innerHTML = `<p style="font-family:'Space Grotesk'; font-weight:600; font-size:13px;">${fx.local} vs ${fx.visitante} <span class="hint">(${fx.liga})</span></p>`;
+      container.appendChild(div);
+      return;
+    }
+    const corners = predictCorners(home, away, fx.liga, 9.5);
+    const goals = predictGoals(home, away, fx.liga, 2.5);
+    div.innerHTML = `<p style="font-family:'Space Grotesk'; font-weight:600; font-size:13px;">${fx.local} vs ${fx.visitante} <span class="hint">(${fx.liga}${fx.fecha ? ' · '+fx.fecha : ''})</span></p>
+      <p class="hint">Córners esp. ${corners.total.toFixed(2)} · 1X2 ${fmtPct(goals.p1)}/${fmtPct(goals.pX)}/${fmtPct(goals.p2)} · Over 2.5 ${fmtPct(goals.pOver)}</p>`;
+    container.appendChild(div);
+  });
+}
+let clvChartInstance = null;
+function renderClvChart(){
+  const canvas = document.getElementById('clvChart');
+  if(!canvas) return;
+  const withClv = [...BETS].filter(b=>betCLV(b)!==null).sort((a,b)=>a.date.localeCompare(b.date));
+  const emptyEl = document.getElementById('clvEmpty');
+  emptyEl.style.display = withClv.length ? 'none' : 'block';
+  if(clvChartInstance) clvChartInstance.destroy();
+  if(!withClv.length) return;
+  const labels = withClv.map(b=>b.date);
+  const data = withClv.map(b=>betCLV(b));
+  let running = 0;
+  const cumAvg = data.map((v,i)=>{ running += v; return running/(i+1); });
+  clvChartInstance = new Chart(canvas, {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'CLV por apuesta', data, borderColor:'#2a3542', backgroundColor:'#00E5C7', pointRadius:3, showLine:false },
+      { label:'Media acumulada', data:cumAvg, borderColor:'#00E5C7', backgroundColor:'rgba(0,229,199,0.1)', fill:true, tension:0.2, pointRadius:0 }
+    ]},
+    options:{
+      plugins:{ legend:{display:true, labels:{boxWidth:12, color:'#EDEFF2'}} },
+      scales:{
+        y:{ title:{display:true, text:'CLV %', color:'#7a8a9a'}, grid:{color:'#1C2530'}, ticks:{color:'#7a8a9a'} },
+        x:{ grid:{display:false}, ticks:{color:'#7a8a9a'} }
+      }
+    }
+  });
 }
 let calibrationChartInstance = null;
 function renderCalibration(){
@@ -2139,10 +2278,10 @@ function renderCalibration(){
     },
     options:{
       scales:{
-        x:{ min:0, max:1, title:{display:true, text:'Probabilidad predicha'}, ticks:{callback:v=>(v*100).toFixed(0)+'%'} },
-        y:{ min:0, max:1, title:{display:true, text:'Acierto real'}, ticks:{callback:v=>(v*100).toFixed(0)+'%'} }
+        x:{ min:0, max:1, title:{display:true, text:'Probabilidad predicha', color:'#7a8a9a'}, ticks:{callback:v=>(v*100).toFixed(0)+'%', color:'#7a8a9a'}, grid:{color:'#1C2530'} },
+        y:{ min:0, max:1, title:{display:true, text:'Acierto real', color:'#7a8a9a'}, ticks:{callback:v=>(v*100).toFixed(0)+'%', color:'#7a8a9a'}, grid:{color:'#1C2530'} }
       },
-      plugins:{ legend:{display:true, labels:{boxWidth:12}} }
+      plugins:{ legend:{display:true, labels:{boxWidth:12, color:'#EDEFF2'}} }
     }
   });
 }
