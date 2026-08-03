@@ -419,6 +419,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
 
     <div class="card">
       <h2><span class="tag">Próxima</span> Jornada a analizar</h2>
+      <p class="hint">Elige una liga concreta, o "Todas las ligas" para ver de golpe todos los partidos de ese número de jornada en cualquier liga que tengas cargada — útil al principio de temporada, cuando casi todas van por la jornada 1-2 a la vez.</p>
       <div class="grid2">
         <div><label>Liga</label><select id="jr_liga" onchange="refreshJornadaSelect()"></select></div>
         <div><label>Jornada</label><select id="jr_jornada" onchange="renderJornada()"></select></div>
@@ -1767,44 +1768,61 @@ function refreshJornadaSelect(){
   if(!ligaSel) return;
   const current = ligaSel.value;
   const ligas = [...new Set(FIXTURES.map(f=>f.liga))].sort();
-  ligaSel.innerHTML = ligas.length ? ligas.map(l=>`<option value="${l}">${l}</option>`).join('') : '<option value="">— sin calendarios —</option>';
-  if(ligas.includes(current)) ligaSel.value = current;
+  const options = ['<option value="__ALL__">🔍 Todas las ligas (buscador)</option>']
+    .concat(ligas.map(l=>`<option value="${l}">${l}</option>`));
+  ligaSel.innerHTML = ligas.length ? options.join('') : '<option value="">— sin calendarios —</option>';
+  if(current && (current==='__ALL__' || ligas.includes(current))) ligaSel.value = current;
   refreshJornadaOptions();
 }
 function refreshJornadaOptions(){
   const liga = document.getElementById('jr_liga').value;
   const jornadaSel = document.getElementById('jr_jornada');
   const current = jornadaSel.value;
-  const jornadas = [...new Set(FIXTURES.filter(f=>f.liga===liga).map(f=>f.jornada))]
+  const relevant = liga==='__ALL__' ? FIXTURES : FIXTURES.filter(f=>f.liga===liga);
+  const jornadas = [...new Set(relevant.map(f=>f.jornada))]
     .sort((a,b)=> (parseFloat(a)||0) - (parseFloat(b)||0));
   jornadaSel.innerHTML = jornadas.map(j=>`<option value="${j}">${j}</option>`).join('');
   if(jornadas.includes(current)) jornadaSel.value = current;
   renderJornada();
+}
+function getCurrentBankroll(){
+  const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
+  const totalPL = settled.reduce((s,b)=>s+betPL(b),0);
+  return BANKCFG.initial + totalPL;
+}
+function computeKellyStake(prob, odd){
+  const b = odd-1;
+  const kellyFull = (prob*b - (1-prob)) / b;
+  const kellyUsed = Math.max(0, kellyFull * (BANKCFG.fraction||0.25));
+  const stake = kellyUsed * getCurrentBankroll();
+  return { kellyFull, stake };
 }
 function renderJornada(){
   const liga = document.getElementById('jr_liga').value;
   const jornada = document.getElementById('jr_jornada').value;
   const container = document.getElementById('jornadaMatches');
   const emptyEl = document.getElementById('jornadaEmpty');
-  const matches = FIXTURES.filter(f=>f.liga===liga && f.jornada===jornada);
+  const crossLiga = liga === '__ALL__';
+  const matches = FIXTURES.filter(f=> f.jornada===jornada && (crossLiga || f.liga===liga));
   emptyEl.style.display = matches.length ? 'none' : 'block';
   container.innerHTML = '';
   const minEV = (BANKCFG.minEV!==undefined ? BANKCFG.minEV : 3) / 100;
   matches.forEach(fx=>{
-    const home = findTeamInLiga(fx.local, liga);
-    const away = findTeamInLiga(fx.visitante, liga);
+    const matchLiga = fx.liga;
+    const home = findTeamInLiga(fx.local, matchLiga);
+    const away = findTeamInLiga(fx.visitante, matchLiga);
     const div = document.createElement('div');
     div.className = 'result-box';
     div.style.marginBottom = '10px';
     if(!home || !away){
       const faltan = [!home?fx.local:null, !away?fx.visitante:null].filter(Boolean).join(' y ');
-      div.innerHTML = `<p style="font-family:'Poppins'; font-weight:600;">${fx.local} vs ${fx.visitante}</p>
-        <p class="hint">${fx.fecha ? fx.fecha+' · ' : ''}No encuentro "${faltan}" en tu base de equipos de ${liga}. Añádelo en 02 Equipos (o promociónalo si es un ascendido) para que aparezca aquí el análisis automático.</p>`;
+      div.innerHTML = `<p style="font-family:'Poppins'; font-weight:600;">${fx.local} vs ${fx.visitante} ${crossLiga ? `<span class="hint">(${matchLiga})</span>` : ''}</p>
+        <p class="hint">${fx.fecha ? fx.fecha+' · ' : ''}No encuentro "${faltan}" en tu base de equipos de ${matchLiga}. Añádelo en 02 Equipos (o promociónalo si es un ascendido) para que aparezca aquí el análisis automático.</p>`;
       container.appendChild(div);
       return;
     }
-    const corners = predictCorners(home, away, liga, 9.5);
-    const goals = predictGoals(home, away, liga, 2.5);
+    const corners = predictCorners(home, away, matchLiga, 9.5);
+    const goals = predictGoals(home, away, matchLiga, 2.5);
     const cards = predictCards(home, away, 4.5);
     const isPicked = PICKED_MATCHES.has(fx.id);
     if(!MATCH_ODDS[fx.id]) MATCH_ODDS[fx.id] = {};
@@ -1814,8 +1832,8 @@ function renderJornada(){
     function marketBlock(label, lineLabel, prob, oddKey, defaultOdd){
       if(prob===null || prob===undefined) return `<div style="margin-top:8px;"><p class="hint" style="${tc}">${label}: sin datos suficientes en este equipo (¿tiene tarjetas cargadas?)</p></div>`;
       const odd = odds[oddKey];
-      let ev = null;
-      if(odd){ ev = evFromProb(prob, odd); }
+      let ev = null, stakeInfo = null;
+      if(odd){ ev = evFromProb(prob, odd); stakeInfo = computeKellyStake(prob, odd); }
       const evColor = ev!==null ? (ev>=minEV ? '#4F46E5' : '#EF4444') : '';
       return `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed var(--line);">
         <p style="margin:0; font-family:'Poppins'; font-weight:600; font-size:12.5px; ${tc}">${label}</p>
@@ -1823,7 +1841,8 @@ function renderJornada(){
         <div style="display:flex; gap:8px; align-items:flex-end; max-width:220px;">
           <div style="flex:1;"><label style="${tc}">Cuota Over</label><input type="number" step="0.01" placeholder="${defaultOdd}" value="${odd||''}" oninput="updateMatchOdd('${fx.id}','${oddKey}', this.value)" style="margin-bottom:0;"></div>
         </div>
-        ${ev!==null ? `<p style="margin:4px 0 0; font-family:'Poppins'; font-weight:600; font-size:12px; color:${evColor};">EV: ${ev>=0?'+':''}${(ev*100).toFixed(1)}% ${ev>=minEV?'✅':'⚠️'}</p>` : ''}
+        ${ev!==null ? `<p style="margin:4px 0 0; font-family:'Poppins'; font-weight:600; font-size:12px; color:${evColor};">EV: ${ev>=0?'+':''}${(ev*100).toFixed(1)}% ${ev>=minEV?'✅':'⚠️'}</p>
+        <p style="margin:2px 0 0; font-family:'Poppins'; font-weight:700; font-size:13px; ${tc}">Stake sugerido (Kelly): ${stakeInfo.stake>0 ? stakeInfo.stake.toFixed(2)+'€' : '0€ — no apostar'}</p>` : ''}
       </div>`;
     }
 
@@ -1836,7 +1855,7 @@ function renderJornada(){
     }
     div.onclick = (e) => { if(e.target.tagName!=='INPUT') toggleMatchPick(fx.id); };
     div.innerHTML = `
-      <p style="font-family:'Poppins'; font-weight:600; font-size:15px; ${tc}">${fx.local} vs ${fx.visitante} ${fx.fecha ? `<span class="hint" style="font-family:Inter; ${tc}">— ${fx.fecha}</span>`:''} ${isPicked ? '<span style="font-family:Poppins; font-size:11px;">★ MARCADO</span>' : ''}</p>
+      <p style="font-family:'Poppins'; font-weight:600; font-size:15px; ${tc}">${fx.local} vs ${fx.visitante} ${crossLiga ? `<span class="hint" style="font-family:Inter; ${tc}">(${matchLiga})</span>` : ''} ${fx.fecha ? `<span class="hint" style="font-family:Inter; ${tc}">— ${fx.fecha}</span>`:''} ${isPicked ? '<span style="font-family:Poppins; font-size:11px;">★ MARCADO</span>' : ''}</p>
       <p class="hint" style="${tc}">
         <strong>${home.name}</strong> (casa): CF ${home.cfh.toFixed(1)}/CA ${home.cah.toFixed(1)} · GF ${home.gfh.toFixed(1)}/GA ${home.gah.toFixed(1)} · TC ${(home.crfh||0).toFixed(1)}/TA ${(home.crah||0).toFixed(1)}<br>
         <strong>${away.name}</strong> (fuera): CF ${away.cfa.toFixed(1)}/CA ${away.caa.toFixed(1)} · GF ${away.gfa.toFixed(1)}/GA ${away.gaa.toFixed(1)} · TC ${(away.crfa||0).toFixed(1)}/TA ${(away.craa||0).toFixed(1)}
