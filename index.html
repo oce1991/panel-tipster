@@ -540,8 +540,18 @@ function poissonOver(line,lambda){ // line like 9.5
   const k = Math.floor(line);
   return 1 - poissonCDF(k,lambda);
 }
+function poissonPush(line,lambda){
+  // en lineas enteras (over/under 2, 9, etc.) existe la posibilidad de empatar justo en esa cifra -> apuesta anulada (push)
+  if(!Number.isInteger(line)) return 0;
+  return poissonPMF(line,lambda);
+}
 function fmtPct(x){return (x*100).toFixed(1)+'%';}
 function evFromProb(prob,odd){return (prob*odd - 1);}
+function evFromProbPush(pOver,pPush,odd){
+  // si hay probabilidad de push, esa parte no se pierde ni se gana (se devuelve la apuesta)
+  const pUnder = Math.max(0, 1 - pOver - pPush);
+  return pOver*(odd-1) - pUnder;
+}
 
 // ---------- app state ----------
 let TEAMS = [];
@@ -1357,22 +1367,25 @@ function calcCorners(){
 
   const line = parseFloat(document.getElementById('c_line').value);
   const pOver = poissonOver(line,total);
-  const pUnder = 1-pOver;
+  const pPush = poissonPush(line,total);
+  const pUnder = Math.max(0, 1-pOver-pPush);
   const oddOver = parseFloat(document.getElementById('c_oddOver').value);
   const oddUnder = parseFloat(document.getElementById('c_oddUnder').value);
+  const pushNote = pPush>=0.01 ? `<p class="hint">Línea entera: ${fmtPct(pPush)} de probabilidad de acabar exactamente en ${line} (push, apuesta anulada) — ya descontado del EV de abajo.</p>` : '';
   let html = `<div class="grid3">
     <div><div class="hint">Total esperado (córners)</div><div class="display" style="font-size:24px;">${total.toFixed(2)}</div></div>
     <div><div class="hint">P(Over ${line})</div><div class="display" style="font-size:24px;">${fmtPct(pOver)}</div></div>
     <div><div class="hint">P(Under ${line})</div><div class="display" style="font-size:24px;">${fmtPct(pUnder)}</div></div>
   </div>
   ${adjustNote}
+  ${pushNote}
   <hr class="divider">`;
   if(oddOver){
-    const ev = evFromProb(pOver,oddOver);
+    const ev = evFromProbPush(pOver,pPush,oddOver);
     html += `<p>Over @ ${oddOver}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
   }
   if(oddUnder){
-    const ev = evFromProb(pUnder,oddUnder);
+    const ev = evFromProbPush(pUnder,pPush,oddUnder);
     html += `<p>Under @ ${oddUnder}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
   }
   html += `<p class="hint">EV positivo no garantiza acierto en un solo partido — es una ventaja estadística que solo se demuestra en volumen. Registra la apuesta en 04 Apuestas para hacer seguimiento real.</p>`;
@@ -1438,20 +1451,22 @@ function calcCards(){
   const total = lh+la;
   const line = parseFloat(document.getElementById('cr_line').value);
   const pOver = poissonOver(line, total);
-  const pUnder = 1-pOver;
+  const pPush = poissonPush(line, total);
+  const pUnder = Math.max(0, 1-pOver-pPush);
   const oddOver = parseFloat(document.getElementById('cr_oddOver').value);
   const oddUnder = parseFloat(document.getElementById('cr_oddUnder').value);
+  const pushNote = pPush>=0.01 ? `<p class="hint">Línea entera: ${fmtPct(pPush)} de probabilidad de push (apuesta anulada) — ya descontado del EV.</p>` : '';
   let html = `<div class="grid3">
     <div><div class="hint">Total esperado (tarjetas)</div><div class="display" style="font-size:24px;">${total.toFixed(2)}</div></div>
     <div><div class="hint">P(Over ${line})</div><div class="display" style="font-size:24px;">${fmtPct(pOver)}</div></div>
     <div><div class="hint">P(Under ${line})</div><div class="display" style="font-size:24px;">${fmtPct(pUnder)}</div></div>
-  </div><hr class="divider">`;
+  </div>${pushNote}<hr class="divider">`;
   if(oddOver){
-    const ev = evFromProb(pOver,oddOver);
+    const ev = evFromProbPush(pOver,pPush,oddOver);
     html += `<p>Over @ ${oddOver}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
   }
   if(oddUnder){
-    const ev = evFromProb(pUnder,oddUnder);
+    const ev = evFromProbPush(pUnder,pPush,oddUnder);
     html += `<p>Under @ ${oddUnder}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
   }
   html += `<p class="hint">Modelo Poisson simple, sin ajustes adicionales (a diferencia de córners, aquí no hay Dixon-Coles ni ajuste por contexto de gol todavía).</p>`;
@@ -1496,28 +1511,34 @@ function calcGoals(){
   const lineFloor = Math.floor(line);
   let pUnderGoals = 0;
   for(let i=0;i<=8;i++) for(let j=0;j<=8;j++) if(i+j<=lineFloor) pUnderGoals += matrix[i][j];
-  const pOverGoals = 1-pUnderGoals;
+  let pPushGoals = 0;
+  if(Number.isInteger(line)){
+    for(let i=0;i<=8;i++) for(let j=0;j<=8;j++) if(i+j===line) pPushGoals += matrix[i][j];
+    pUnderGoals -= pPushGoals;
+  }
+  const pOverGoals = Math.max(0, 1-pUnderGoals-pPushGoals);
 
   const dcNote = rho!==null
     ? `<p class="hint">Ajuste Dixon-Coles aplicado en ${liga} (ρ=${rho.toFixed(3)}, calculado sobre ${stats.rhoN} partidos reales): corrige la sobre/infra-estimación del Poisson simple en marcadores 0-0, 1-0, 0-1 y 1-1.</p>`
     : `<p class="hint">Aún no hay suficientes partidos importados en ${liga || 'esta liga'} para ajustar Dixon-Coles (se necesitan ≥100) — usando Poisson independiente sin corrección.</p>`;
+  const pushNoteGoals = pPushGoals>=0.01 ? ` · Push ${fmtPct(pPushGoals)}` : '';
 
   let html = `<div class="grid3">
     <div><div class="hint">P(1)</div><div class="display" style="font-size:22px;">${fmtPct(p1)}</div></div>
     <div><div class="hint">P(X)</div><div class="display" style="font-size:22px;">${fmtPct(pX)}</div></div>
     <div><div class="hint">P(2)</div><div class="display" style="font-size:22px;">${fmtPct(p2)}</div></div>
   </div>
-  <p class="hint">Goles esperados: ${(lh+la).toFixed(2)} · P(Over ${line}) ${fmtPct(pOverGoals)} · P(Under ${line}) ${fmtPct(pUnderGoals)}</p>
+  <p class="hint">Goles esperados: ${(lh+la).toFixed(2)} · P(Over ${line}) ${fmtPct(pOverGoals)} · P(Under ${line}) ${fmtPct(pUnderGoals)}${pushNoteGoals}</p>
   ${dcNote}
   <hr class="divider">`;
   const o1 = parseFloat(document.getElementById('g_odd1').value);
   const oX = parseFloat(document.getElementById('g_oddX').value);
   const o2 = parseFloat(document.getElementById('g_odd2').value);
   const oOver = parseFloat(document.getElementById('g_oddOver').value);
-  const rows = [['1',p1,o1],['X',pX,oX],['2',p2,o2],['Over '+line,pOverGoals,oOver]];
-  rows.forEach(([label,prob,odd])=>{
+  const rows = [['1',p1,o1,0],['X',pX,oX,0],['2',p2,o2,0],['Over '+line,pOverGoals,oOver,pPushGoals]];
+  rows.forEach(([label,prob,odd,push])=>{
     if(odd){
-      const ev = evFromProb(prob,odd);
+      const ev = push>0 ? evFromProbPush(prob,push,odd) : evFromProb(prob,odd);
       html += `<p>${label} @ ${odd}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
     }
   });
@@ -1690,14 +1711,16 @@ function predictCorners(homeTeam, awayTeam, liga, line){
     total = adjustedTotal;
   }
   const pOver = poissonOver(line, total);
-  return { baseTotal, total, pOver, pUnder: 1-pOver, expectedGoals };
+  const pPush = poissonPush(line, total);
+  return { baseTotal, total, pOver, pPush, pUnder: Math.max(0,1-pOver-pPush), expectedGoals };
 }
 function predictCards(homeTeam, awayTeam, line){
   const lh = ((homeTeam.crfh||0) + (awayTeam.craa||0))/2;
   const la = ((awayTeam.crfa||0) + (homeTeam.crah||0))/2;
   const total = lh+la;
   const pOver = (lh>0 && la>0) ? poissonOver(line, total) : null;
-  return { lh, la, total, pOver, pUnder: pOver!==null ? 1-pOver : null };
+  const pPush = (lh>0 && la>0) ? poissonPush(line, total) : null;
+  return { lh, la, total, pOver, pPush, pUnder: pOver!==null ? Math.max(0,1-pOver-pPush) : null };
 }
 function predictGoals(homeTeam, awayTeam, liga, line){
   const lh = (homeTeam.gfh + awayTeam.gaa)/2;
@@ -1721,7 +1744,12 @@ function predictGoals(homeTeam, awayTeam, liga, line){
   const lineFloor = Math.floor(line);
   let pUnder=0;
   for(let i=0;i<=8;i++) for(let j=0;j<=8;j++) if(i+j<=lineFloor) pUnder+=matrix[i][j];
-  return { lh, la, p1, pX, p2, pOver: 1-pUnder, pUnder, rho };
+  let pPush=0;
+  if(Number.isInteger(line)){
+    for(let i=0;i<=8;i++) for(let j=0;j<=8;j++) if(i+j===line) pPush+=matrix[i][j];
+    pUnder -= pPush; // pUnder ya no debe incluir la cifra exacta del push
+  }
+  return { lh, la, p1, pX, p2, pOver: Math.max(0,1-pUnder-pPush), pPush, pUnder: Math.max(0,pUnder), rho };
 }
 async function importFixtures(){
   const fileInput = document.getElementById('fx_file');
@@ -1799,9 +1827,12 @@ function getCurrentBankroll(){
   const totalPL = settled.reduce((s,b)=>s+betPL(b),0);
   return BANKCFG.initial + totalPL;
 }
-function computeKellyStake(prob, odd){
+function computeKellyStake(prob, odd, pPush){
+  pPush = pPush || 0;
   const b = odd-1;
-  const kellyFull = (prob*b - (1-prob)) / b;
+  const pLoss = Math.max(0, 1-prob-pPush);
+  const denom = b*(prob+pLoss);
+  const kellyFull = denom>0 ? (prob*b - pLoss)/denom : 0;
   const kellyUsed = Math.max(0, kellyFull * (BANKCFG.fraction||0.25));
   const stake = kellyUsed * getCurrentBankroll();
   return { kellyFull, stake };
@@ -1840,7 +1871,7 @@ function renderJornada(){
     const odds = MATCH_ODDS[fx.id];
     const tc = isPicked ? 'color:#0A2B20;' : '';
 
-    function marketBlock(label, market, prob, defaultOdd){
+    function marketBlock(label, market, prob, pPush, defaultOdd){
       const odd = odds[market];
       const lineOpts = LINE_OPTIONS[market];
       const currentLine = lines[market];
@@ -1848,14 +1879,15 @@ function renderJornada(){
       if(prob===null || prob===undefined){
         return `<div style="margin-top:8px;"><p style="margin:0; font-family:'Manrope'; font-weight:600; font-size:12.5px; ${tc}">${label}</p><p class="hint" style="${tc}">Sin datos suficientes en este equipo (¿tiene tarjetas cargadas?)</p></div>`;
       }
+      const pushTxt = Number.isInteger(currentLine) ? ` · Push ${fmtPct(pPush||0)}` : '';
       return `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed var(--line);">
         <p style="margin:0; font-family:'Manrope'; font-weight:600; font-size:12.5px; ${tc}">${label}</p>
         <div style="display:flex; gap:8px; align-items:flex-end; max-width:280px; margin-top:4px;">
           <div><label style="${tc}">Línea</label>${selectHtml}</div>
           <div style="flex:1;"><label style="${tc}">Cuota Over</label><input type="number" step="0.01" placeholder="${defaultOdd}" value="${odd||''}" oninput="updateMatchOdd('${fx.id}','${market}', this.value)" style="margin-bottom:0;"></div>
         </div>
-        <p class="hint" id="probtext-${fx.id}-${market}" style="${tc}">P(Over ${currentLine}) ${fmtPct(prob)}</p>
-        <div id="evbox-${fx.id}-${market}">${renderEvBox(prob, odd, minEV)}</div>
+        <p class="hint" id="probtext-${fx.id}-${market}" style="${tc}">P(Over ${currentLine}) ${fmtPct(prob)}${pushTxt}</p>
+        <div id="evbox-${fx.id}-${market}">${renderEvBox(prob, odd, minEV, pPush)}</div>
       </div>`;
     }
 
@@ -1878,9 +1910,9 @@ function renderJornada(){
         <div><div class="hint" style="${tc}">P(1) / P(X) / P(2)</div><div class="display" style="font-size:15px; ${tc}">${fmtPct(goals.p1)} / ${fmtPct(goals.pX)} / ${fmtPct(goals.p2)}</div></div>
         <div><div class="hint" style="${tc}">Goles esp.</div><div class="display" style="font-size:15px; ${tc}">${(goals.lh+goals.la).toFixed(2)}</div></div>
       </div>
-      ${marketBlock('Córners', 'corners', corners.pOver, '1.90')}
-      ${marketBlock('Goles', 'goals', goals.pOver, '1.85')}
-      ${marketBlock('Tarjetas', 'cards', cards.pOver, '1.90')}
+      ${marketBlock('Córners', 'corners', corners.pOver, corners.pPush, '1.90')}
+      ${marketBlock('Goles', 'goals', goals.pOver, goals.pPush, '1.85')}
+      ${marketBlock('Tarjetas', 'cards', cards.pOver, cards.pPush, '1.90')}
     `;
     container.appendChild(div);
   });
@@ -1888,30 +1920,33 @@ function renderJornada(){
 let MATCH_ODDS = {}; // {fixtureId: {corners, goals, cards}} - solo en sesion, para ver el EV en vivo antes de decidir
 let MATCH_LINES = {}; // {fixtureId: {corners:9.5, goals:2.5, cards:4.5}} - linea seleccionada por partido y mercado
 const LINE_OPTIONS = {
-  corners: [7.5, 8.5, 9.5, 10.5],
-  goals: [0.5, 1.5, 2.5, 3.5, 4.5, 5.5],
-  cards: [2.5, 3.5, 4.5, 5.5, 6.5],
+  corners: [7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11],
+  goals: [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5],
+  cards: [2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5],
 };
-function renderEvBox(prob, odd, minEV){
+function renderEvBox(prob, odd, minEV, pPush){
   if(!odd || prob===null || prob===undefined) return '';
-  const ev = evFromProb(prob, odd);
-  const stakeInfo = computeKellyStake(prob, odd);
+  pPush = pPush || 0;
+  const ev = pPush>0 ? evFromProbPush(prob, pPush, odd) : evFromProb(prob, odd);
+  const stakeInfo = computeKellyStake(prob, odd, pPush);
   const isValue = ev>=minEV;
+  const pushNote = pPush>=0.01 ? `<p class="hint" style="margin:2px 0 0;">Línea entera: ${fmtPct(pPush)} de probabilidad de empatar justo en esa cifra (push, se devuelve la apuesta) — ya está descontado del EV.</p>` : '';
   return `<div style="display:flex; align-items:center; gap:8px; margin-top:6px; flex-wrap:wrap;">
       <span class="oddbtn ${isValue?'value':''}">${odd}</span>
       <span style="font-family:'Manrope'; font-weight:700; font-size:12px; color:${isValue?'#16803C':'#DC2626'};">EV ${ev>=0?'+':''}${(ev*100).toFixed(1)}% ${isValue?'✅':'⚠️'}</span>
     </div>
-    <p style="margin:5px 0 0; font-family:'Manrope'; font-weight:700; font-size:13px;">Stake sugerido (Kelly): ${stakeInfo.stake>0 ? stakeInfo.stake.toFixed(2)+'€' : '0€ — no apostar'}</p>`;
+    <p style="margin:5px 0 0; font-family:'Manrope'; font-weight:700; font-size:13px;">Stake sugerido (Kelly): ${stakeInfo.stake>0 ? stakeInfo.stake.toFixed(2)+'€' : '0€ — no apostar'}</p>
+    ${pushNote}`;
 }
 function getMarketProb(fx, market, line){
   const home = findTeamInLiga(fx.local, fx.liga);
   const away = findTeamInLiga(fx.visitante, fx.liga);
-  if(!home || !away) return null;
+  if(!home || !away) return {prob:null, push:0};
   if(line===undefined) line = (MATCH_LINES[fx.id]||{})[market];
-  if(market==='corners') return predictCorners(home, away, fx.liga, line).pOver;
-  if(market==='goals') return predictGoals(home, away, fx.liga, line).pOver;
-  if(market==='cards') return predictCards(home, away, line).pOver;
-  return null;
+  if(market==='corners'){ const r = predictCorners(home, away, fx.liga, line); return {prob:r.pOver, push:r.pPush||0}; }
+  if(market==='goals'){ const r = predictGoals(home, away, fx.liga, line); return {prob:r.pOver, push:r.pPush||0}; }
+  if(market==='cards'){ const r = predictCards(home, away, line); return {prob:r.pOver, push:r.pPush||0}; }
+  return {prob:null, push:0};
 }
 function updateMatchOdd(fxId, market, val){
   const n = parseFloat(val);
@@ -1922,9 +1957,9 @@ function updateMatchOdd(fxId, market, val){
   if(!box) return;
   const fx = FIXTURES.find(f=>f.id===fxId);
   if(!fx) return;
-  const prob = getMarketProb(fx, market);
+  const { prob, push } = getMarketProb(fx, market);
   const minEV = (BANKCFG.minEV!==undefined ? BANKCFG.minEV : 3) / 100;
-  box.innerHTML = renderEvBox(prob, n||null, minEV);
+  box.innerHTML = renderEvBox(prob, n||null, minEV, push);
 }
 function updateMatchLine(fxId, market, val){
   const line = parseFloat(val);
@@ -1932,13 +1967,13 @@ function updateMatchLine(fxId, market, val){
   MATCH_LINES[fxId][market] = line;
   const fx = FIXTURES.find(f=>f.id===fxId);
   if(!fx) return;
-  const prob = getMarketProb(fx, market, line);
+  const { prob, push } = getMarketProb(fx, market, line);
   const odd = (MATCH_ODDS[fxId]||{})[market];
   const minEV = (BANKCFG.minEV!==undefined ? BANKCFG.minEV : 3) / 100;
   const probEl = document.getElementById(`probtext-${fxId}-${market}`);
-  if(probEl) probEl.textContent = `P(Over ${line}) ${fmtPct(prob)}`;
+  if(probEl) probEl.textContent = `P(Over ${line}) ${fmtPct(prob)}${Number.isInteger(line) ? ` · Push ${fmtPct(push)}` : ''}`;
   const box = document.getElementById(`evbox-${fxId}-${market}`);
-  if(box) box.innerHTML = renderEvBox(prob, odd||null, minEV);
+  if(box) box.innerHTML = renderEvBox(prob, odd||null, minEV, push);
 }
 async function toggleMatchPick(fxId){
   const wasPicked = PICKED_MATCHES.has(fxId);
@@ -1998,11 +2033,11 @@ function refreshLineaOptions(){
   const sel = document.getElementById('b_linea');
   let options = [];
   if(market === 'Corners'){
-    [7.5,8.5,9.5,10.5].forEach(l=>{ options.push(`Over ${l} corners`); options.push(`Under ${l} corners`); });
+    [7,7.5,8,8.5,9,9.5,10,10.5,11].forEach(l=>{ options.push(`Over ${l} corners`); options.push(`Under ${l} corners`); });
   } else if(market === 'Goles O/U'){
-    [0.5,1.5,2.5,3.5,4.5,5.5].forEach(l=>{ options.push(`Over ${l} goles`); options.push(`Under ${l} goles`); });
+    [0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5].forEach(l=>{ options.push(`Over ${l} goles`); options.push(`Under ${l} goles`); });
   } else if(market === 'Tarjetas O/U'){
-    [2.5,3.5,4.5,5.5,6.5].forEach(l=>{ options.push(`Over ${l} tarjetas`); options.push(`Under ${l} tarjetas`); });
+    [2,2.5,3,3.5,4,4.5,5,5.5,6,6.5].forEach(l=>{ options.push(`Over ${l} tarjetas`); options.push(`Under ${l} tarjetas`); });
   } else if(market === '1X2'){
     options = ['1 (Local)','X (Empate)','2 (Visitante)'];
   } else {
@@ -2034,7 +2069,8 @@ function computeModelProbForBet(){
     const line = parseFloat(m[2]);
     const total = lh+la;
     const pOver = poissonOver(line, total);
-    return m[1]==='over' ? pOver : 1-pOver;
+    const pPush = poissonPush(line, total);
+    return m[1]==='over' ? pOver : Math.max(0,1-pOver-pPush);
   }
   if(market === 'Tarjetas O/U'){
     const lh = parseFloat(document.getElementById('cr_lh').value);
@@ -2045,7 +2081,8 @@ function computeModelProbForBet(){
     const line = parseFloat(m[2]);
     const total = lh+la;
     const pOver = poissonOver(line, total);
-    return m[1]==='over' ? pOver : 1-pOver;
+    const pPush = poissonPush(line, total);
+    return m[1]==='over' ? pOver : Math.max(0,1-pOver-pPush);
   }
   if(market === 'Goles O/U'){
     const lh = parseFloat(document.getElementById('g_lh').value);
@@ -2055,9 +2092,13 @@ function computeModelProbForBet(){
     if(!m) return null;
     const line = parseFloat(m[2]);
     const lineFloor = Math.floor(line);
-    let pUnder = 0;
+    let pUnder = 0, pPush = 0;
     for(let i=0;i<=10;i++) for(let j=0;j<=10;j++) if(i+j<=lineFloor) pUnder += poissonPMF(i,lh)*poissonPMF(j,la);
-    return m[1]==='over' ? 1-pUnder : pUnder;
+    if(Number.isInteger(line)){
+      for(let i=0;i<=10;i++) for(let j=0;j<=10;j++) if(i+j===line) pPush += poissonPMF(i,lh)*poissonPMF(j,la);
+      pUnder -= pPush;
+    }
+    return m[1]==='over' ? Math.max(0,1-pUnder-pPush) : Math.max(0,pUnder);
   }
   if(market === '1X2'){
     const lh = parseFloat(document.getElementById('g_lh').value);
