@@ -5,21 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ficha de Juego — Panel del Tipster</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
-    --pitch:#4F46E5;
-    --pitch-dark:#4338CA;
-    --ink:#0F172A;
-    --chalk:#DFE3F3;
-    --paper:#ECEFFA;
-    --amber:#4F46E5;
+    --pitch:#FF5722;
+    --pitch-dark:#E64A19;
+    --ink:#0E2E3D;
+    --chalk:#F6F7FA;
+    --paper:#FFFFFF;
+    --amber:#FF5722;
     --win:#22C55E;
-    --loss:#EF4444;
-    --line:#C7CEE8;
+    --loss:#DC2626;
+    --line:#E5E9ED;
+    --header-bg:#1A1A1E;
+    --header-muted:#9A9AA5;
   }
   *{box-sizing:border-box;}
   body{
@@ -29,34 +31,34 @@
     font-family:'Inter',sans-serif;
     -webkit-font-smoothing:antialiased;
   }
-  h1,h2,h3,.display{font-family:'Poppins',sans-serif; text-transform:uppercase; letter-spacing:0.02em;}
+  h1,h2,h3,.display{font-family:'Manrope',sans-serif; text-transform:uppercase; letter-spacing:0.02em;}
   .mono{font-family:'JetBrains Mono',monospace;}
 
   header.top{
-    background:var(--paper);
-    color:var(--ink);
+    background:var(--header-bg);
+    color:#fff;
     padding:18px 20px 14px;
     position:sticky; top:0; z-index:20;
-    box-shadow:0 2px 10px rgba(79,70,229,0.08);
-    border-bottom:1px solid var(--line);
+    box-shadow:0 2px 10px rgba(0,0,0,0.2);
   }
   header.top .brand{display:flex; align-items:center; gap:10px;}
   header.top .arc{width:26px;height:26px;border:3px solid var(--pitch); border-radius:0 100% 0 0; border-left:none; border-bottom:none; transform:rotate(0deg);}
-  header.top h1{font-size:19px; margin:0; font-weight:600; letter-spacing:0.06em; color:var(--pitch);}
-  header.top p{margin:2px 0 0; font-size:11.5px; color:#64748B; font-family:'Inter',sans-serif; text-transform:none; letter-spacing:0;}
+  header.top h1{font-size:19px; margin:0; font-weight:700; letter-spacing:0.06em; color:#fff;}
+  header.top p{margin:2px 0 0; font-size:11.5px; color:var(--header-muted); font-family:'Inter',sans-serif; text-transform:none; letter-spacing:0;}
 
   nav.tabs{
     display:flex; overflow-x:auto; gap:2px;
-    background:var(--paper);
-    border-bottom:1px solid var(--line);
+    background:var(--header-bg);
     padding:0 4px;
+    border-bottom:3px solid transparent;
+    border-image:linear-gradient(90deg,#FF3D00,#FF7A00) 1;
   }
   nav.tabs button{
     flex:0 0 auto;
-    background:transparent; border:none; color:#94A3B8;
-    padding:10px 14px 9px; font-family:'Poppins'; font-size:12.5px; letter-spacing:0.05em;
+    background:transparent; border:none; color:var(--header-muted);
+    padding:10px 14px 9px; font-family:'Manrope'; font-weight:700; font-size:12.5px; letter-spacing:0.05em;
     cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;
-    text-transform:uppercase;
+    text-transform:uppercase; margin-bottom:-3px;
   }
   nav.tabs button .num{font-family:'JetBrains Mono'; color:var(--pitch); margin-right:6px; font-size:11px;}
   nav.tabs button.active{color:var(--pitch); border-bottom-color:var(--pitch);}
@@ -66,19 +68,19 @@
   .view.active{display:block;}
 
   .card{
-    background:var(--paper); border:1px solid var(--line); border-radius:6px;
-    padding:16px; margin-bottom:14px;
+    background:var(--paper); border:1px solid var(--line); border-radius:10px;
+    padding:16px; margin-bottom:14px; box-shadow:0 1px 4px rgba(0,0,0,0.05);
   }
   .card h2{font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:8px;}
-  .card h2 .tag{background:#E0E4FA; color:var(--pitch); font-family:'JetBrains Mono'; font-size:10px; padding:2px 6px; border-radius:3px; letter-spacing:0.05em;}
+  .card h2 .tag{background:#FFEDE5; color:var(--pitch); font-family:'JetBrains Mono'; font-size:10px; padding:2px 6px; border-radius:3px; letter-spacing:0.05em;}
 
   .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
   .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
   @media(max-width:520px){.grid3{grid-template-columns:1fr 1fr;} .grid2{grid-template-columns:1fr;}}
 
-  label{display:block; font-size:11px; color:#64748B; margin-bottom:3px; font-weight:600; text-transform:uppercase; letter-spacing:0.03em;}
+  label{display:block; font-size:11px; color:#8A96A3; margin-bottom:3px; font-weight:600; text-transform:uppercase; letter-spacing:0.03em;}
   input,select{
-    width:100%; padding:8px 9px; border:1px solid var(--line); border-radius:4px;
+    width:100%; padding:8px 9px; border:1px solid var(--line); border-radius:6px;
     background:var(--chalk); font-family:'JetBrains Mono'; font-size:13px; color:var(--ink);
     margin-bottom:10px;
   }
@@ -86,35 +88,42 @@
 
   button.btn{
     background:transparent; color:var(--ink); border:1px solid var(--line); padding:10px 16px;
-    border-radius:4px; font-family:'Poppins'; font-size:13px; letter-spacing:0.04em;
+    border-radius:6px; font-family:'Manrope'; font-weight:700; font-size:13px; letter-spacing:0.04em;
     text-transform:uppercase; cursor:pointer;
   }
-  button.btn:hover{background:#E0E4FA; border-color:var(--pitch);}
+  button.btn:hover{background:#F0F2F5; border-color:var(--pitch);}
   button.btn.amber{background:var(--amber); color:#fff; border:1px solid var(--amber); font-weight:700;}
   button.btn.amber:hover{background:var(--pitch-dark);}
   button.btn.ghost{background:transparent; color:var(--loss); border:1px solid var(--loss); padding:6px 10px; font-size:11px;}
 
   table{width:100%; border-collapse:collapse; font-size:12.5px;}
-  th{text-align:left; font-family:'Poppins'; font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:#94A3B8; border-bottom:2px solid var(--line); padding:6px 5px;}
+  th{text-align:left; font-family:'Manrope'; font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:#8A96A3; border-bottom:2px solid var(--line); padding:6px 5px;}
   td{padding:7px 5px; border-bottom:1px solid var(--line); font-family:'JetBrains Mono';}
   tr:last-child td{border-bottom:none;}
   .pos{color:var(--win); font-weight:700;}
   .neg{color:var(--loss); font-weight:700;}
 
   .statgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-bottom:14px;}
-  .stat{background:var(--paper); color:var(--ink); border-radius:10px; padding:12px; position:relative; overflow:hidden; box-shadow:0 2px 8px rgba(79,70,229,0.08);}
-  .stat .val{font-family:'Poppins'; font-size:22px; font-weight:600; color:var(--pitch);}
-  .stat .lbl{font-size:10px; text-transform:uppercase; letter-spacing:0.05em; color:#64748B; margin-top:2px;}
+  .stat{background:var(--paper); color:var(--ink); border-radius:10px; padding:12px; position:relative; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06); border:1px solid var(--line);}
+  .stat .val{font-family:'Manrope'; font-size:22px; font-weight:800; color:var(--ink);}
+  .stat .lbl{font-size:10px; text-transform:uppercase; letter-spacing:0.05em; color:#8A96A3; margin-top:2px;}
 
   .arcwrap{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
   .arc-gauge{position:relative; width:120px; height:120px;}
-  .result-box{background:var(--chalk); border:1px dashed var(--line); border-radius:6px; padding:12px; margin-top:8px;}
-  .ev-pos{color:var(--win); font-family:'Poppins'; font-weight:600;}
-  .ev-neg{color:var(--loss); font-family:'Poppins'; font-weight:600;}
-  .hint{font-size:11.5px; color:#64748B; line-height:1.5; margin-top:4px;}
+  .result-box{background:var(--chalk); border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:8px;}
+  .ev-pos{color:var(--win); font-family:'Manrope'; font-weight:700;}
+  .ev-neg{color:var(--loss); font-family:'Manrope'; font-weight:700;}
+  .hint{font-size:11.5px; color:#8A96A3; line-height:1.5; margin-top:4px;}
   .divider{border:none; border-top:1px solid var(--line); margin:14px 0;}
-  .empty{text-align:center; padding:30px 10px; color:#64748B; font-size:13px;}
+  .empty{text-align:center; padding:30px 10px; color:#8A96A3; font-size:13px;}
   .chip{display:inline-block; background:var(--pitch); color:#fff; font-family:'JetBrains Mono'; font-size:10px; padding:2px 7px; border-radius:10px; margin-left:6px;}
+
+  .oddbtn{
+    font-family:'Manrope'; font-weight:700; font-size:13px; color:var(--ink);
+    background:#EDF1F4; border:1px solid var(--line); border-radius:6px;
+    padding:7px 14px; display:inline-block;
+  }
+  .oddbtn.value{background:#E8FBF0; border-color:#22C55E; color:#16803C;}
 </style>
 </head>
 <body>
@@ -126,7 +135,7 @@
     <ol class="hint" style="padding-left:18px;">
       <li>Crea una cuenta gratis en <strong>supabase.com</strong> y un proyecto nuevo.</li>
       <li>En el proyecto, ve a <strong>SQL Editor</strong> y ejecuta esto una vez:
-        <pre style="background:var(--pitch-dark); color:#fff; padding:10px; border-radius:4px; font-size:11px; overflow-x:auto; margin:6px 0;">create table tipster_data (
+        <pre style="background:var(--header-bg); color:#fff; padding:10px; border-radius:4px; font-size:11px; overflow-x:auto; margin:6px 0;">create table tipster_data (
   id text primary key,
   data jsonb,
   updated_at timestamptz default now()
@@ -1313,7 +1322,7 @@ function renderHeadToHead(homeName, awayName, liga){
     return `<tr><td>${m.d}</td><td style="font-family:Inter;">${golesTxt}${cornersTxt}</td></tr>`;
   }).join('');
   box.innerHTML = `<div class="result-box">
-    <p style="font-family:'Poppins'; font-weight:600;">Historial directo (${matches.length} partido${matches.length>1?'s':''})</p>
+    <p style="font-family:'Manrope'; font-weight:600;">Historial directo (${matches.length} partido${matches.length>1?'s':''})</p>
     <p class="hint">Media en estos enfrentamientos: ${avgGoals.toFixed(2)} goles/partido${avgCorners!==null ? ` · ${avgCorners.toFixed(2)} córners/partido` : ' · sin datos de córners'}. Esto es informativo, no se mezcla automáticamente en el cálculo — úsalo con tu propio criterio.</p>
     <table style="margin-top:6px;"><tbody>${rows}</tbody></table>
   </div>`;
@@ -1816,7 +1825,7 @@ function renderJornada(){
     div.style.marginBottom = '10px';
     if(!home || !away){
       const faltan = [!home?fx.local:null, !away?fx.visitante:null].filter(Boolean).join(' y ');
-      div.innerHTML = `<p style="font-family:'Poppins'; font-weight:600;">${fx.local} vs ${fx.visitante} ${crossLiga ? `<span class="hint">(${matchLiga})</span>` : ''}</p>
+      div.innerHTML = `<p style="font-family:'Manrope'; font-weight:600;">${fx.local} vs ${fx.visitante} ${crossLiga ? `<span class="hint">(${matchLiga})</span>` : ''}</p>
         <p class="hint">${fx.fecha ? fx.fecha+' · ' : ''}No encuentro "${faltan}" en tu base de equipos de ${matchLiga}. Añádelo en 02 Equipos (o promociónalo si es un ascendido) para que aparezca aquí el análisis automático.</p>`;
       container.appendChild(div);
       return;
@@ -1837,10 +1846,10 @@ function renderJornada(){
       const currentLine = lines[market];
       const selectHtml = `<select onchange="updateMatchLine('${fx.id}','${market}', this.value)" style="margin-bottom:0; padding:6px;">${lineOpts.map(l=>`<option value="${l}" ${l===currentLine?'selected':''}>${l}</option>`).join('')}</select>`;
       if(prob===null || prob===undefined){
-        return `<div style="margin-top:8px;"><p style="margin:0; font-family:'Poppins'; font-weight:600; font-size:12.5px; ${tc}">${label}</p><p class="hint" style="${tc}">Sin datos suficientes en este equipo (¿tiene tarjetas cargadas?)</p></div>`;
+        return `<div style="margin-top:8px;"><p style="margin:0; font-family:'Manrope'; font-weight:600; font-size:12.5px; ${tc}">${label}</p><p class="hint" style="${tc}">Sin datos suficientes en este equipo (¿tiene tarjetas cargadas?)</p></div>`;
       }
       return `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed var(--line);">
-        <p style="margin:0; font-family:'Poppins'; font-weight:600; font-size:12.5px; ${tc}">${label}</p>
+        <p style="margin:0; font-family:'Manrope'; font-weight:600; font-size:12.5px; ${tc}">${label}</p>
         <div style="display:flex; gap:8px; align-items:flex-end; max-width:280px; margin-top:4px;">
           <div><label style="${tc}">Línea</label>${selectHtml}</div>
           <div style="flex:1;"><label style="${tc}">Cuota Over</label><input type="number" step="0.01" placeholder="${defaultOdd}" value="${odd||''}" oninput="updateMatchOdd('${fx.id}','${market}', this.value)" style="margin-bottom:0;"></div>
@@ -1859,7 +1868,7 @@ function renderJornada(){
     }
     div.onclick = (e) => { if(e.target.tagName!=='INPUT' && e.target.tagName!=='SELECT') toggleMatchPick(fx.id); };
     div.innerHTML = `
-      <p style="font-family:'Poppins'; font-weight:600; font-size:15px; ${tc}">${fx.local} vs ${fx.visitante} ${crossLiga ? `<span class="hint" style="font-family:Inter; ${tc}">(${matchLiga})</span>` : ''} ${fx.fecha ? `<span class="hint" style="font-family:Inter; ${tc}">— ${fx.fecha}</span>`:''} ${isPicked ? '<span style="font-family:Poppins; font-size:11px;">★ MARCADO</span>' : ''}</p>
+      <p style="font-family:'Manrope'; font-weight:600; font-size:15px; ${tc}">${fx.local} vs ${fx.visitante} ${crossLiga ? `<span class="hint" style="font-family:Inter; ${tc}">(${matchLiga})</span>` : ''} ${fx.fecha ? `<span class="hint" style="font-family:Inter; ${tc}">— ${fx.fecha}</span>`:''} ${isPicked ? '<span style="font-family:Manrope; font-size:11px;">★ MARCADO</span>' : ''}</p>
       <p class="hint" style="${tc}">
         <strong>${home.name}</strong> (casa): CF ${home.cfh.toFixed(1)}/CA ${home.cah.toFixed(1)} · GF ${home.gfh.toFixed(1)}/GA ${home.gah.toFixed(1)} · TC ${(home.crfh||0).toFixed(1)}/TA ${(home.crah||0).toFixed(1)}<br>
         <strong>${away.name}</strong> (fuera): CF ${away.cfa.toFixed(1)}/CA ${away.caa.toFixed(1)} · GF ${away.gfa.toFixed(1)}/GA ${away.gaa.toFixed(1)} · TC ${(away.crfa||0).toFixed(1)}/TA ${(away.craa||0).toFixed(1)}
@@ -1887,9 +1896,12 @@ function renderEvBox(prob, odd, minEV){
   if(!odd || prob===null || prob===undefined) return '';
   const ev = evFromProb(prob, odd);
   const stakeInfo = computeKellyStake(prob, odd);
-  const evColor = ev>=minEV ? '#4F46E5' : '#EF4444';
-  return `<p style="margin:4px 0 0; font-family:'Poppins'; font-weight:600; font-size:12px; color:${evColor};">EV: ${ev>=0?'+':''}${(ev*100).toFixed(1)}% ${ev>=minEV?'✅':'⚠️'}</p>
-    <p style="margin:2px 0 0; font-family:'Poppins'; font-weight:700; font-size:13px;">Stake sugerido (Kelly): ${stakeInfo.stake>0 ? stakeInfo.stake.toFixed(2)+'€' : '0€ — no apostar'}</p>`;
+  const isValue = ev>=minEV;
+  return `<div style="display:flex; align-items:center; gap:8px; margin-top:6px; flex-wrap:wrap;">
+      <span class="oddbtn ${isValue?'value':''}">${odd}</span>
+      <span style="font-family:'Manrope'; font-weight:700; font-size:12px; color:${isValue?'#16803C':'#DC2626'};">EV ${ev>=0?'+':''}${(ev*100).toFixed(1)}% ${isValue?'✅':'⚠️'}</span>
+    </div>
+    <p style="margin:5px 0 0; font-family:'Manrope'; font-weight:700; font-size:13px;">Stake sugerido (Kelly): ${stakeInfo.stake>0 ? stakeInfo.stake.toFixed(2)+'€' : '0€ — no apostar'}</p>`;
 }
 function getMarketProb(fx, market, line){
   const home = findTeamInLiga(fx.local, fx.liga);
@@ -2234,7 +2246,7 @@ function renderDashboard(){
 
   document.getElementById('dashStats').innerHTML = `
     <div class="stat"><div class="val">${bank.toFixed(0)}€</div><div class="lbl">Banca actual</div></div>
-    <div class="stat"><div class="val" style="color:${roi>=0?'#4F46E5':'#EF4444'}">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="lbl">ROI</div></div>
+    <div class="stat"><div class="val" style="color:${roi>=0?'#FF5722':'#DC2626'}">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="lbl">ROI</div></div>
     <div class="stat"><div class="val">${winRate.toFixed(0)}%</div><div class="lbl">Aciertos (${wins}/${settled.length})</div></div>
     <div class="stat"><div class="val">${avgClv!==null ? (avgClv>0?'+':'')+avgClv.toFixed(1)+'%' : '—'}</div><div class="lbl">CLV medio</div></div>
   `;
@@ -2248,8 +2260,8 @@ function renderDashboard(){
   if(bankChartInstance) bankChartInstance.destroy();
   bankChartInstance = new Chart(ctx, {
     type:'line',
-    data:{ labels, datasets:[{ data, borderColor:'#4F46E5', backgroundColor:'rgba(0,229,199,0.12)', fill:true, tension:0.15, pointRadius:2 }] },
-    options:{ plugins:{legend:{display:false}}, scales:{ y:{ grid:{color:'#C7CEE8'}, ticks:{color:'#64748B'} }, x:{ grid:{display:false}, ticks:{color:'#64748B'} } } }
+    data:{ labels, datasets:[{ data, borderColor:'#FF5722', backgroundColor:'rgba(0,229,199,0.12)', fill:true, tension:0.15, pointRadius:2 }] },
+    options:{ plugins:{legend:{display:false}}, scales:{ y:{ grid:{color:'#E5E9ED'}, ticks:{color:'#8A96A3'} }, x:{ grid:{display:false}, ticks:{color:'#8A96A3'} } } }
   });
 
   // by market
@@ -2291,13 +2303,13 @@ function renderCrossLeaguePicks(){
     div.className = 'result-box';
     div.style.marginBottom = '8px';
     if(!home || !away){
-      div.innerHTML = `<p style="font-family:'Poppins'; font-weight:600; font-size:13px;">${fx.local} vs ${fx.visitante} <span class="hint">(${fx.liga})</span></p>`;
+      div.innerHTML = `<p style="font-family:'Manrope'; font-weight:600; font-size:13px;">${fx.local} vs ${fx.visitante} <span class="hint">(${fx.liga})</span></p>`;
       container.appendChild(div);
       return;
     }
     const corners = predictCorners(home, away, fx.liga, 9.5);
     const goals = predictGoals(home, away, fx.liga, 2.5);
-    div.innerHTML = `<p style="font-family:'Poppins'; font-weight:600; font-size:13px;">${fx.local} vs ${fx.visitante} <span class="hint">(${fx.liga}${fx.fecha ? ' · '+fx.fecha : ''})</span></p>
+    div.innerHTML = `<p style="font-family:'Manrope'; font-weight:600; font-size:13px;">${fx.local} vs ${fx.visitante} <span class="hint">(${fx.liga}${fx.fecha ? ' · '+fx.fecha : ''})</span></p>
       <p class="hint">Córners esp. ${corners.total.toFixed(2)} · 1X2 ${fmtPct(goals.p1)}/${fmtPct(goals.pX)}/${fmtPct(goals.p2)} · Over 2.5 ${fmtPct(goals.pOver)}</p>`;
     container.appendChild(div);
   });
@@ -2318,14 +2330,14 @@ function renderClvChart(){
   clvChartInstance = new Chart(canvas, {
     type:'line',
     data:{ labels, datasets:[
-      { label:'CLV por apuesta', data, borderColor:'#C7CEE8', backgroundColor:'#4F46E5', pointRadius:3, showLine:false },
-      { label:'Media acumulada', data:cumAvg, borderColor:'#4F46E5', backgroundColor:'rgba(0,229,199,0.1)', fill:true, tension:0.2, pointRadius:0 }
+      { label:'CLV por apuesta', data, borderColor:'#E5E9ED', backgroundColor:'#FF5722', pointRadius:3, showLine:false },
+      { label:'Media acumulada', data:cumAvg, borderColor:'#FF5722', backgroundColor:'rgba(0,229,199,0.1)', fill:true, tension:0.2, pointRadius:0 }
     ]},
     options:{
-      plugins:{ legend:{display:true, labels:{boxWidth:12, color:'#0F172A'}} },
+      plugins:{ legend:{display:true, labels:{boxWidth:12, color:'#0E2E3D'}} },
       scales:{
-        y:{ title:{display:true, text:'CLV %', color:'#64748B'}, grid:{color:'#C7CEE8'}, ticks:{color:'#64748B'} },
-        x:{ grid:{display:false}, ticks:{color:'#64748B'} }
+        y:{ title:{display:true, text:'CLV %', color:'#8A96A3'}, grid:{color:'#E5E9ED'}, ticks:{color:'#8A96A3'} },
+        x:{ grid:{display:false}, ticks:{color:'#8A96A3'} }
       }
     }
   });
@@ -2366,16 +2378,16 @@ function renderCalibration(){
     type:'scatter',
     data:{
       datasets:[
-        { label:'Perfecto', data:[{x:0,y:0},{x:1,y:1}], showLine:true, borderColor:'#C7CEE8', borderDash:[4,4], pointRadius:0 },
-        { label:'Tu modelo', data: activeBuckets.map(b=>({x:b.sumProb/b.n, y:b.wins/b.n, r:Math.min(20,5+b.n)})), backgroundColor:'#4F46E5', borderColor:'#fff' }
+        { label:'Perfecto', data:[{x:0,y:0},{x:1,y:1}], showLine:true, borderColor:'#E5E9ED', borderDash:[4,4], pointRadius:0 },
+        { label:'Tu modelo', data: activeBuckets.map(b=>({x:b.sumProb/b.n, y:b.wins/b.n, r:Math.min(20,5+b.n)})), backgroundColor:'#FF5722', borderColor:'#fff' }
       ]
     },
     options:{
       scales:{
-        x:{ min:0, max:1, title:{display:true, text:'Probabilidad predicha', color:'#64748B'}, ticks:{callback:v=>(v*100).toFixed(0)+'%', color:'#64748B'}, grid:{color:'#C7CEE8'} },
-        y:{ min:0, max:1, title:{display:true, text:'Acierto real', color:'#64748B'}, ticks:{callback:v=>(v*100).toFixed(0)+'%', color:'#64748B'}, grid:{color:'#C7CEE8'} }
+        x:{ min:0, max:1, title:{display:true, text:'Probabilidad predicha', color:'#8A96A3'}, ticks:{callback:v=>(v*100).toFixed(0)+'%', color:'#8A96A3'}, grid:{color:'#E5E9ED'} },
+        y:{ min:0, max:1, title:{display:true, text:'Acierto real', color:'#8A96A3'}, ticks:{callback:v=>(v*100).toFixed(0)+'%', color:'#8A96A3'}, grid:{color:'#E5E9ED'} }
       },
-      plugins:{ legend:{display:true, labels:{boxWidth:12, color:'#0F172A'}} }
+      plugins:{ legend:{display:true, labels:{boxWidth:12, color:'#0E2E3D'}} }
     }
   });
 }
