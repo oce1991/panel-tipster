@@ -1459,6 +1459,21 @@ function calcCorners(){
     adjustNote = `<p class="hint">Aún no hay suficientes partidos importados con córners de esta liga para calcular el ajuste por contexto de gol (se necesitan al menos 20). Usando el total base.</p>`;
   }
 
+  // Ajuste adicional por tiros totales: si tienes datos de tiros para ambos equipos, se aplica sobre el total ya ajustado
+  const h = TEAMS.find(t=>t.id===document.getElementById('c_home').value);
+  const a = TEAMS.find(t=>t.id===document.getElementById('c_away').value);
+  let shotAdjustNote = '';
+  if(stats && typeof stats.shotSlope==='number' && h && a && h.shfh && a.shfa){
+    const shlh = (h.shfh + a.shaa)/2;
+    const shla = (a.shfa + h.shah)/2;
+    const expectedShots = shlh+shla;
+    let shotAdjustedTotal = total + stats.shotSlope*(expectedShots - stats.meanShots);
+    shotAdjustedTotal = Math.max(baseTotal*0.6, Math.min(baseTotal*1.6, shotAdjustedTotal));
+    const deltaShots = shotAdjustedTotal - total;
+    shotAdjustNote = `<p class="hint">Ajuste por tiros totales (${liga}, pendiente real ${stats.shotSlope.toFixed(4)} córners/tiro sobre ${stats.shotN} partidos): tiros esperados ${expectedShots.toFixed(1)} vs media de liga ${stats.meanShots.toFixed(1)} → ${deltaShots>=0?'+':''}${deltaShots.toFixed(2)} córners. Total tras este ajuste: ${shotAdjustedTotal.toFixed(2)}.</p>`;
+    total = shotAdjustedTotal;
+  }
+
   const line = parseFloat(document.getElementById('c_line').value);
   const pOver = poissonOver(line,total);
   const pPush = poissonPush(line,total);
@@ -1472,6 +1487,7 @@ function calcCorners(){
     <div><div class="hint">P(Under ${line})</div><div class="display" style="font-size:24px;">${fmtPct(pUnder)}</div></div>
   </div>
   ${adjustNote}
+  ${shotAdjustNote}
   ${pushNote}
   <hr class="divider">`;
   if(oddOver){
