@@ -205,6 +205,16 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <table id="calibrationTable" style="margin-top:10px;"><thead><tr><th>Tramo predicho</th><th>Apuestas</th><th>Media predicha</th><th>Acierto real</th></tr></thead><tbody></tbody></table>
       <div class="empty" id="calibrationEmpty" style="display:none;">Aún no hay suficientes apuestas resueltas con probabilidad de modelo guardada.</div>
     </div>
+    <div class="card">
+      <h2><span class="tag">Backtest</span> Validación con cuotas históricas reales</h2>
+      <p class="hint"><strong>Aviso importante:</strong> football-data.co.uk solo tiene cuotas históricas de <strong>goles</strong> (1X2 y Over/Under 2.5) — no de córners ni tarjetas, esos mercados nunca se han publicado en abierto. Así que esto valida solo el modelo de goles.</p>
+      <p class="hint">Para que sea honesto, cada partido se predice usando <strong>solo los datos anteriores a esa fecha</strong> (nunca datos del futuro) — es decir, es una simulación real de "qué habría dicho el modelo en su momento", no una comparación con ventaja injusta. Usa un Poisson simple (sin Dixon-Coles, forma reciente ni shrinkage, para no sobrecomplicar el cálculo repetido partido a partido) y solo empieza a apostar cuando cada equipo ya tiene 6 partidos previos en su lado — con menos, no hay datos fiables.</p>
+      <div class="grid2">
+        <div><label>Liga</label><select id="bt_liga"></select></div>
+        <div style="display:flex; align-items:flex-end;"><button class="btn amber" onclick="renderBacktest()" style="width:100%;">Ejecutar backtest</button></div>
+      </div>
+      <div class="result-box" id="backtestResult" style="display:none;"></div>
+    </div>
   </div>
 
   <!-- TEAMS -->
@@ -720,6 +730,82 @@ function buildCombinedMatchLogs(){
   });
   return byLiga;
 }
+const BACKTEST_MIN_MATCHES = 6; // partidos previos minimos (en su lado) antes de fiarse de la media de un equipo
+function runBacktest(liga){
+  const logs = (buildCombinedMatchLogs()[liga] || []).filter(m=>m.d);
+  const sorted = [...logs].sort((a,b)=> a.d.localeCompare(b.d));
+  const tally = {};
+  function ensure(name){
+    if(!tally[name]) tally[name] = {home:{mp:0,gf:0,ga:0}, away:{mp:0,gf:0,ga:0}};
+    return tally[name];
+  }
+  const buckets = Array.from({length:10}, ()=>({n:0, wins:0, sumProb:0}));
+  let bets=0, wins=0, staked=0, profit=0, skippedNoOdds=0, skippedNoHistory=0;
+  sorted.forEach(m=>{
+    const h = ensure(m.h), a = ensure(m.a);
+    const hasHistory = h.home.mp>=BACKTEST_MIN_MATCHES && a.away.mp>=BACKTEST_MIN_MATCHES;
+    const hasOdds = m.oO25 || m.oU25;
+    if(hasHistory && hasOdds){
+      const lh = (h.home.gf/h.home.mp + a.away.ga/a.away.mp)/2;
+      const la = (a.away.gf/a.away.mp + h.home.ga/h.home.mp)/2;
+      let pUnder=0;
+      for(let i=0;i<=8;i++) for(let j=0;j<=8;j++) if(i+j<=2) pUnder += poissonPMF(i,lh)*poissonPMF(j,la);
+      const pOver = 1-pUnder;
+      const actualOver = (m.hg+m.ag) > 2;
+      let chosen = null, prob = null, odd = null;
+      // apostamos al lado con mas valor, si alguno lo tiene
+      const evOver = m.oO25 ? pOver*m.oO25 - 1 : -Infinity;
+      const evUnder = m.oU25 ? pUnder*m.oU25 - 1 : -Infinity;
+      if(evOver>0 && evOver>=evUnder){ chosen='over'; prob=pOver; odd=m.oO25; }
+      else if(evUnder>0){ chosen='under'; prob=pUnder; odd=m.oU25; }
+      if(chosen){
+        bets++; staked+=1;
+        const won = chosen==='over' ? actualOver : !actualOver;
+        if(won){ profit += (odd-1); wins++; } else { profit -= 1; }
+        const bIdx = Math.min(9, Math.max(0, Math.floor(prob*10)));
+        buckets[bIdx].n++; buckets[bIdx].sumProb += prob;
+        if(won) buckets[bIdx].wins++;
+      }
+    } else if(!hasOdds){ skippedNoOdds++; } else { skippedNoHistory++; }
+    h.home.mp++; h.home.gf+=m.hg; h.home.ga+=m.ag;
+    a.away.mp++; a.away.gf+=m.ag; a.away.ga+=m.hg;
+  });
+  return {
+    totalMatches: sorted.length, bets, wins, staked, profit,
+    roi: staked>0 ? (profit/staked)*100 : null,
+    winRate: bets>0 ? (wins/bets)*100 : null,
+    buckets: buckets.filter(b=>b.n>0),
+    skippedNoOdds, skippedNoHistory,
+  };
+}
+function renderBacktest(){
+  const liga = document.getElementById('bt_liga').value;
+  const box = document.getElementById('backtestResult');
+  box.style.display = 'block';
+  if(!liga){ box.innerHTML = '<p class="hint">Selecciona una liga.</p>'; return; }
+  const r = runBacktest(liga);
+  if(!r.bets){
+    box.innerHTML = `<p class="hint">No se ha podido simular ninguna apuesta en ${liga}. Partidos con fecha: ${r.totalMatches} · sin cuotas de Over/Under 2.5: ${r.skippedNoOdds} · sin historial previo suficiente: ${r.skippedNoHistory}. Revisa que el CSV que importaste tenga columnas de cuotas (Avg&gt;2.5/Avg&lt;2.5 o B365&gt;2.5/B365&lt;2.5).</p>`;
+    return;
+  }
+  const roiColor = r.roi>=0 ? '#16803C' : '#DC2626';
+  let html = `<div class="grid3">
+    <div><div class="hint">Apuestas simuladas</div><div class="display" style="font-size:22px;">${r.bets}</div></div>
+    <div><div class="hint">Acierto</div><div class="display" style="font-size:22px;">${fmtPct(r.winRate/100)}</div></div>
+    <div><div class="hint">ROI</div><div class="display" style="font-size:22px; color:${roiColor};">${r.roi>=0?'+':''}${r.roi.toFixed(1)}%</div></div>
+  </div>
+  <p class="hint" style="margin-top:8px;">De ${r.totalMatches} partidos con fecha en ${liga}: ${r.skippedNoOdds} no tenían cuota de Over/Under 2.5 y ${r.skippedNoHistory} se saltaron por no tener suficiente historial previo de ambos equipos todavía.</p>
+  <hr class="divider">
+  <p style="font-family:'Manrope'; font-weight:700; font-size:13px;">Calibración del backtest (¿el modelo acertó lo que decía?)</p>
+  <table><thead><tr><th>Tramo</th><th>Apuestas</th><th>Media predicha</th><th>Acierto real</th></tr></thead><tbody>`;
+  r.buckets.forEach(b=>{
+    const avgPred = b.sumProb/b.n, actual = b.wins/b.n;
+    const diff = Math.abs(avgPred-actual);
+    html += `<tr><td>${(Math.floor(avgPred*10)*10)}-${(Math.floor(avgPred*10)*10+10)}%</td><td>${b.n}</td><td>${fmtPct(avgPred)}</td><td class="${diff<0.1?'pos':'neg'}">${fmtPct(actual)}</td></tr>`;
+  });
+  html += `</tbody></table>`;
+  box.innerHTML = html;
+}
 function computeRecentForm(logs, teamName){
   const n = teamName.toLowerCase();
   const asHome = logs.filter(m=>m.h.toLowerCase()===n).sort((a,b)=> b.d.localeCompare(a.d)).slice(0, RECENT_FORM_N);
@@ -880,6 +966,11 @@ const CSV_ALIASES = {
   as_:  ['as','awayshots','tirosvisitante'],
   hst:  ['hst','homeshotsontarget','tirosaporterialocal'],
   ast:  ['ast','awayshotsontarget','tirosaporteriavisitante'],
+  oddH: ['avgh','b365h','psh','maxh'],
+  oddD: ['avgd','b365d','psd','maxd'],
+  oddA: ['avga','b365a','psa','maxa'],
+  oddO25: ['avg>2.5','b365>2.5','p>2.5','max>2.5'],
+  oddU25: ['avg<2.5','b365<2.5','p<2.5','max<2.5'],
   date: ['date','fecha']
 };
 function findCol(headers, aliases){
@@ -916,6 +1007,11 @@ function parseCSVText(text){
   const iAs = findCol(headers, CSV_ALIASES.as_);
   const iHst = findCol(headers, CSV_ALIASES.hst);
   const iAst = findCol(headers, CSV_ALIASES.ast);
+  const iOddH = findCol(headers, CSV_ALIASES.oddH);
+  const iOddD = findCol(headers, CSV_ALIASES.oddD);
+  const iOddA = findCol(headers, CSV_ALIASES.oddA);
+  const iOddO25 = findCol(headers, CSV_ALIASES.oddO25);
+  const iOddU25 = findCol(headers, CSV_ALIASES.oddU25);
   const iDate = findCol(headers, CSV_ALIASES.date);
   if(iHome===-1 || iAway===-1 || iFthg===-1 || iFtag===-1){
     return {rows:null, error:'No se han encontrado las columnas de equipos/goles esperadas (HomeTeam, AwayTeam, FTHG, FTAG).'};
@@ -938,6 +1034,11 @@ function parseCSVText(text){
     const as = iAs!==-1 ? parseInt(cols[iAs]) : NaN;
     const hst = iHst!==-1 ? parseInt(cols[iHst]) : NaN;
     const ast = iAst!==-1 ? parseInt(cols[iAst]) : NaN;
+    const oddH = iOddH!==-1 ? parseFloat(cols[iOddH]) : NaN;
+    const oddD = iOddD!==-1 ? parseFloat(cols[iOddD]) : NaN;
+    const oddA = iOddA!==-1 ? parseFloat(cols[iOddA]) : NaN;
+    const oddO25 = iOddO25!==-1 ? parseFloat(cols[iOddO25]) : NaN;
+    const oddU25 = iOddU25!==-1 ? parseFloat(cols[iOddU25]) : NaN;
     const dateSort = iDate!==-1 ? parseDateToSortable(cols[iDate]||'') : null;
     rows.push({
       home,away,fthg,ftag,
@@ -946,10 +1047,12 @@ function parseCSVText(text){
       aCards: (isNaN(ay)&&isNaN(ar)) ? null : (isNaN(ay)?0:ay)+(isNaN(ar)?0:ar),
       hs: isNaN(hs)?null:hs, as: isNaN(as)?null:as,
       hst: isNaN(hst)?null:hst, ast: isNaN(ast)?null:ast,
+      oddH: isNaN(oddH)?null:oddH, oddD: isNaN(oddD)?null:oddD, oddA: isNaN(oddA)?null:oddA,
+      oddO25: isNaN(oddO25)?null:oddO25, oddU25: isNaN(oddU25)?null:oddU25,
       dateSort
     });
   }
-  return {rows, missingCorners: iHc===-1 || iAc===-1, missingCards: iHy===-1 && iHr===-1, missingShots: iHs===-1 && iHst===-1};
+  return {rows, missingCorners: iHc===-1 || iAc===-1, missingCards: iHy===-1 && iHr===-1, missingShots: iHs===-1 && iHst===-1, missingOdds: iOddH===-1 && iOddO25===-1};
 }
 function computeScorelineSums(rows){
   let n=0, sumHome=0, sumAway=0, c00=0, c10=0, c01=0, c11=0;
@@ -1051,7 +1154,8 @@ function importParsedIntoSeason(liga, temporada, weight, parsed){
   const scorelines = computeScorelineSums(parsed.rows);
   const shotStats = computeShotSums(parsed.rows);
   const matchLog = parsed.rows.filter(r=>r.dateSort).map(r=>({
-    d: r.dateSort, h: r.home, a: r.away, hg: r.fthg, ag: r.ftag, hc: r.hc, ac: r.ac
+    d: r.dateSort, h: r.home, a: r.away, hg: r.fthg, ag: r.ftag, hc: r.hc, ac: r.ac,
+    oH: r.oddH, oD: r.oddD, oA: r.oddA, oO25: r.oddO25, oU25: r.oddU25
   }));
   const key = liga.toLowerCase()+'||'+temporada.toLowerCase();
   const existingIdx = SEASON_IMPORTS.findIndex(i => (i.liga.toLowerCase()+'||'+i.temporada.toLowerCase())===key);
@@ -1146,7 +1250,8 @@ async function importCSV(){
     const shotStats = computeShotSums(parsed.rows);
     const matchLog = parsed.rows.filter(r=>r.dateSort).map(r=>({
       d: r.dateSort, h: r.home, a: r.away, hg: r.fthg, ag: r.ftag,
-      hc: r.hc, ac: r.ac
+      hc: r.hc, ac: r.ac,
+      oH: r.oddH, oD: r.oddD, oA: r.oddA, oO25: r.oddO25, oU25: r.oddU25
     }));
     if(matchLog.length) anyMatchLog = true;
     if(parsed.missingCorners) anyMissingCorners = true;
@@ -1336,6 +1441,15 @@ function refreshBetLigaSelect(){
   const allLigas = [...baseLigas, ...extra.sort(), 'Otra'];
   sel.innerHTML = allLigas.map(l=>`<option value="${l}">${l}</option>`).join('');
   if(allLigas.includes(current)) sel.value = current;
+  refreshBacktestLigaSelect();
+}
+function refreshBacktestLigaSelect(){
+  const sel = document.getElementById('bt_liga');
+  if(!sel) return;
+  const current = sel.value;
+  const ligas = Object.keys(buildCombinedMatchLogs()).sort();
+  sel.innerHTML = ligas.length ? ligas.map(l=>`<option value="${l}">${l}</option>`).join('') : '<option value="">— sin partidos con fecha importados —</option>';
+  if(ligas.includes(current)) sel.value = current;
 }
 function refreshMatchTeamSelects(){
   const liga = document.getElementById('m_liga').value;
