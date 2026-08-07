@@ -1370,7 +1370,12 @@ function loadMatchFromTeams(){
   const rawGla = (a.gfa + h.gah)/2;
   let glh = rawGlh, gla = rawGla;
   let shotNote = '';
-  if(lstats && typeof lstats.conversionRate==='number' && h.sotfh && a.sotaa){
+  if(!lstats || typeof lstats.conversionRate!=='number'){
+    shotNote = `<p class="hint">Sin ajuste por tiros: ${liga||'esta liga'} aún no tiene suficientes partidos con columnas de tiros a puerta (HST/AST) importados para calcular la tasa de conversión de la liga (se necesitan ≥20). ${lstats && lstats.convN ? `Ahora mismo tiene ${lstats.convN}.` : 'Ahora mismo tiene 0 — revisa que el CSV que subiste para esta liga incluya esas columnas.'}</p>`;
+  } else if(!h.sotfh || !a.sotaa){
+    const falta = [!h.sotfh?h.name:null, !a.sotaa?a.name:null].filter(Boolean).join(' y ');
+    shotNote = `<p class="hint">Sin ajuste por tiros: la liga sí tiene datos (${lstats.convN} partidos), pero la ficha de <strong>${falta}</strong> no tiene tiros a puerta calculados — puede que ese equipo en concreto solo tenga partidos de alguna temporada/CSV sin esas columnas.</p>`;
+  } else {
     const shotLh = (h.sotfh + a.sotaa)/2;
     const shotLa = (a.sotfa + h.sotah)/2;
     const impliedLh = shotLh * lstats.conversionRate;
@@ -1378,8 +1383,6 @@ function loadMatchFromTeams(){
     glh = SHOT_BLEND_WEIGHT*impliedLh + (1-SHOT_BLEND_WEIGHT)*rawGlh;
     gla = SHOT_BLEND_WEIGHT*impliedLa + (1-SHOT_BLEND_WEIGHT)*rawGla;
     shotNote = `<p class="hint">Ajuste por tiros a puerta (${(SHOT_BLEND_WEIGHT*100).toFixed(0)}% de peso, conversión real de ${liga}: ${lstats.conversionRate.toFixed(3)} goles/tiro a puerta sobre ${lstats.convN} partidos): goles local ${rawGlh.toFixed(2)}→${glh.toFixed(2)}, goles visitante ${rawGla.toFixed(2)}→${gla.toFixed(2)}.</p>`;
-  } else {
-    shotNote = `<p class="hint">Sin datos de tiros a puerta suficientes para uno de los dos equipos o para ${liga||'esta liga'} — usando solo goles reales, sin ajuste por tiros.</p>`;
   }
   document.getElementById('g_lh').value = glh.toFixed(2);
   document.getElementById('g_la').value = gla.toFixed(2);
