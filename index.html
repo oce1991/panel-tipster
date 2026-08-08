@@ -2204,6 +2204,12 @@ function renderJornada(){
     const odds = MATCH_ODDS[fx.id];
     const tc = isPicked ? 'color:#0A2B20;' : '';
 
+    const sampleLevel = n => n>=25 ? 'buena' : (n>=10 ? 'media' : 'baja');
+    const lowSampleTeams = [home.mh<10?`${home.name} (${home.mh} en casa)`:null, away.ma<10?`${away.name} (${away.ma} fuera)`:null].filter(Boolean);
+    const confBadge = lowSampleTeams.length
+      ? `<p class="hint" style="${tc} font-weight:700;">⚠️ Muestra baja: ${lowSampleTeams.join(' y ')} — la ficha se apoya más en la media de liga que en datos propios, trata este partido con más cautela.</p>`
+      : '';
+
     function marketBlock(label, market, prob, pPush, defaultOdd){
       const odd = odds[market];
       const lineOpts = LINE_OPTIONS[market];
@@ -2213,6 +2219,9 @@ function renderJornada(){
         return `<div style="margin-top:8px;"><p style="margin:0; font-family:'Manrope'; font-weight:600; font-size:12.5px; ${tc}">${label}</p><p class="hint" style="${tc}">Sin datos suficientes en este equipo (¿tiene tarjetas cargadas?)</p></div>`;
       }
       const pushTxt = Number.isInteger(currentLine) ? ` · Push ${fmtPct(pPush||0)}` : '';
+      const calibNote = (market==='corners' && (prob<0.4 || prob>0.6))
+        ? `<p class="hint" style="${tc} color:#DC2626;">⚠️ Fuera del rango 40-60% donde el backtest de córners está bien calibrado (visto en 01 Panel) — trátalo con más cautela, hay menos muestra que valide esta zona.</p>`
+        : '';
       return `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed var(--line);">
         <p style="margin:0; font-family:'Manrope'; font-weight:600; font-size:12.5px; ${tc}">${label}</p>
         <div style="display:flex; gap:8px; align-items:flex-end; max-width:280px; margin-top:4px;">
@@ -2221,6 +2230,7 @@ function renderJornada(){
         </div>
         <p class="hint" id="probtext-${fx.id}-${market}" style="${tc}">P(Over ${currentLine}) ${fmtPct(prob)}${pushTxt}</p>
         <div id="evbox-${fx.id}-${market}">${renderEvBox(prob, odd, minEV, pPush)}</div>
+        ${calibNote}
       </div>`;
     }
 
@@ -2234,6 +2244,7 @@ function renderJornada(){
     div.onclick = (e) => { if(e.target.tagName!=='INPUT' && e.target.tagName!=='SELECT') toggleMatchPick(fx.id); };
     div.innerHTML = `
       <p style="font-family:'Manrope'; font-weight:600; font-size:15px; ${tc}">${fx.local} vs ${fx.visitante} ${crossLiga ? `<span class="hint" style="font-family:Inter; ${tc}">(${matchLiga})</span>` : ''} ${fx.fecha ? `<span class="hint" style="font-family:Inter; ${tc}">— ${fx.fecha}</span>`:''} ${isPicked ? '<span style="font-family:Manrope; font-size:11px;">★ MARCADO</span>' : ''}</p>
+      ${confBadge}
       <p class="hint" style="${tc}">
         <strong>${home.name}</strong> (casa): CF ${home.cfh.toFixed(1)}/CA ${home.cah.toFixed(1)} · GF ${home.gfh.toFixed(1)}/GA ${home.gah.toFixed(1)} · TC ${(home.crfh||0).toFixed(1)}/TA ${(home.crah||0).toFixed(1)}<br>
         <strong>${away.name}</strong> (fuera): CF ${away.cfa.toFixed(1)}/CA ${away.caa.toFixed(1)} · GF ${away.gfa.toFixed(1)}/GA ${away.gaa.toFixed(1)} · TC ${(away.crfa||0).toFixed(1)}/TA ${(away.craa||0).toFixed(1)}
