@@ -72,6 +72,11 @@
     padding:16px; margin-bottom:14px; box-shadow:0 1px 4px rgba(0,0,0,0.05);
   }
   .card h2{font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:8px;}
+  .card.collapsible > h2{cursor:pointer; user-select:none; margin-bottom:12px;}
+  .card.collapsible > h2 .chevron{margin-left:auto; font-size:12px; color:#8A96A3; transition:transform 0.2s;}
+  .card.collapsible.collapsed > h2{margin-bottom:0;}
+  .card.collapsible.collapsed > h2 .chevron{transform:rotate(-90deg);}
+  .card.collapsible.collapsed > *:not(h2){display:none;}
   .card h2 .tag{background:#FFEDE5; color:var(--pitch); font-family:'JetBrains Mono'; font-size:10px; padding:2px 6px; border-radius:3px; letter-spacing:0.05em;}
 
   .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
@@ -178,35 +183,29 @@ create policy "public update" on tipster_data for update using (true);</pre>
   <!-- DASHBOARD -->
   <div class="view active" id="view-dashboard">
     <div class="statgrid" id="dashStats"></div>
-    <div class="card">
-      <h2><span class="tag">Resumen</span> Tus picks activos (todas las ligas)</h2>
-      <p class="hint">Todos los partidos que tienes marcados en verde en Jornada, de todas las ligas, en un solo sitio.</p>
-      <div id="crossLeaguePicks"></div>
-      <div class="empty" id="crossLeagueEmpty" style="display:none;">No tienes ningún partido marcado todavía. Márcalos en 04 Jornada.</div>
-    </div>
-    <div class="card">
-      <h2><span class="tag">Evolución</span> Banca acumulada</h2>
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Evolución</span> Banca acumulada<span class="chevron">▾</span></h2>
       <canvas id="bankChart" height="140"></canvas>
     </div>
-    <div class="card">
-      <h2><span class="tag">Evolución</span> CLV por apuesta</h2>
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Evolución</span> CLV por apuesta<span class="chevron">▾</span></h2>
       <p class="hint">Cada punto es una apuesta con cuota de cierre registrada. Por encima de 0% significa que conseguiste mejor cuota que el cierre del mercado — la señal más fiable de que tienes ventaja real, más que el resultado de un partido suelto.</p>
       <canvas id="clvChart" height="140"></canvas>
       <div class="empty" id="clvEmpty" style="display:none;">Aún no tienes apuestas con cuota de cierre registrada.</div>
     </div>
-    <div class="card">
-      <h2><span class="tag">Detalle</span> Rendimiento por mercado</h2>
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Detalle</span> Rendimiento por mercado<span class="chevron">▾</span></h2>
       <table id="marketTable"><thead><tr><th>Mercado</th><th>Apuestas</th><th>Aciertos</th><th>ROI</th><th>CLV medio</th></tr></thead><tbody></tbody></table>
     </div>
-    <div class="card">
-      <h2><span class="tag">Calibración</span> ¿Acierta el modelo lo que dice?</h2>
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Calibración</span> ¿Acierta el modelo lo que dice?<span class="chevron">▾</span></h2>
       <p class="hint">Compara la probabilidad que calculó el modelo con lo que realmente pasó, agrupado en tramos de 10%. Si el modelo dice "60-70%" y de verdad acierta ~6-7 de cada 10 veces en ese tramo, está bien calibrado. Necesita bastantes apuestas resueltas para ser fiable — con pocas, ignóralo.</p>
       <canvas id="calibrationChart" height="160"></canvas>
       <table id="calibrationTable" style="margin-top:10px;"><thead><tr><th>Tramo predicho</th><th>Apuestas</th><th>Media predicha</th><th>Acierto real</th></tr></thead><tbody></tbody></table>
       <div class="empty" id="calibrationEmpty" style="display:none;">Aún no hay suficientes apuestas resueltas con probabilidad de modelo guardada.</div>
     </div>
-    <div class="card">
-      <h2><span class="tag">Backtest</span> Validación con cuotas históricas reales</h2>
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Backtest</span> Validación con cuotas históricas reales<span class="chevron">▾</span></h2>
       <p class="hint"><strong>Aviso importante:</strong> football-data.co.uk solo tiene cuotas históricas de <strong>goles</strong> (1X2 y Over/Under 2.5) — no de córners ni tarjetas, esos mercados nunca se han publicado en abierto. Así que esto valida solo el modelo de goles.</p>
       <p class="hint">Para que sea honesto, cada partido se predice usando <strong>solo los datos anteriores a esa fecha</strong> (nunca datos del futuro) — es decir, es una simulación real de "qué habría dicho el modelo en su momento", no una comparación con ventaja injusta. Usa un Poisson simple (sin Dixon-Coles, forma reciente ni shrinkage, para no sobrecomplicar el cálculo repetido partido a partido) y solo empieza a apostar cuando cada equipo ya tiene 6 partidos previos en su lado — con menos, no hay datos fiables.</p>
       <div class="grid2">
@@ -215,8 +214,8 @@ create policy "public update" on tipster_data for update using (true);</pre>
       </div>
       <div class="result-box" id="backtestResult" style="display:none;"></div>
     </div>
-    <div class="card">
-      <h2><span class="tag">Backtest</span> Calibración del modelo de córners</h2>
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Backtest</span> Calibración del modelo de córners<span class="chevron">▾</span></h2>
       <p class="hint">Aquí no hay cuotas históricas (nunca se han publicado en abierto), así que no calculamos ROI — pero sí podemos comprobar si tu modelo de córners está bien calibrado: cuando dice "60% de Over 9.5", ¿pasa el 60% de las veces de verdad? Igual que el otro backtest, cada partido se predice solo con datos anteriores a esa fecha.</p>
       <p class="hint">Incluye el ajuste por contexto de gol (igual que en Jornada/Partido), pero no el de tiros — ese dato no se guarda todavía en el histórico partido a partido, tendrías que reimportar de nuevo para activarlo aquí si te interesa.</p>
       <div class="grid3">
@@ -230,8 +229,8 @@ create policy "public update" on tipster_data for update using (true);</pre>
 
   <!-- TEAMS -->
   <div class="view" id="view-teams">
-    <div class="card">
-      <h2><span class="tag">1 clic</span> Actualización automática</h2>
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">1 clic</span> Actualización automática<span class="chevron">▾</span></h2>
       <p class="hint">Descarga y sube automáticamente el CSV más reciente de football-data.co.uk para las 10 ligas que tienen código en ese sitio (Primera, Segunda, Premier League, Championship, Ligue 1, Serie A, Eredivisie, Süper Lig, Bundesliga, Bundesliga 2). No incluye 1ª RFEF ni Brasil, que vienen de otras fuentes sin este atajo.</p>
       <p class="hint"><strong>Aviso honesto:</strong> esto depende de un servicio externo (proxy) que salta la restricción de seguridad del navegador — puede fallar alguna vez. Si una liga falla, súbela a mano como siempre; el resto se actualizará igualmente.</p>
       <div class="grid2">
@@ -247,8 +246,8 @@ create policy "public update" on tipster_data for update using (true);</pre>
       </div>
       <div class="result-box" id="autoUpdateResult" style="display:none;"></div>
     </div>
-    <div class="card">
-      <h2><span class="tag">Auto</span> Importar temporada (CSV)</h2>
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Auto</span> Importar temporada (CSV)<span class="chevron">▾</span></h2>
       <p class="hint">Sube el CSV de una temporada y calculamos las medias de córners y goles por equipo, casa/fuera, automáticamente. Se fusiona con lo que ya tengas guardado (media ponderada por partidos).</p>
       <p class="hint"><strong>Dónde conseguirlo:</strong> Primera/Segunda → football-data.co.uk (columnas HomeTeam, AwayTeam, FTHG, FTAG, HC, AC). 1ª RFEF Grupo 1 → footystats.org/es/spain/primera-division-rfef-group-1 (botón "Descargar datos en CSV"). Cualquier CSV con esas columnas (en inglés o español) sirve.</p>
       <p class="hint"><strong>Carga múltiple:</strong> puedes seleccionar varios archivos de golpe (misma liga). Renómbralos antes para que la app detecte la temporada de cada uno automáticamente — por ejemplo <code>SP1_2223.csv</code>, <code>SP1_2324.csv</code>, <code>SP1_2425.csv</code>, <code>SP1_2526.csv</code> (cualquier "25/26", "2526" o "25-26" en el nombre vale). El peso que pongas se aplica igual a todos los archivos de esta tanda — si quieres pesos distintos por temporada, súbelos en tandas separadas.</p>
@@ -268,8 +267,8 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <table id="importsTable"><thead><tr><th>Liga</th><th>Temporada</th><th>Peso</th><th>Partidos</th><th></th></tr></thead><tbody></tbody></table>
       <div class="empty" id="importsEmpty" style="display:none;">Todavía no has importado ninguna temporada.</div>
     </div>
-    <div class="card">
-      <h2><span class="tag">Masivo</span> Importar fichas de equipo (Excel/CSV)</h2>
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Masivo</span> Importar fichas de equipo (Excel/CSV)<span class="chevron">▾</span></h2>
       <p class="hint">Para cargar de golpe las medias de córners y goles de todos los equipos de una liga (por ejemplo, transcritas de otra web). Columnas esperadas en la primera fila: <strong>Equipo, CF Casa, CA Casa, CF Fuera, CA Fuera, GF Casa, GA Casa, GF Fuera, GA Fuera</strong> (y opcionalmente <strong>TC Casa, TA Casa, TC Fuera, TA Fuera</strong> para tarjetas) — si el archivo trae una columna "Liga" por fila, se usa esa; si no, se aplica la liga que elijas abajo a todas las filas. Si un equipo ya existe con ese nombre en esa liga, se sustituye su ficha entera — no se promedia con lo anterior.</p>
       <div class="grid2">
         <div><label>Liga (si el archivo no trae columna Liga)</label>
@@ -280,8 +279,8 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <button class="btn amber" onclick="importBulkTeams()">Importar fichas</button>
       <div class="result-box" id="bulkImportResult" style="display:none;"></div>
     </div>
-    <div class="card">
-      <h2><span class="tag">Nuevo</span> Ficha de equipo (manual)</h2>
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Nuevo</span> Ficha de equipo (manual)<span class="chevron">▾</span></h2>
       <p class="hint">Introduce medias por partido (no acumulados). Estas fichas alimentan directamente las calculadoras de Corners y Goles.</p>
       <div class="grid2">
         <div><label>Nombre del equipo</label><input id="t_name" placeholder="Ej. Racing de Ferrol"></div>
@@ -323,8 +322,8 @@ create policy "public update" on tipster_data for update using (true);</pre>
       </div>
       <button class="btn amber" onclick="saveTeam()">Guardar ficha</button>
     </div>
-    <div class="card">
-      <h2><span class="tag">Base</span> Equipos guardados</h2>
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Base</span> Equipos guardados<span class="chevron">▾</span></h2>
       <div class="grid2">
         <div><label>Filtrar por liga</label><select id="teamsFilter" onchange="renderTeams()"><option value="">Todas las ligas</option></select></div>
         <div></div>
@@ -333,8 +332,8 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <div class="empty" id="teamsEmpty" style="display:none;">Aún no has añadido ningún equipo. Empieza por el que juegue este fin de semana.</div>
     </div>
 
-    <div class="card">
-      <h2><span class="tag">Ascensos/Descensos</span> Promocionar equipo entre ligas</h2>
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Ascensos/Descensos</span> Promocionar equipo entre ligas<span class="chevron">▾</span></h2>
       <p class="hint">Para un recién ascendido o descendido: coge sus datos de su liga anterior y mézclalos con la media de la liga nueva (regresión a la media), porque normalmente no rinde igual en la nueva categoría.</p>
       <div class="grid3">
         <div><label>Equipo de origen</label><select id="promo_source" onchange="document.getElementById('promo_name').value = this.value.split('||')[1] || '';"></select></div>
@@ -568,6 +567,18 @@ function poissonPush(line,lambda){
   return poissonPMF(line,lambda);
 }
 function fmtPct(x){return (x*100).toFixed(1)+'%';}
+function toggleCard(h2){
+  const card = h2.parentElement;
+  card.classList.toggle('collapsed');
+  if(!card.classList.contains('collapsed')){
+    // si la tarjeta tiene un grafico Chart.js, hay que redimensionarlo al desplegar (estaba oculto cuando se creo)
+    setTimeout(()=>{
+      [bankChartInstance, clvChartInstance, calibrationChartInstance].forEach(ch=>{
+        if(ch && card.contains(ch.canvas)) ch.resize();
+      });
+    }, 50);
+  }
+}
 function evFromProb(prob,odd){return (prob*odd - 1);}
 function evFromProbPush(pOver,pPush,odd){
   // si hay probabilidad de push, esa parte no se pierde ni se gana (se devuelve la apuesta)
@@ -2621,7 +2632,6 @@ function calcKelly(){
 // ---------- dashboard ----------
 let bankChartInstance = null;
 function renderDashboard(){
-  renderCrossLeaguePicks();
   renderClvChart();
   const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
   const totalStaked = settled.reduce((s,b)=>s+b.stake,0);
@@ -2678,31 +2688,7 @@ function renderDashboard(){
   }
   renderCalibration();
 }
-function renderCrossLeaguePicks(){
-  const container = document.getElementById('crossLeaguePicks');
-  const emptyEl = document.getElementById('crossLeagueEmpty');
-  if(!container) return;
-  const picked = FIXTURES.filter(f=>PICKED_MATCHES.has(f.id));
-  emptyEl.style.display = picked.length ? 'none' : 'block';
-  container.innerHTML = '';
-  picked.forEach(fx=>{
-    const home = findTeamInLiga(fx.local, fx.liga);
-    const away = findTeamInLiga(fx.visitante, fx.liga);
-    const div = document.createElement('div');
-    div.className = 'result-box';
-    div.style.marginBottom = '8px';
-    if(!home || !away){
-      div.innerHTML = `<p style="font-family:'Manrope'; font-weight:600; font-size:13px;">${fx.local} vs ${fx.visitante} <span class="hint">(${fx.liga})</span></p>`;
-      container.appendChild(div);
-      return;
-    }
-    const corners = predictCorners(home, away, fx.liga, 9.5);
-    const goals = predictGoals(home, away, fx.liga, 2.5);
-    div.innerHTML = `<p style="font-family:'Manrope'; font-weight:600; font-size:13px;">${fx.local} vs ${fx.visitante} <span class="hint">(${fx.liga}${fx.fecha ? ' · '+fx.fecha : ''})</span></p>
-      <p class="hint">Córners esp. ${corners.total.toFixed(2)} · 1X2 ${fmtPct(goals.p1)}/${fmtPct(goals.pX)}/${fmtPct(goals.p2)} · Over 2.5 ${fmtPct(goals.pOver)}</p>`;
-    container.appendChild(div);
-  });
-}
+function renderCrossLeaguePicks(){ /* eliminado del Panel a peticion del usuario */ }
 let clvChartInstance = null;
 function renderClvChart(){
   const canvas = document.getElementById('clvChart');
