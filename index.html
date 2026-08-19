@@ -189,7 +189,6 @@ create policy "public update" on tipster_data for update using (true);</pre>
 <nav class="tabs" id="tabs">
   <button data-view="dashboard" class="active"><span class="icon">📊</span>Panel</button>
   <button data-view="teams"><span class="icon">⚽</span>Equipos</button>
-  <button data-view="corners"><span class="icon">🎯</span>Partido</button>
   <button data-view="jornada"><span class="icon">📅</span>Jornada</button>
   <button data-view="bets"><span class="icon">💰</span>Apuestas</button>
   <button data-view="bankroll"><span class="icon">🏦</span>Banca</button>
@@ -372,6 +371,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
 
   <!-- MATCH ANALYSIS (CORNERS + GOALS UNIFIED) -->
   <div class="view" id="view-corners">
+    <button class="btn" onclick="switchToView('jornada')" style="margin-bottom:14px;">← Volver a Jornada</button>
     <div class="card">
       <h2><span class="tag">Partido</span> Selecciona equipos</h2>
       <div class="grid3">
@@ -471,7 +471,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
 
     <div class="card">
       <h2><span class="tag">Próxima</span> Jornada a analizar</h2>
-      <p class="hint">Elige una liga concreta, o "Todas las ligas" para ver de golpe todos los partidos de ese número de jornada en cualquier liga que tengas cargada — útil al principio de temporada, cuando casi todas van por la jornada 1-2 a la vez.</p>
+      <p class="hint">Elige una liga concreta, o "Todas las ligas" para ver de golpe todos los partidos de ese número de jornada en cualquier liga que tengas cargada. Toca un partido para marcarlo/desmarcarlo como pick (se pone en verde), o "Ver →" para entrar en su análisis completo (córners, goles, tarjetas, hándicap, historial directo...).</p>
       <div class="grid2">
         <div><label>Liga</label><select id="jr_liga" onchange="refreshJornadaSelect()"></select></div>
         <div><label>Jornada</label><select id="jr_jornada" onchange="renderJornada()"></select></div>
@@ -1060,13 +1060,18 @@ function applyShrinkage(){
 }
 
 // ---------- tabs ----------
+function switchToView(viewName){
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+  const navBtn = document.querySelector(`nav.tabs button[data-view="${viewName}"]`);
+  if(navBtn) navBtn.classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+viewName).classList.add('active');
+  if(viewName==='dashboard') renderDashboard();
+  window.scrollTo(0,0);
+}
 document.getElementById('tabs').addEventListener('click', e=>{
   const btn = e.target.closest('button'); if(!btn) return;
-  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  document.getElementById('view-'+btn.dataset.view).classList.add('active');
-  if(btn.dataset.view==='dashboard') renderDashboard();
+  switchToView(btn.dataset.view);
 });
 
 // ---------- CSV season import ----------
@@ -2192,21 +2197,6 @@ function refreshJornadaOptions(){
   if(jornadas.includes(current)) jornadaSel.value = current;
   renderJornada();
 }
-function getCurrentBankroll(){
-  const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
-  const totalPL = settled.reduce((s,b)=>s+betPL(b),0);
-  return BANKCFG.initial + totalPL;
-}
-function computeKellyStake(prob, odd, pPush){
-  pPush = pPush || 0;
-  const b = odd-1;
-  const pLoss = Math.max(0, 1-prob-pPush);
-  const denom = b*(prob+pLoss);
-  const kellyFull = denom>0 ? (prob*b - pLoss)/denom : 0;
-  const kellyUsed = Math.max(0, kellyFull * (BANKCFG.fraction||0.25));
-  const stake = kellyUsed * getCurrentBankroll();
-  return { kellyFull, stake };
-}
 function renderJornada(){
   const liga = document.getElementById('jr_liga').value;
   const jornada = document.getElementById('jr_jornada').value;
@@ -2216,160 +2206,45 @@ function renderJornada(){
   const matches = FIXTURES.filter(f=> f.jornada===jornada && (crossLiga || f.liga===liga));
   emptyEl.style.display = matches.length ? 'none' : 'block';
   container.innerHTML = '';
-  const minEV = (BANKCFG.minEV!==undefined ? BANKCFG.minEV : 3) / 100;
   matches.forEach(fx=>{
     const matchLiga = fx.liga;
     const home = findTeamInLiga(fx.local, matchLiga);
     const away = findTeamInLiga(fx.visitante, matchLiga);
+    const isPicked = PICKED_MATCHES.has(fx.id);
+    const sinDatos = !home || !away;
+    const tc = isPicked ? 'color:#0A2B20;' : '';
     const div = document.createElement('div');
     div.className = 'result-box';
-    div.style.marginBottom = '10px';
-    if(!home || !away){
-      const faltan = [!home?fx.local:null, !away?fx.visitante:null].filter(Boolean).join(' y ');
-      div.innerHTML = `<p style="font-family:'Space Grotesk'; font-weight:600;">${fx.local} vs ${fx.visitante} ${crossLiga ? `<span class="hint">(${matchLiga})</span>` : ''}</p>
-        <p class="hint">${fx.fecha ? fx.fecha+' · ' : ''}No encuentro "${faltan}" en tu base de equipos de ${matchLiga}. Añádelo en 02 Equipos (o promociónalo si es un ascendido) para que aparezca aquí el análisis automático.</p>`;
-      container.appendChild(div);
-      return;
-    }
-    if(!MATCH_LINES[fx.id]) MATCH_LINES[fx.id] = {corners:9.5, goals:2.5, cards:4.5};
-    const lines = MATCH_LINES[fx.id];
-    const corners = predictCorners(home, away, matchLiga, lines.corners);
-    const goals = predictGoals(home, away, matchLiga, lines.goals);
-    const cards = predictCards(home, away, lines.cards);
-    const isPicked = PICKED_MATCHES.has(fx.id);
-    if(!MATCH_ODDS[fx.id]) MATCH_ODDS[fx.id] = {};
-    const odds = MATCH_ODDS[fx.id];
-    const tc = isPicked ? 'color:#0A2B20;' : '';
-
-    const sampleLevel = n => n>=25 ? 'buena' : (n>=10 ? 'media' : 'baja');
-    const lowSampleTeams = [home.mh<10?`${home.name} (${home.mh} en casa)`:null, away.ma<10?`${away.name} (${away.ma} fuera)`:null].filter(Boolean);
-    const confBadge = lowSampleTeams.length
-      ? `<p class="hint" style="${tc} font-weight:700;">⚠️ Muestra baja: ${lowSampleTeams.join(' y ')} — la ficha se apoya más en la media de liga que en datos propios, trata este partido con más cautela.</p>`
-      : '';
-
-    function marketBlock(label, market, prob, pPush, defaultOdd){
-      const odd = odds[market];
-      const lineOpts = LINE_OPTIONS[market];
-      const currentLine = lines[market];
-      const selectHtml = `<select onchange="updateMatchLine('${fx.id}','${market}', this.value)" style="margin-bottom:0; padding:6px;">${lineOpts.map(l=>`<option value="${l}" ${l===currentLine?'selected':''}>${l}</option>`).join('')}</select>`;
-      if(prob===null || prob===undefined){
-        return `<div style="margin-top:8px;"><p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:12.5px; ${tc}">${label}</p><p class="hint" style="${tc}">Sin datos suficientes en este equipo (¿tiene tarjetas cargadas?)</p></div>`;
-      }
-      const pushTxt = Number.isInteger(currentLine) ? ` · Push ${fmtPct(pPush||0)}` : '';
-      const calibNote = (market==='corners' && (prob<0.4 || prob>0.6))
-        ? `<p class="hint" style="${tc} color:#FB7185;">⚠️ Fuera del rango 40-60% donde el backtest de córners está bien calibrado (visto en 01 Panel) — trátalo con más cautela, hay menos muestra que valide esta zona.</p>`
-        : '';
-      return `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed var(--line);">
-        <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:12.5px; ${tc}">${label}</p>
-        <div style="display:flex; gap:8px; align-items:flex-end; max-width:280px; margin-top:4px;">
-          <div><label style="${tc}">Línea</label>${selectHtml}</div>
-          <div style="flex:1;"><label style="${tc}">Cuota Over</label><input type="number" step="0.01" placeholder="${defaultOdd}" value="${odd||''}" oninput="updateMatchOdd('${fx.id}','${market}', this.value)" style="margin-bottom:0;"></div>
-        </div>
-        <p class="hint" id="probtext-${fx.id}-${market}" style="${tc}">P(Over ${currentLine}) ${fmtPct(prob)}${pushTxt}</p>
-        <div id="evbox-${fx.id}-${market}">${renderEvBox(prob, odd, minEV, pPush)}</div>
-        ${calibNote}
-      </div>`;
-    }
-
-    div.style.cursor = 'pointer';
-    div.title = 'Haz clic en la tarjeta (fuera de los campos de línea/cuota) para marcar/desmarcar este partido como pick';
+    div.style.cssText = 'margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer;';
+    div.title = 'Toca la fila para marcar/desmarcar como pick';
     if(isPicked){
       div.style.background = '#39FF14';
       div.style.borderColor = '#2ecc0f';
-      div.style.color = '#0A2B20';
     }
-    div.onclick = (e) => { if(e.target.tagName!=='INPUT' && e.target.tagName!=='SELECT') toggleMatchPick(fx.id); };
+    div.onclick = (e) => { if(!e.target.closest('.detail-btn')) toggleMatchPick(fx.id); };
     div.innerHTML = `
-      <div style="text-align:center; margin-bottom:2px;">
-        <span style="font-family:'Space Grotesk'; font-weight:700; font-size:16px; ${tc}">${home.name}</span>
-        <span style="font-family:'Space Grotesk'; font-size:11px; opacity:0.55; margin:0 8px; ${tc}">VS</span>
-        <span style="font-family:'Space Grotesk'; font-weight:700; font-size:16px; ${tc}">${away.name}</span>
+      <div style="flex:1; min-width:0;">
+        <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; ${tc} overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${fx.local} vs ${fx.visitante}</p>
+        <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${fx.fecha||''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado' : ''}</p>
       </div>
-      <p class="hint" style="text-align:center; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${fx.fecha||''} ${isPicked ? '<span style="font-family:\'Space Grotesk\'; font-weight:700;">★ MARCADO</span>' : ''}</p>
-      ${confBadge}
-      <div style="display:flex; gap:8px; margin:12px 0;">
-        <div style="flex:1; background:rgba(255,255,255,0.08); border-radius:12px; padding:10px 6px; text-align:center;">
-          <div style="font-family:'Space Grotesk'; font-weight:800; font-size:19px; ${tc}">${corners.total.toFixed(1)}</div>
-          <div class="hint" style="${tc} margin-top:0;">Córners esp.</div>
-        </div>
-        <div style="flex:1; background:rgba(255,255,255,0.08); border-radius:12px; padding:10px 6px; text-align:center;">
-          <div style="font-family:'Space Grotesk'; font-weight:800; font-size:19px; ${tc}">${(goals.lh+goals.la).toFixed(1)}</div>
-          <div class="hint" style="${tc} margin-top:0;">Goles esp.</div>
-        </div>
-        <div style="flex:1; background:rgba(255,255,255,0.08); border-radius:12px; padding:10px 6px; text-align:center;">
-          <div style="font-family:'Space Grotesk'; font-weight:800; font-size:19px; ${tc}">${cards.total.toFixed(1)}</div>
-          <div class="hint" style="${tc} margin-top:0;">Tarjetas esp.</div>
-        </div>
-      </div>
-      <p class="hint" style="${tc}">1X2: ${fmtPct(goals.p1)} / ${fmtPct(goals.pX)} / ${fmtPct(goals.p2)}</p>
-      <p class="hint" style="${tc}">
-        <strong>${home.name}</strong> (casa): CF ${home.cfh.toFixed(1)}/CA ${home.cah.toFixed(1)} · GF ${home.gfh.toFixed(1)}/GA ${home.gah.toFixed(1)} · TC ${(home.crfh||0).toFixed(1)}/TA ${(home.crah||0).toFixed(1)}<br>
-        <strong>${away.name}</strong> (fuera): CF ${away.cfa.toFixed(1)}/CA ${away.caa.toFixed(1)} · GF ${away.gfa.toFixed(1)}/GA ${away.gaa.toFixed(1)} · TC ${(away.crfa||0).toFixed(1)}/TA ${(away.craa||0).toFixed(1)}
-      </p>
-      ${marketBlock('Córners', 'corners', corners.pOver, corners.pPush, '1.90')}
-      ${marketBlock('Goles', 'goals', goals.pOver, goals.pPush, '1.85')}
-      ${marketBlock('Tarjetas', 'cards', cards.pOver, cards.pPush, '1.90')}
+      ${!sinDatos ? `<button class="btn detail-btn" onclick="event.stopPropagation(); openMatchDetail('${fx.id}')" style="flex-shrink:0; padding:8px 12px; font-size:11px; white-space:nowrap;">Ver →</button>` : ''}
     `;
     container.appendChild(div);
   });
 }
-let MATCH_ODDS = {}; // {fixtureId: {corners, goals, cards}} - solo en sesion, para ver el EV en vivo antes de decidir
-let MATCH_LINES = {}; // {fixtureId: {corners:9.5, goals:2.5, cards:4.5}} - linea seleccionada por partido y mercado
-const LINE_OPTIONS = {
-  corners: [7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11],
-  goals: [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5],
-  cards: [2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5],
-};
-function renderEvBox(prob, odd, minEV, pPush){
-  if(!odd || prob===null || prob===undefined) return '';
-  pPush = pPush || 0;
-  const ev = pPush>0 ? evFromProbPush(prob, pPush, odd) : evFromProb(prob, odd);
-  const stakeInfo = computeKellyStake(prob, odd, pPush);
-  const isValue = ev>=minEV;
-  const pushNote = pPush>=0.01 ? `<p class="hint" style="margin:2px 0 0;">Línea entera: ${fmtPct(pPush)} de probabilidad de empatar justo en esa cifra (push, se devuelve la apuesta) — ya está descontado del EV.</p>` : '';
-  return `<div style="display:flex; align-items:center; gap:8px; margin-top:6px; flex-wrap:wrap;">
-      <span class="oddbtn ${isValue?'value':''}">${odd}</span>
-      <span style="font-family:'Space Grotesk'; font-weight:700; font-size:12px; color:${isValue?'#4ADE80':'#FB7185'};">EV ${ev>=0?'+':''}${(ev*100).toFixed(1)}% ${isValue?'✅':'⚠️'}</span>
-    </div>
-    <p style="margin:5px 0 0; font-family:'Space Grotesk'; font-weight:700; font-size:13px;">Stake sugerido (Kelly): ${stakeInfo.stake>0 ? stakeInfo.stake.toFixed(2)+'€' : '0€ — no apostar'}</p>
-    ${pushNote}`;
-}
-function getMarketProb(fx, market, line){
+function openMatchDetail(fxId){
+  const fx = FIXTURES.find(f=>f.id===fxId);
+  if(!fx) return;
   const home = findTeamInLiga(fx.local, fx.liga);
   const away = findTeamInLiga(fx.visitante, fx.liga);
-  if(!home || !away) return {prob:null, push:0};
-  if(line===undefined) line = (MATCH_LINES[fx.id]||{})[market];
-  if(market==='corners'){ const r = predictCorners(home, away, fx.liga, line); return {prob:r.pOver, push:r.pPush||0}; }
-  if(market==='goals'){ const r = predictGoals(home, away, fx.liga, line); return {prob:r.pOver, push:r.pPush||0}; }
-  if(market==='cards'){ const r = predictCards(home, away, line); return {prob:r.pOver, push:r.pPush||0}; }
-  return {prob:null, push:0};
-}
-function updateMatchOdd(fxId, market, val){
-  const n = parseFloat(val);
-  if(!MATCH_ODDS[fxId]) MATCH_ODDS[fxId] = {};
-  if(n) MATCH_ODDS[fxId][market] = n; else delete MATCH_ODDS[fxId][market];
-  // actualizamos solo el recuadro de EV/stake, sin tocar el campo de cuota (para no perder el punto decimal mientras escribes)
-  const box = document.getElementById(`evbox-${fxId}-${market}`);
-  if(!box) return;
-  const fx = FIXTURES.find(f=>f.id===fxId);
-  if(!fx) return;
-  const { prob, push } = getMarketProb(fx, market);
-  const minEV = (BANKCFG.minEV!==undefined ? BANKCFG.minEV : 3) / 100;
-  box.innerHTML = renderEvBox(prob, n||null, minEV, push);
-}
-function updateMatchLine(fxId, market, val){
-  const line = parseFloat(val);
-  if(!MATCH_LINES[fxId]) MATCH_LINES[fxId] = {corners:9.5, goals:2.5, cards:4.5};
-  MATCH_LINES[fxId][market] = line;
-  const fx = FIXTURES.find(f=>f.id===fxId);
-  if(!fx) return;
-  const { prob, push } = getMarketProb(fx, market, line);
-  const odd = (MATCH_ODDS[fxId]||{})[market];
-  const minEV = (BANKCFG.minEV!==undefined ? BANKCFG.minEV : 3) / 100;
-  const probEl = document.getElementById(`probtext-${fxId}-${market}`);
-  if(probEl) probEl.textContent = `P(Over ${line}) ${fmtPct(prob)}${Number.isInteger(line) ? ` · Push ${fmtPct(push)}` : ''}`;
-  const box = document.getElementById(`evbox-${fxId}-${market}`);
-  if(box) box.innerHTML = renderEvBox(prob, odd||null, minEV, push);
+  if(!home || !away) return;
+  switchToView('corners');
+  const ligaSel = document.getElementById('m_liga');
+  if([...ligaSel.options].some(o=>o.value===fx.liga)) ligaSel.value = fx.liga;
+  refreshMatchTeamSelects();
+  document.getElementById('c_home').value = home.id;
+  document.getElementById('c_away').value = away.id;
+  loadMatchFromTeams();
 }
 async function toggleMatchPick(fxId){
   const wasPicked = PICKED_MATCHES.has(fxId);
@@ -2534,18 +2409,21 @@ async function addBet(){
   ['b_match','b_pick','b_odd','b_stake','b_close','b_note'].forEach(id=>document.getElementById(id).value='');
   renderBets();
   renderCalibration();
+  renderDashboard();
 }
 async function updateBetStatus(id,status){
   const b = BETS.find(x=>x.id===id); if(b) b.status=status;
   await saveState();
   renderBets();
   renderCalibration();
+  renderDashboard();
 }
 async function deleteBet(id){
   BETS = BETS.filter(b=>b.id!==id);
   await saveState();
   renderBets();
   renderCalibration();
+  renderDashboard();
 }
 function betPL(b){
   if(b.status==='win') return b.stake*(b.odd-1);
