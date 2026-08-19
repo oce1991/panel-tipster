@@ -24,6 +24,7 @@
     --header-muted:#C4B5FD;
   }
   *{box-sizing:border-box;}
+  html,body{overflow-x:hidden; max-width:100%;}
   body{
     margin:0;
     background:
@@ -36,7 +37,11 @@
     color:var(--ink);
     font-family:'Inter',sans-serif;
     -webkit-font-smoothing:antialiased;
+    width:100%;
+    position:relative;
   }
+  .card{overflow-x:auto;}
+  table{min-width:100%;}
   h1,h2,h3,.display{font-family:'Space Grotesk',sans-serif; text-transform:uppercase; letter-spacing:0.02em;}
   .mono{font-family:'JetBrains Mono',monospace;}
 
