@@ -2550,12 +2550,14 @@ function renderDashboard(){
   const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
   const totalStaked = settled.reduce((s,b)=>s+b.stake,0);
   const totalPL = settled.reduce((s,b)=>s+betPL(b),0);
-  const roi = totalStaked? (totalPL/totalStaked*100) : 0;
+  const yieldPct = totalStaked? (totalPL/totalStaked*100) : 0; // rendimiento sobre lo arriesgado
+  const roi = BANKCFG.initial? (totalPL/BANKCFG.initial*100) : 0; // crecimiento sobre la banca inicial
   const wins = settled.filter(b=>b.status==='win').length;
   const winRate = settled.length? (wins/settled.length*100) : 0;
   const clvVals = BETS.map(betCLV).filter(v=>v!==null);
   const avgClv = clvVals.length? clvVals.reduce((a,b)=>a+b,0)/clvVals.length : null;
   const bank = BANKCFG.initial + totalPL;
+  const avgStake = BETS.length? (BETS.reduce((s,b)=>s+b.stake,0)/BETS.length) : 0;
 
   // los numeros principales se actualizan siempre primero, antes de tocar ningun grafico,
   // para que un fallo al dibujar un grafico nunca deje la banca/ROI desactualizados
@@ -2563,9 +2565,13 @@ function renderDashboard(){
   if(heroEl) heroEl.textContent = bank.toFixed(0)+'€';
   const statsEl = document.getElementById('dashStats');
   if(statsEl) statsEl.innerHTML = `
-    <div class="stat"><div class="val" style="background:none; -webkit-text-fill-color:${roi>=0?'#A855F7':'#FB7185'}; color:${roi>=0?'#A855F7':'#FB7185'};">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="lbl">ROI</div></div>
+    <div class="stat"><div class="val" style="background:none; -webkit-text-fill-color:${roi>=0?'#A855F7':'#FB7185'}; color:${roi>=0?'#A855F7':'#FB7185'};">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="lbl">ROI (vs banca inicial)</div></div>
+    <div class="stat"><div class="val" style="background:none; -webkit-text-fill-color:${yieldPct>=0?'#A855F7':'#FB7185'}; color:${yieldPct>=0?'#A855F7':'#FB7185'};">${yieldPct>=0?'+':''}${yieldPct.toFixed(1)}%</div><div class="lbl">Yield (vs apostado)</div></div>
+    <div class="stat"><div class="val" style="background:none; -webkit-text-fill-color:${totalPL>=0?'#A855F7':'#FB7185'}; color:${totalPL>=0?'#A855F7':'#FB7185'};">${totalPL>=0?'+':''}${totalPL.toFixed(2)}€</div><div class="lbl">Ganancia neta</div></div>
     <div class="stat"><div class="val">${winRate.toFixed(0)}%</div><div class="lbl">Aciertos (${wins}/${settled.length})</div></div>
     <div class="stat"><div class="val">${avgClv!==null ? (avgClv>0?'+':'')+avgClv.toFixed(1)+'%' : '—'}</div><div class="lbl">CLV medio</div></div>
+    <div class="stat"><div class="val">${totalStaked.toFixed(0)}€</div><div class="lbl">Total apostado</div></div>
+    <div class="stat"><div class="val">${avgStake.toFixed(2)}€</div><div class="lbl">Stake medio</div></div>
   `;
 
   // rendimiento por mercado (tabla, no depende de graficos)
