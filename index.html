@@ -54,24 +54,26 @@
   header.top p{margin:2px 0 0; font-size:11.5px; color:var(--header-muted); font-family:'Inter',sans-serif; text-transform:none; letter-spacing:0;}
 
   nav.tabs{
-    display:flex; overflow-x:auto; gap:2px;
+    display:flex; justify-content:space-around;
+    position:fixed; left:0; right:0; bottom:0; z-index:30;
     background:var(--header-bg);
-    backdrop-filter:blur(16px);
-    padding:0 4px;
-    border-bottom:3px solid transparent;
+    backdrop-filter:blur(20px);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    border-top:1px solid transparent;
     border-image:linear-gradient(90deg,#A855F7,#EC4899,#FB923C) 1;
   }
   nav.tabs button{
-    flex:0 0 auto;
+    flex:1 1 0; display:flex; flex-direction:column; align-items:center; gap:2px;
     background:transparent; border:none; color:var(--header-muted);
-    padding:10px 14px 9px; font-family:'Space Grotesk'; font-weight:700; font-size:12.5px; letter-spacing:0.05em;
-    cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;
-    text-transform:uppercase; margin-bottom:-3px;
+    padding:6px 2px; font-family:'Space Grotesk'; font-weight:700; font-size:9.5px; letter-spacing:0.02em;
+    cursor:pointer; white-space:nowrap;
+    text-transform:uppercase; border-radius:10px;
   }
-  nav.tabs button .num{font-family:'JetBrains Mono'; color:var(--pitch); margin-right:6px; font-size:11px;}
-  nav.tabs button.active{color:#fff; border-bottom-color:var(--pitch);}
+  nav.tabs button .icon{font-size:18px; line-height:1;}
+  nav.tabs button .num{display:none;}
+  nav.tabs button.active{color:#fff; background:rgba(168,85,247,0.18);}
 
-  main{max-width:920px; margin:0 auto; padding:18px 14px 60px;}
+  main{max-width:920px; margin:0 auto; padding:18px 14px calc(90px + env(safe-area-inset-bottom));}
   .view{display:none;}
   .view.active{display:block;}
 
@@ -180,18 +182,23 @@ create policy "public update" on tipster_data for update using (true);</pre>
 
 
 <nav class="tabs" id="tabs">
-  <button data-view="dashboard" class="active"><span class="num">01</span>Panel</button>
-  <button data-view="teams"><span class="num">02</span>Equipos</button>
-  <button data-view="corners"><span class="num">03</span>Partido</button>
-  <button data-view="jornada"><span class="num">04</span>Jornada</button>
-  <button data-view="bets"><span class="num">05</span>Apuestas</button>
-  <button data-view="bankroll"><span class="num">06</span>Banca</button>
+  <button data-view="dashboard" class="active"><span class="icon">📊</span>Panel</button>
+  <button data-view="teams"><span class="icon">⚽</span>Equipos</button>
+  <button data-view="corners"><span class="icon">🎯</span>Partido</button>
+  <button data-view="jornada"><span class="icon">📅</span>Jornada</button>
+  <button data-view="bets"><span class="icon">💰</span>Apuestas</button>
+  <button data-view="bankroll"><span class="icon">🏦</span>Banca</button>
 </nav>
 
 <main>
 
   <!-- DASHBOARD -->
   <div class="view active" id="view-dashboard">
+    <div id="dashHero" style="text-align:center; padding:24px 10px 20px;">
+      <div style="font-family:'Space Grotesk'; font-weight:700; font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:#D8B4FE; margin-bottom:6px;">Panel del Tipster</div>
+      <div id="dashHeroNum" style="font-family:'Space Grotesk'; font-weight:800; font-size:52px; line-height:1; background:linear-gradient(90deg,#C4B5FD,#F9A8D4); -webkit-background-clip:text; background-clip:text; color:transparent;">—</div>
+      <div style="font-size:11px; color:var(--header-muted); text-transform:uppercase; letter-spacing:0.08em; margin-top:6px;">Banca actual</div>
+    </div>
     <div class="statgrid" id="dashStats"></div>
     <div class="card collapsible collapsed">
       <h2 onclick="toggleCard(this)"><span class="tag">Evolución</span> Banca acumulada<span class="chevron">▾</span></h2>
@@ -2268,17 +2275,32 @@ function renderJornada(){
     }
     div.onclick = (e) => { if(e.target.tagName!=='INPUT' && e.target.tagName!=='SELECT') toggleMatchPick(fx.id); };
     div.innerHTML = `
-      <p style="font-family:'Space Grotesk'; font-weight:600; font-size:15px; ${tc}">${fx.local} vs ${fx.visitante} ${crossLiga ? `<span class="hint" style="font-family:Inter; ${tc}">(${matchLiga})</span>` : ''} ${fx.fecha ? `<span class="hint" style="font-family:Inter; ${tc}">— ${fx.fecha}</span>`:''} ${isPicked ? '<span style="font-family:Space Grotesk; font-size:11px;">★ MARCADO</span>' : ''}</p>
+      <div style="text-align:center; margin-bottom:2px;">
+        <span style="font-family:'Space Grotesk'; font-weight:700; font-size:16px; ${tc}">${home.name}</span>
+        <span style="font-family:'Space Grotesk'; font-size:11px; opacity:0.55; margin:0 8px; ${tc}">VS</span>
+        <span style="font-family:'Space Grotesk'; font-weight:700; font-size:16px; ${tc}">${away.name}</span>
+      </div>
+      <p class="hint" style="text-align:center; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${fx.fecha||''} ${isPicked ? '<span style="font-family:\'Space Grotesk\'; font-weight:700;">★ MARCADO</span>' : ''}</p>
       ${confBadge}
+      <div style="display:flex; gap:8px; margin:12px 0;">
+        <div style="flex:1; background:rgba(255,255,255,0.08); border-radius:12px; padding:10px 6px; text-align:center;">
+          <div style="font-family:'Space Grotesk'; font-weight:800; font-size:19px; ${tc}">${corners.total.toFixed(1)}</div>
+          <div class="hint" style="${tc} margin-top:0;">Córners esp.</div>
+        </div>
+        <div style="flex:1; background:rgba(255,255,255,0.08); border-radius:12px; padding:10px 6px; text-align:center;">
+          <div style="font-family:'Space Grotesk'; font-weight:800; font-size:19px; ${tc}">${(goals.lh+goals.la).toFixed(1)}</div>
+          <div class="hint" style="${tc} margin-top:0;">Goles esp.</div>
+        </div>
+        <div style="flex:1; background:rgba(255,255,255,0.08); border-radius:12px; padding:10px 6px; text-align:center;">
+          <div style="font-family:'Space Grotesk'; font-weight:800; font-size:19px; ${tc}">${cards.total.toFixed(1)}</div>
+          <div class="hint" style="${tc} margin-top:0;">Tarjetas esp.</div>
+        </div>
+      </div>
+      <p class="hint" style="${tc}">1X2: ${fmtPct(goals.p1)} / ${fmtPct(goals.pX)} / ${fmtPct(goals.p2)}</p>
       <p class="hint" style="${tc}">
         <strong>${home.name}</strong> (casa): CF ${home.cfh.toFixed(1)}/CA ${home.cah.toFixed(1)} · GF ${home.gfh.toFixed(1)}/GA ${home.gah.toFixed(1)} · TC ${(home.crfh||0).toFixed(1)}/TA ${(home.crah||0).toFixed(1)}<br>
         <strong>${away.name}</strong> (fuera): CF ${away.cfa.toFixed(1)}/CA ${away.caa.toFixed(1)} · GF ${away.gfa.toFixed(1)}/GA ${away.gaa.toFixed(1)} · TC ${(away.crfa||0).toFixed(1)}/TA ${(away.craa||0).toFixed(1)}
       </p>
-      <div class="grid3">
-        <div><div class="hint" style="${tc}">Córners esp. (ajustado)</div><div class="display" style="font-size:18px; ${tc}">${corners.total.toFixed(2)}</div></div>
-        <div><div class="hint" style="${tc}">P(1) / P(X) / P(2)</div><div class="display" style="font-size:15px; ${tc}">${fmtPct(goals.p1)} / ${fmtPct(goals.pX)} / ${fmtPct(goals.p2)}</div></div>
-        <div><div class="hint" style="${tc}">Goles esp.</div><div class="display" style="font-size:15px; ${tc}">${(goals.lh+goals.la).toFixed(2)}</div></div>
-      </div>
       ${marketBlock('Córners', 'corners', corners.pOver, corners.pPush, '1.90')}
       ${marketBlock('Goles', 'goals', goals.pOver, goals.pPush, '1.85')}
       ${marketBlock('Tarjetas', 'cards', cards.pOver, cards.pPush, '1.90')}
@@ -2653,9 +2675,9 @@ function renderDashboard(){
   const avgClv = clvVals.length? clvVals.reduce((a,b)=>a+b,0)/clvVals.length : null;
   const bank = BANKCFG.initial + totalPL;
 
+  document.getElementById('dashHeroNum').textContent = bank.toFixed(0)+'€';
   document.getElementById('dashStats').innerHTML = `
-    <div class="stat"><div class="val">${bank.toFixed(0)}€</div><div class="lbl">Banca actual</div></div>
-    <div class="stat"><div class="val" style="color:${roi>=0?'#A855F7':'#FB7185'}">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="lbl">ROI</div></div>
+    <div class="stat"><div class="val" style="background:none; -webkit-text-fill-color:${roi>=0?'#A855F7':'#FB7185'}; color:${roi>=0?'#A855F7':'#FB7185'};">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="lbl">ROI</div></div>
     <div class="stat"><div class="val">${winRate.toFixed(0)}%</div><div class="lbl">Aciertos (${wins}/${settled.length})</div></div>
     <div class="stat"><div class="val">${avgClv!==null ? (avgClv>0?'+':'')+avgClv.toFixed(1)+'%' : '—'}</div><div class="lbl">CLV medio</div></div>
   `;
