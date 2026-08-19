@@ -2186,6 +2186,31 @@ function refreshJornadaSelect(){
   if(current && (current==='__ALL__' || ligas.includes(current))) ligaSel.value = current;
   refreshJornadaOptions();
 }
+function parseFechaLoose(str){
+  if(!str) return null;
+  // extrae la primera fecha con pinta de DD/MM/AAAA, DD.MM.AAAA o DD-MM-AAAA que encuentre,
+  // incluso dentro de un rango tipo "29./30.08.2026" o "04.-06.09.2026"
+  const m = str.match(/(\d{1,2})[.\/\-](\d{1,2})[.\/\-](\d{2,4})/);
+  if(!m) return null;
+  let [_, d, mo, y] = m;
+  if(y.length===2) y = (parseInt(y)<50 ? '20':'19')+y;
+  const dt = new Date(parseInt(y), parseInt(mo)-1, parseInt(d));
+  return isNaN(dt.getTime()) ? null : dt;
+}
+function suggestCurrentJornada(relevant, jornadasOrdenadas){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const cutoff = new Date(today); cutoff.setDate(cutoff.getDate()-3); // margen: si una jornada empezo hace <=3 dias, se sigue considerando "actual"
+  const conFecha = [];
+  for(const j of jornadasOrdenadas){
+    const fechas = relevant.filter(f=>f.jornada===j).map(f=>parseFechaLoose(f.fecha)).filter(Boolean);
+    if(!fechas.length) continue;
+    const minFecha = new Date(Math.min(...fechas.map(d=>d.getTime())));
+    conFecha.push({jornada:j, minFecha});
+  }
+  if(!conFecha.length) return null; // ninguna jornada tiene fechas legibles, no sugerimos nada
+  const proxima = conFecha.find(x=>x.minFecha >= cutoff);
+  return proxima ? proxima.jornada : conFecha[conFecha.length-1].jornada; // si ya paso toda la temporada, la ultima
+}
 function refreshJornadaOptions(){
   const liga = document.getElementById('jr_liga').value;
   const jornadaSel = document.getElementById('jr_jornada');
@@ -2194,7 +2219,12 @@ function refreshJornadaOptions(){
   const jornadas = [...new Set(relevant.map(f=>f.jornada))]
     .sort((a,b)=> (parseFloat(a)||0) - (parseFloat(b)||0));
   jornadaSel.innerHTML = jornadas.map(j=>`<option value="${j}">${j}</option>`).join('');
-  if(jornadas.includes(current)) jornadaSel.value = current;
+  if(jornadas.includes(current)){
+    jornadaSel.value = current;
+  } else {
+    const sugerida = suggestCurrentJornada(relevant, jornadas);
+    if(sugerida) jornadaSel.value = sugerida;
+  }
   renderJornada();
 }
 function renderJornada(){
