@@ -5,41 +5,48 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ficha de Juego — Panel del Tipster</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
-    --pitch:#FF5722;
-    --pitch-dark:#E64A19;
-    --ink:#0E2E3D;
-    --chalk:#F6F7FA;
-    --paper:#FFFFFF;
-    --amber:#FF5722;
+    --pitch:#A855F7;
+    --pitch-dark:#7C3AED;
+    --ink:#FFFFFF;
+    --chalk:#0B0A14;
+    --paper:rgba(255,255,255,0.07);
+    --amber:#EC4899;
     --win:#22C55E;
-    --loss:#DC2626;
-    --line:#E5E9ED;
-    --header-bg:#1A1A1E;
-    --header-muted:#9A9AA5;
+    --loss:#FB7185;
+    --line:rgba(255,255,255,0.14);
+    --header-bg:rgba(11,10,20,0.75);
+    --header-muted:#C4B5FD;
   }
   *{box-sizing:border-box;}
   body{
     margin:0;
-    background:var(--chalk);
+    background:
+      radial-gradient(circle at 15% 10%, rgba(168,85,247,0.35), transparent 42%),
+      radial-gradient(circle at 88% 8%, rgba(236,72,153,0.30), transparent 40%),
+      radial-gradient(circle at 30% 85%, rgba(251,146,60,0.22), transparent 45%),
+      radial-gradient(circle at 90% 75%, rgba(139,92,246,0.25), transparent 40%),
+      var(--chalk);
+    background-attachment:fixed;
     color:var(--ink);
     font-family:'Inter',sans-serif;
     -webkit-font-smoothing:antialiased;
   }
-  h1,h2,h3,.display{font-family:'Manrope',sans-serif; text-transform:uppercase; letter-spacing:0.02em;}
+  h1,h2,h3,.display{font-family:'Space Grotesk',sans-serif; text-transform:uppercase; letter-spacing:0.02em;}
   .mono{font-family:'JetBrains Mono',monospace;}
 
   header.top{
     background:var(--header-bg);
+    backdrop-filter:blur(16px);
     color:#fff;
     padding:18px 20px 14px;
     position:sticky; top:0; z-index:20;
-    box-shadow:0 2px 10px rgba(0,0,0,0.2);
+    border-bottom:1px solid var(--line);
   }
   header.top .brand{display:flex; align-items:center; gap:10px;}
   header.top .arc{width:26px;height:26px;border:3px solid var(--pitch); border-radius:0 100% 0 0; border-left:none; border-bottom:none; transform:rotate(0deg);}
@@ -49,86 +56,88 @@
   nav.tabs{
     display:flex; overflow-x:auto; gap:2px;
     background:var(--header-bg);
+    backdrop-filter:blur(16px);
     padding:0 4px;
     border-bottom:3px solid transparent;
-    border-image:linear-gradient(90deg,#FF3D00,#FF7A00) 1;
+    border-image:linear-gradient(90deg,#A855F7,#EC4899,#FB923C) 1;
   }
   nav.tabs button{
     flex:0 0 auto;
     background:transparent; border:none; color:var(--header-muted);
-    padding:10px 14px 9px; font-family:'Manrope'; font-weight:700; font-size:12.5px; letter-spacing:0.05em;
+    padding:10px 14px 9px; font-family:'Space Grotesk'; font-weight:700; font-size:12.5px; letter-spacing:0.05em;
     cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap;
     text-transform:uppercase; margin-bottom:-3px;
   }
   nav.tabs button .num{font-family:'JetBrains Mono'; color:var(--pitch); margin-right:6px; font-size:11px;}
-  nav.tabs button.active{color:var(--pitch); border-bottom-color:var(--pitch);}
+  nav.tabs button.active{color:#fff; border-bottom-color:var(--pitch);}
 
   main{max-width:920px; margin:0 auto; padding:18px 14px 60px;}
   .view{display:none;}
   .view.active{display:block;}
 
   .card{
-    background:var(--paper); border:1px solid var(--line); border-radius:10px;
-    padding:16px; margin-bottom:14px; box-shadow:0 1px 4px rgba(0,0,0,0.05);
+    background:var(--paper); border:1px solid var(--line); border-radius:16px;
+    padding:16px; margin-bottom:14px; backdrop-filter:blur(20px);
+    box-shadow:0 8px 32px rgba(0,0,0,0.25);
   }
-  .card h2{font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:8px;}
+  .card h2{font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:8px; color:#fff;}
   .card.collapsible > h2{cursor:pointer; user-select:none; margin-bottom:12px;}
-  .card.collapsible > h2 .chevron{margin-left:auto; font-size:12px; color:#8A96A3; transition:transform 0.2s;}
+  .card.collapsible > h2 .chevron{margin-left:auto; font-size:12px; color:var(--header-muted); transition:transform 0.2s;}
   .card.collapsible.collapsed > h2{margin-bottom:0;}
   .card.collapsible.collapsed > h2 .chevron{transform:rotate(-90deg);}
   .card.collapsible.collapsed > *:not(h2){display:none;}
-  .card h2 .tag{background:#FFEDE5; color:var(--pitch); font-family:'JetBrains Mono'; font-size:10px; padding:2px 6px; border-radius:3px; letter-spacing:0.05em;}
+  .card h2 .tag{background:rgba(168,85,247,0.2); color:#D8B4FE; font-family:'JetBrains Mono'; font-size:10px; padding:2px 6px; border-radius:3px; letter-spacing:0.05em;}
 
   .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
   .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
   @media(max-width:520px){.grid3{grid-template-columns:1fr 1fr;} .grid2{grid-template-columns:1fr;}}
 
-  label{display:block; font-size:11px; color:#8A96A3; margin-bottom:3px; font-weight:600; text-transform:uppercase; letter-spacing:0.03em;}
+  label{display:block; font-size:11px; color:var(--header-muted); margin-bottom:3px; font-weight:600; text-transform:uppercase; letter-spacing:0.03em;}
   input,select{
-    width:100%; padding:8px 9px; border:1px solid var(--line); border-radius:6px;
-    background:var(--chalk); font-family:'JetBrains Mono'; font-size:13px; color:var(--ink);
+    width:100%; padding:8px 9px; border:1px solid var(--line); border-radius:8px;
+    background:rgba(255,255,255,0.06); font-family:'JetBrains Mono'; font-size:13px; color:var(--ink);
     margin-bottom:10px;
   }
   input:focus,select:focus{outline:2px solid var(--amber); outline-offset:1px;}
 
   button.btn{
-    background:transparent; color:var(--ink); border:1px solid var(--line); padding:10px 16px;
-    border-radius:6px; font-family:'Manrope'; font-weight:700; font-size:13px; letter-spacing:0.04em;
+    background:rgba(255,255,255,0.08); color:var(--ink); border:1px solid var(--line); padding:10px 16px;
+    border-radius:10px; font-family:'Space Grotesk'; font-weight:700; font-size:13px; letter-spacing:0.04em;
     text-transform:uppercase; cursor:pointer;
   }
-  button.btn:hover{background:#F0F2F5; border-color:var(--pitch);}
-  button.btn.amber{background:var(--amber); color:#fff; border:1px solid var(--amber); font-weight:700;}
-  button.btn.amber:hover{background:var(--pitch-dark);}
+  button.btn:hover{background:rgba(255,255,255,0.14); border-color:var(--pitch);}
+  button.btn.amber{background:linear-gradient(90deg,#A855F7,#EC4899); color:#fff; border:none; font-weight:700; box-shadow:0 4px 16px rgba(168,85,247,0.4);}
+  button.btn.amber:hover{background:linear-gradient(90deg,#9333EA,#DB2777);}
   button.btn.ghost{background:transparent; color:var(--loss); border:1px solid var(--loss); padding:6px 10px; font-size:11px;}
 
   table{width:100%; border-collapse:collapse; font-size:12.5px;}
-  th{text-align:left; font-family:'Manrope'; font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:#8A96A3; border-bottom:2px solid var(--line); padding:6px 5px;}
-  td{padding:7px 5px; border-bottom:1px solid var(--line); font-family:'JetBrains Mono';}
+  th{text-align:left; font-family:'Space Grotesk'; font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--header-muted); border-bottom:2px solid var(--line); padding:6px 5px;}
+  td{padding:7px 5px; border-bottom:1px solid var(--line); font-family:'JetBrains Mono'; color:var(--ink);}
   tr:last-child td{border-bottom:none;}
   .pos{color:var(--win); font-weight:700;}
   .neg{color:var(--loss); font-weight:700;}
 
   .statgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-bottom:14px;}
-  .stat{background:var(--paper); color:var(--ink); border-radius:10px; padding:12px; position:relative; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.06); border:1px solid var(--line);}
-  .stat .val{font-family:'Manrope'; font-size:22px; font-weight:800; color:var(--ink);}
-  .stat .lbl{font-size:10px; text-transform:uppercase; letter-spacing:0.05em; color:#8A96A3; margin-top:2px;}
+  .stat{background:var(--paper); color:var(--ink); border-radius:16px; padding:12px; position:relative; overflow:hidden; border:1px solid var(--line); backdrop-filter:blur(20px);}
+  .stat .val{font-family:'Space Grotesk'; font-size:22px; font-weight:800; background:linear-gradient(90deg,#C4B5FD,#F9A8D4); -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .stat .lbl{font-size:10px; text-transform:uppercase; letter-spacing:0.05em; color:var(--header-muted); margin-top:2px;}
 
   .arcwrap{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
   .arc-gauge{position:relative; width:120px; height:120px;}
-  .result-box{background:var(--chalk); border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:8px;}
-  .ev-pos{color:var(--win); font-family:'Manrope'; font-weight:700;}
-  .ev-neg{color:var(--loss); font-family:'Manrope'; font-weight:700;}
-  .hint{font-size:11.5px; color:#8A96A3; line-height:1.5; margin-top:4px;}
+  .result-box{background:rgba(255,255,255,0.05); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:8px;}
+  .ev-pos{color:var(--win); font-family:'Space Grotesk'; font-weight:700;}
+  .ev-neg{color:var(--loss); font-family:'Space Grotesk'; font-weight:700;}
+  .hint{font-size:11.5px; color:var(--header-muted); line-height:1.5; margin-top:4px;}
   .divider{border:none; border-top:1px solid var(--line); margin:14px 0;}
-  .empty{text-align:center; padding:30px 10px; color:#8A96A3; font-size:13px;}
-  .chip{display:inline-block; background:var(--pitch); color:#fff; font-family:'JetBrains Mono'; font-size:10px; padding:2px 7px; border-radius:10px; margin-left:6px;}
+  .empty{text-align:center; padding:30px 10px; color:var(--header-muted); font-size:13px;}
+  .chip{display:inline-block; background:linear-gradient(90deg,#A855F7,#EC4899); color:#fff; font-family:'JetBrains Mono'; font-size:10px; padding:2px 7px; border-radius:10px; margin-left:6px;}
 
   .oddbtn{
-    font-family:'Manrope'; font-weight:700; font-size:13px; color:var(--ink);
-    background:#EDF1F4; border:1px solid var(--line); border-radius:6px;
+    font-family:'Space Grotesk'; font-weight:700; font-size:13px; color:var(--ink);
+    background:rgba(255,255,255,0.08); border:1px solid var(--line); border-radius:20px;
     padding:7px 14px; display:inline-block;
   }
-  .oddbtn.value{background:#E8FBF0; border-color:#22C55E; color:#16803C;}
+  .oddbtn.value{background:linear-gradient(90deg,#22C55E,#4ADE80); border-color:transparent; color:#052e12;}
 </style>
 </head>
 <body>
@@ -140,7 +149,7 @@
     <ol class="hint" style="padding-left:18px;">
       <li>Crea una cuenta gratis en <strong>supabase.com</strong> y un proyecto nuevo.</li>
       <li>En el proyecto, ve a <strong>SQL Editor</strong> y ejecuta esto una vez:
-        <pre style="background:var(--header-bg); color:#fff; padding:10px; border-radius:4px; font-size:11px; overflow-x:auto; margin:6px 0;">create table tipster_data (
+        <pre style="background:rgba(0,0,0,0.4); color:#fff; padding:10px; border-radius:8px; font-size:11px; overflow-x:auto; margin:6px 0; border:1px solid var(--line);">create table tipster_data (
   id text primary key,
   data jsonb,
   updated_at timestamptz default now()
@@ -168,6 +177,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
   <div class="brand"><div class="arc"></div><h1>Panel del Tipster</h1></div>
   <p>Primera · Segunda · 1ª RFEF (Grupo 1) — corners, goles y 1X2, siempre en pre-partido</p>
 </header>
+
 
 <nav class="tabs" id="tabs">
   <button data-view="dashboard" class="active"><span class="num">01</span>Panel</button>
@@ -810,7 +820,7 @@ function renderBacktest(){
     box.innerHTML = `<p class="hint">No se ha podido simular ninguna apuesta en ${liga}. Partidos con fecha: ${r.totalMatches} · sin cuotas de Over/Under 2.5: ${r.skippedNoOdds} · sin historial previo suficiente: ${r.skippedNoHistory}. Revisa que el CSV que importaste tenga columnas de cuotas (Avg&gt;2.5/Avg&lt;2.5 o B365&gt;2.5/B365&lt;2.5).</p>`;
     return;
   }
-  const roiColor = r.roi>=0 ? '#16803C' : '#DC2626';
+  const roiColor = r.roi>=0 ? '#4ADE80' : '#FB7185';
   let html = `<div class="grid3">
     <div><div class="hint">Apuestas simuladas</div><div class="display" style="font-size:22px;">${r.bets}</div></div>
     <div><div class="hint">Acierto</div><div class="display" style="font-size:22px;">${fmtPct(r.winRate/100)}</div></div>
@@ -818,7 +828,7 @@ function renderBacktest(){
   </div>
   <p class="hint" style="margin-top:8px;">De ${r.totalMatches} partidos con fecha en ${liga}: ${r.skippedNoOdds} no tenían cuota de Over/Under 2.5 y ${r.skippedNoHistory} se saltaron por no tener suficiente historial previo de ambos equipos todavía.</p>
   <hr class="divider">
-  <p style="font-family:'Manrope'; font-weight:700; font-size:13px;">Calibración del backtest (¿el modelo acertó lo que decía?)</p>
+  <p style="font-family:'Space Grotesk'; font-weight:700; font-size:13px;">Calibración del backtest (¿el modelo acertó lo que decía?)</p>
   <table><thead><tr><th>Tramo</th><th>Apuestas</th><th>Media predicha</th><th>Acierto real</th></tr></thead><tbody>`;
   r.buckets.forEach(b=>{
     const avgPred = b.sumProb/b.n, actual = b.wins/b.n;
@@ -885,7 +895,7 @@ function renderCornersBacktest(){
     return;
   }
   const bias = r.avgPredicted - r.avgActual;
-  const biasColor = Math.abs(bias)<0.3 ? '#16803C' : '#DC2626';
+  const biasColor = Math.abs(bias)<0.3 ? '#4ADE80' : '#FB7185';
   let html = `<div class="grid3">
     <div><div class="hint">Partidos analizados</div><div class="display" style="font-size:22px;">${r.n}</div></div>
     <div><div class="hint">Córners predichos (media)</div><div class="display" style="font-size:22px;">${r.avgPredicted.toFixed(2)}</div></div>
@@ -893,7 +903,7 @@ function renderCornersBacktest(){
   </div>
   <p class="hint" style="margin-top:8px;">Sesgo del modelo: <span style="color:${biasColor}; font-weight:700;">${bias>=0?'+':''}${bias.toFixed(2)} córners</span> (predicho − real; cerca de 0 es bueno) · Error medio absoluto por partido: ${r.mae.toFixed(2)} córners.</p>
   <hr class="divider">
-  <p style="font-family:'Manrope'; font-weight:700; font-size:13px;">Calibración de Over ${line} córners</p>
+  <p style="font-family:'Space Grotesk'; font-weight:700; font-size:13px;">Calibración de Over ${line} córners</p>
   <table><thead><tr><th>Tramo</th><th>Partidos</th><th>Media predicha</th><th>Acierto real</th></tr></thead><tbody>`;
   r.buckets.forEach(b=>{
     const avgPred = b.sumProb/b.n, actual = b.wins/b.n;
@@ -1640,7 +1650,7 @@ function renderHeadToHead(homeName, awayName, liga){
     return `<tr><td>${m.d}</td><td style="font-family:Inter;">${golesTxt}${cornersTxt}</td></tr>`;
   }).join('');
   box.innerHTML = `<div class="result-box">
-    <p style="font-family:'Manrope'; font-weight:600;">Historial directo (${matches.length} partido${matches.length>1?'s':''})</p>
+    <p style="font-family:'Space Grotesk'; font-weight:600;">Historial directo (${matches.length} partido${matches.length>1?'s':''})</p>
     <p class="hint">Media en estos enfrentamientos: ${avgGoals.toFixed(2)} goles/partido${avgCorners!==null ? ` · ${avgCorners.toFixed(2)} córners/partido` : ' · sin datos de córners'}. Esto es informativo, no se mezcla automáticamente en el cálculo — úsalo con tu propio criterio.</p>
     <table style="margin-top:6px;"><tbody>${rows}</tbody></table>
   </div>`;
@@ -2204,7 +2214,7 @@ function renderJornada(){
     div.style.marginBottom = '10px';
     if(!home || !away){
       const faltan = [!home?fx.local:null, !away?fx.visitante:null].filter(Boolean).join(' y ');
-      div.innerHTML = `<p style="font-family:'Manrope'; font-weight:600;">${fx.local} vs ${fx.visitante} ${crossLiga ? `<span class="hint">(${matchLiga})</span>` : ''}</p>
+      div.innerHTML = `<p style="font-family:'Space Grotesk'; font-weight:600;">${fx.local} vs ${fx.visitante} ${crossLiga ? `<span class="hint">(${matchLiga})</span>` : ''}</p>
         <p class="hint">${fx.fecha ? fx.fecha+' · ' : ''}No encuentro "${faltan}" en tu base de equipos de ${matchLiga}. Añádelo en 02 Equipos (o promociónalo si es un ascendido) para que aparezca aquí el análisis automático.</p>`;
       container.appendChild(div);
       return;
@@ -2231,14 +2241,14 @@ function renderJornada(){
       const currentLine = lines[market];
       const selectHtml = `<select onchange="updateMatchLine('${fx.id}','${market}', this.value)" style="margin-bottom:0; padding:6px;">${lineOpts.map(l=>`<option value="${l}" ${l===currentLine?'selected':''}>${l}</option>`).join('')}</select>`;
       if(prob===null || prob===undefined){
-        return `<div style="margin-top:8px;"><p style="margin:0; font-family:'Manrope'; font-weight:600; font-size:12.5px; ${tc}">${label}</p><p class="hint" style="${tc}">Sin datos suficientes en este equipo (¿tiene tarjetas cargadas?)</p></div>`;
+        return `<div style="margin-top:8px;"><p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:12.5px; ${tc}">${label}</p><p class="hint" style="${tc}">Sin datos suficientes en este equipo (¿tiene tarjetas cargadas?)</p></div>`;
       }
       const pushTxt = Number.isInteger(currentLine) ? ` · Push ${fmtPct(pPush||0)}` : '';
       const calibNote = (market==='corners' && (prob<0.4 || prob>0.6))
-        ? `<p class="hint" style="${tc} color:#DC2626;">⚠️ Fuera del rango 40-60% donde el backtest de córners está bien calibrado (visto en 01 Panel) — trátalo con más cautela, hay menos muestra que valide esta zona.</p>`
+        ? `<p class="hint" style="${tc} color:#FB7185;">⚠️ Fuera del rango 40-60% donde el backtest de córners está bien calibrado (visto en 01 Panel) — trátalo con más cautela, hay menos muestra que valide esta zona.</p>`
         : '';
       return `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed var(--line);">
-        <p style="margin:0; font-family:'Manrope'; font-weight:600; font-size:12.5px; ${tc}">${label}</p>
+        <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:12.5px; ${tc}">${label}</p>
         <div style="display:flex; gap:8px; align-items:flex-end; max-width:280px; margin-top:4px;">
           <div><label style="${tc}">Línea</label>${selectHtml}</div>
           <div style="flex:1;"><label style="${tc}">Cuota Over</label><input type="number" step="0.01" placeholder="${defaultOdd}" value="${odd||''}" oninput="updateMatchOdd('${fx.id}','${market}', this.value)" style="margin-bottom:0;"></div>
@@ -2258,7 +2268,7 @@ function renderJornada(){
     }
     div.onclick = (e) => { if(e.target.tagName!=='INPUT' && e.target.tagName!=='SELECT') toggleMatchPick(fx.id); };
     div.innerHTML = `
-      <p style="font-family:'Manrope'; font-weight:600; font-size:15px; ${tc}">${fx.local} vs ${fx.visitante} ${crossLiga ? `<span class="hint" style="font-family:Inter; ${tc}">(${matchLiga})</span>` : ''} ${fx.fecha ? `<span class="hint" style="font-family:Inter; ${tc}">— ${fx.fecha}</span>`:''} ${isPicked ? '<span style="font-family:Manrope; font-size:11px;">★ MARCADO</span>' : ''}</p>
+      <p style="font-family:'Space Grotesk'; font-weight:600; font-size:15px; ${tc}">${fx.local} vs ${fx.visitante} ${crossLiga ? `<span class="hint" style="font-family:Inter; ${tc}">(${matchLiga})</span>` : ''} ${fx.fecha ? `<span class="hint" style="font-family:Inter; ${tc}">— ${fx.fecha}</span>`:''} ${isPicked ? '<span style="font-family:Space Grotesk; font-size:11px;">★ MARCADO</span>' : ''}</p>
       ${confBadge}
       <p class="hint" style="${tc}">
         <strong>${home.name}</strong> (casa): CF ${home.cfh.toFixed(1)}/CA ${home.cah.toFixed(1)} · GF ${home.gfh.toFixed(1)}/GA ${home.gah.toFixed(1)} · TC ${(home.crfh||0).toFixed(1)}/TA ${(home.crah||0).toFixed(1)}<br>
@@ -2292,9 +2302,9 @@ function renderEvBox(prob, odd, minEV, pPush){
   const pushNote = pPush>=0.01 ? `<p class="hint" style="margin:2px 0 0;">Línea entera: ${fmtPct(pPush)} de probabilidad de empatar justo en esa cifra (push, se devuelve la apuesta) — ya está descontado del EV.</p>` : '';
   return `<div style="display:flex; align-items:center; gap:8px; margin-top:6px; flex-wrap:wrap;">
       <span class="oddbtn ${isValue?'value':''}">${odd}</span>
-      <span style="font-family:'Manrope'; font-weight:700; font-size:12px; color:${isValue?'#16803C':'#DC2626'};">EV ${ev>=0?'+':''}${(ev*100).toFixed(1)}% ${isValue?'✅':'⚠️'}</span>
+      <span style="font-family:'Space Grotesk'; font-weight:700; font-size:12px; color:${isValue?'#4ADE80':'#FB7185'};">EV ${ev>=0?'+':''}${(ev*100).toFixed(1)}% ${isValue?'✅':'⚠️'}</span>
     </div>
-    <p style="margin:5px 0 0; font-family:'Manrope'; font-weight:700; font-size:13px;">Stake sugerido (Kelly): ${stakeInfo.stake>0 ? stakeInfo.stake.toFixed(2)+'€' : '0€ — no apostar'}</p>
+    <p style="margin:5px 0 0; font-family:'Space Grotesk'; font-weight:700; font-size:13px;">Stake sugerido (Kelly): ${stakeInfo.stake>0 ? stakeInfo.stake.toFixed(2)+'€' : '0€ — no apostar'}</p>
     ${pushNote}`;
 }
 function getMarketProb(fx, market, line){
@@ -2645,7 +2655,7 @@ function renderDashboard(){
 
   document.getElementById('dashStats').innerHTML = `
     <div class="stat"><div class="val">${bank.toFixed(0)}€</div><div class="lbl">Banca actual</div></div>
-    <div class="stat"><div class="val" style="color:${roi>=0?'#FF5722':'#DC2626'}">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="lbl">ROI</div></div>
+    <div class="stat"><div class="val" style="color:${roi>=0?'#A855F7':'#FB7185'}">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="lbl">ROI</div></div>
     <div class="stat"><div class="val">${winRate.toFixed(0)}%</div><div class="lbl">Aciertos (${wins}/${settled.length})</div></div>
     <div class="stat"><div class="val">${avgClv!==null ? (avgClv>0?'+':'')+avgClv.toFixed(1)+'%' : '—'}</div><div class="lbl">CLV medio</div></div>
   `;
@@ -2659,8 +2669,8 @@ function renderDashboard(){
   if(bankChartInstance) bankChartInstance.destroy();
   bankChartInstance = new Chart(ctx, {
     type:'line',
-    data:{ labels, datasets:[{ data, borderColor:'#FF5722', backgroundColor:'rgba(0,229,199,0.12)', fill:true, tension:0.15, pointRadius:2 }] },
-    options:{ plugins:{legend:{display:false}}, scales:{ y:{ grid:{color:'#E5E9ED'}, ticks:{color:'#8A96A3'} }, x:{ grid:{display:false}, ticks:{color:'#8A96A3'} } } }
+    data:{ labels, datasets:[{ data, borderColor:'#A855F7', backgroundColor:'rgba(168,85,247,0.18)', fill:true, tension:0.15, pointRadius:2 }] },
+    options:{ plugins:{legend:{display:false}}, scales:{ y:{ grid:{color:'rgba(255,255,255,0.15)'}, ticks:{color:'#C4B5FD'} }, x:{ grid:{display:false}, ticks:{color:'#C4B5FD'} } } }
   });
 
   // by market
@@ -2705,14 +2715,14 @@ function renderClvChart(){
   clvChartInstance = new Chart(canvas, {
     type:'line',
     data:{ labels, datasets:[
-      { label:'CLV por apuesta', data, borderColor:'#E5E9ED', backgroundColor:'#FF5722', pointRadius:3, showLine:false },
-      { label:'Media acumulada', data:cumAvg, borderColor:'#FF5722', backgroundColor:'rgba(0,229,199,0.1)', fill:true, tension:0.2, pointRadius:0 }
+      { label:'CLV por apuesta', data, borderColor:'rgba(255,255,255,0.15)', backgroundColor:'#A855F7', pointRadius:3, showLine:false },
+      { label:'Media acumulada', data:cumAvg, borderColor:'#A855F7', backgroundColor:'rgba(168,85,247,0.15)', fill:true, tension:0.2, pointRadius:0 }
     ]},
     options:{
-      plugins:{ legend:{display:true, labels:{boxWidth:12, color:'#0E2E3D'}} },
+      plugins:{ legend:{display:true, labels:{boxWidth:12, color:'#FFFFFF'}} },
       scales:{
-        y:{ title:{display:true, text:'CLV %', color:'#8A96A3'}, grid:{color:'#E5E9ED'}, ticks:{color:'#8A96A3'} },
-        x:{ grid:{display:false}, ticks:{color:'#8A96A3'} }
+        y:{ title:{display:true, text:'CLV %', color:'#C4B5FD'}, grid:{color:'rgba(255,255,255,0.15)'}, ticks:{color:'#C4B5FD'} },
+        x:{ grid:{display:false}, ticks:{color:'#C4B5FD'} }
       }
     }
   });
@@ -2753,16 +2763,16 @@ function renderCalibration(){
     type:'scatter',
     data:{
       datasets:[
-        { label:'Perfecto', data:[{x:0,y:0},{x:1,y:1}], showLine:true, borderColor:'#E5E9ED', borderDash:[4,4], pointRadius:0 },
-        { label:'Tu modelo', data: activeBuckets.map(b=>({x:b.sumProb/b.n, y:b.wins/b.n, r:Math.min(20,5+b.n)})), backgroundColor:'#FF5722', borderColor:'#fff' }
+        { label:'Perfecto', data:[{x:0,y:0},{x:1,y:1}], showLine:true, borderColor:'rgba(255,255,255,0.15)', borderDash:[4,4], pointRadius:0 },
+        { label:'Tu modelo', data: activeBuckets.map(b=>({x:b.sumProb/b.n, y:b.wins/b.n, r:Math.min(20,5+b.n)})), backgroundColor:'#A855F7', borderColor:'#fff' }
       ]
     },
     options:{
       scales:{
-        x:{ min:0, max:1, title:{display:true, text:'Probabilidad predicha', color:'#8A96A3'}, ticks:{callback:v=>(v*100).toFixed(0)+'%', color:'#8A96A3'}, grid:{color:'#E5E9ED'} },
-        y:{ min:0, max:1, title:{display:true, text:'Acierto real', color:'#8A96A3'}, ticks:{callback:v=>(v*100).toFixed(0)+'%', color:'#8A96A3'}, grid:{color:'#E5E9ED'} }
+        x:{ min:0, max:1, title:{display:true, text:'Probabilidad predicha', color:'#C4B5FD'}, ticks:{callback:v=>(v*100).toFixed(0)+'%', color:'#C4B5FD'}, grid:{color:'rgba(255,255,255,0.15)'} },
+        y:{ min:0, max:1, title:{display:true, text:'Acierto real', color:'#C4B5FD'}, ticks:{callback:v=>(v*100).toFixed(0)+'%', color:'#C4B5FD'}, grid:{color:'rgba(255,255,255,0.15)'} }
       },
-      plugins:{ legend:{display:true, labels:{boxWidth:12, color:'#0E2E3D'}} }
+      plugins:{ legend:{display:true, labels:{boxWidth:12, color:'#FFFFFF'}} }
     }
   });
 }
