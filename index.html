@@ -24,7 +24,7 @@
     --header-muted:#C4B5FD;
   }
   *{box-sizing:border-box;}
-  html,body{overflow-x:hidden; max-width:100%;}
+  html,body{overflow-x:hidden; overflow-y:visible; max-width:100%;}
   body{
     margin:0;
     background:var(--chalk);
@@ -2213,20 +2213,23 @@ function suggestCurrentJornada(relevant, jornadasOrdenadas){
   const proxima = conFecha.find(x=>x.minFecha >= cutoff);
   return proxima ? proxima.jornada : conFecha[conFecha.length-1].jornada; // si ya paso toda la temporada, la ultima
 }
+let lastJornadaLiga = null; // recordamos de que liga era la jornada seleccionada, para no confundir "3 en Primera" con "3 en Eredivisie"
 function refreshJornadaOptions(){
   const liga = document.getElementById('jr_liga').value;
   const jornadaSel = document.getElementById('jr_jornada');
   const current = jornadaSel.value;
+  const ligaCambio = liga !== lastJornadaLiga;
   const relevant = liga==='__ALL__' ? FIXTURES : FIXTURES.filter(f=>f.liga===liga);
   const jornadas = [...new Set(relevant.map(f=>f.jornada))]
     .sort((a,b)=> (parseFloat(a)||0) - (parseFloat(b)||0));
   jornadaSel.innerHTML = jornadas.map(j=>`<option value="${j}">${j}</option>`).join('');
-  if(jornadas.includes(current)){
+  if(!ligaCambio && jornadas.includes(current)){
     jornadaSel.value = current;
   } else {
     const sugerida = suggestCurrentJornada(relevant, jornadas);
-    if(sugerida) jornadaSel.value = sugerida;
+    jornadaSel.value = sugerida || (jornadas[0]||'');
   }
+  lastJornadaLiga = liga;
   renderJornada();
 }
 function renderJornada(){
