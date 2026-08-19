@@ -15,7 +15,7 @@
     --pitch-dark:#7C3AED;
     --ink:#FFFFFF;
     --chalk:#0B0A14;
-    --paper:rgba(255,255,255,0.07);
+    --paper:rgba(255,255,255,0.11);
     --amber:#EC4899;
     --win:#22C55E;
     --loss:#FB7185;
@@ -49,7 +49,6 @@
 
   header.top{
     background:var(--header-bg);
-    backdrop-filter:blur(16px);
     color:#fff;
     padding:18px 20px 14px;
     position:sticky; top:0; z-index:20;
@@ -64,7 +63,6 @@
     display:flex; justify-content:space-around;
     position:fixed; left:0; right:0; bottom:0; z-index:30;
     background:var(--header-bg);
-    backdrop-filter:blur(20px);
     padding:6px 4px calc(6px + env(safe-area-inset-bottom));
     border-top:1px solid transparent;
     border-image:linear-gradient(90deg,#A855F7,#EC4899,#FB923C) 1;
@@ -86,7 +84,7 @@
 
   .card{
     background:var(--paper); border:1px solid var(--line); border-radius:16px;
-    padding:16px; margin-bottom:14px; backdrop-filter:blur(20px);
+    padding:16px; margin-bottom:14px;
     box-shadow:0 8px 32px rgba(0,0,0,0.25);
   }
   .card h2{font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:8px; color:#fff;}
@@ -127,7 +125,7 @@
   .neg{color:var(--loss); font-weight:700;}
 
   .statgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-bottom:14px;}
-  .stat{background:var(--paper); color:var(--ink); border-radius:16px; padding:12px; position:relative; overflow:hidden; border:1px solid var(--line); backdrop-filter:blur(20px);}
+  .stat{background:var(--paper); color:var(--ink); border-radius:16px; padding:12px; position:relative; overflow:hidden; border:1px solid var(--line);}
   .stat .val{font-family:'Space Grotesk'; font-size:22px; font-weight:800; background:linear-gradient(90deg,#C4B5FD,#F9A8D4); -webkit-background-clip:text; background-clip:text; color:transparent;}
   .stat .lbl{font-size:10px; text-transform:uppercase; letter-spacing:0.05em; color:var(--header-muted); margin-top:2px;}
 
