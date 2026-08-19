@@ -200,7 +200,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
   <div class="view active" id="view-dashboard">
     <div id="dashHero" style="text-align:center; padding:24px 10px 20px;">
       <div style="font-family:'Space Grotesk'; font-weight:700; font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:#D8B4FE; margin-bottom:6px;">Panel del Tipster</div>
-      <div id="dashHeroNum" style="font-family:'Space Grotesk'; font-weight:800; font-size:52px; line-height:1; background:linear-gradient(90deg,#C4B5FD,#F9A8D4); -webkit-background-clip:text; background-clip:text; color:transparent;">—</div>
+      <div id="dashHeroNum" style="font-family:'Space Grotesk'; font-weight:800; font-size:44px; line-height:1; background:linear-gradient(90deg,#C4B5FD,#F9A8D4); -webkit-background-clip:text; background-clip:text; color:transparent;">—</div>
       <div style="font-size:11px; color:var(--header-muted); text-transform:uppercase; letter-spacing:0.08em; margin-top:6px;">Banca actual</div>
     </div>
     <div class="statgrid" id="dashStats"></div>
@@ -2562,7 +2562,7 @@ function renderDashboard(){
   // los numeros principales se actualizan siempre primero, antes de tocar ningun grafico,
   // para que un fallo al dibujar un grafico nunca deje la banca/ROI desactualizados
   const heroEl = document.getElementById('dashHeroNum');
-  if(heroEl) heroEl.textContent = bank.toFixed(0)+'€';
+  if(heroEl) heroEl.textContent = bank.toFixed(2)+'€';
   const statsEl = document.getElementById('dashStats');
   if(statsEl) statsEl.innerHTML = `
     <div class="stat"><div class="val" style="background:none; -webkit-text-fill-color:${roi>=0?'#A855F7':'#FB7185'}; color:${roi>=0?'#A855F7':'#FB7185'};">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="lbl">ROI (vs banca inicial)</div></div>
