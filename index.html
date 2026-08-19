@@ -2547,7 +2547,6 @@ function calcKelly(){
 // ---------- dashboard ----------
 let bankChartInstance = null;
 function renderDashboard(){
-  renderClvChart();
   const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
   const totalStaked = settled.reduce((s,b)=>s+b.stake,0);
   const totalPL = settled.reduce((s,b)=>s+betPL(b),0);
@@ -2558,27 +2557,18 @@ function renderDashboard(){
   const avgClv = clvVals.length? clvVals.reduce((a,b)=>a+b,0)/clvVals.length : null;
   const bank = BANKCFG.initial + totalPL;
 
-  document.getElementById('dashHeroNum').textContent = bank.toFixed(0)+'€';
-  document.getElementById('dashStats').innerHTML = `
+  // los numeros principales se actualizan siempre primero, antes de tocar ningun grafico,
+  // para que un fallo al dibujar un grafico nunca deje la banca/ROI desactualizados
+  const heroEl = document.getElementById('dashHeroNum');
+  if(heroEl) heroEl.textContent = bank.toFixed(0)+'€';
+  const statsEl = document.getElementById('dashStats');
+  if(statsEl) statsEl.innerHTML = `
     <div class="stat"><div class="val" style="background:none; -webkit-text-fill-color:${roi>=0?'#A855F7':'#FB7185'}; color:${roi>=0?'#A855F7':'#FB7185'};">${roi>=0?'+':''}${roi.toFixed(1)}%</div><div class="lbl">ROI</div></div>
     <div class="stat"><div class="val">${winRate.toFixed(0)}%</div><div class="lbl">Aciertos (${wins}/${settled.length})</div></div>
     <div class="stat"><div class="val">${avgClv!==null ? (avgClv>0?'+':'')+avgClv.toFixed(1)+'%' : '—'}</div><div class="lbl">CLV medio</div></div>
   `;
 
-  // evolution chart
-  const sorted = [...settled].sort((a,b)=>a.date.localeCompare(b.date));
-  let running = BANKCFG.initial;
-  const labels=['Inicio']; const data=[running];
-  sorted.forEach(b=>{ running += betPL(b); labels.push(b.date); data.push(running); });
-  const ctx = document.getElementById('bankChart');
-  if(bankChartInstance) bankChartInstance.destroy();
-  bankChartInstance = new Chart(ctx, {
-    type:'line',
-    data:{ labels, datasets:[{ data, borderColor:'#A855F7', backgroundColor:'rgba(168,85,247,0.18)', fill:true, tension:0.15, pointRadius:2 }] },
-    options:{ plugins:{legend:{display:false}}, scales:{ y:{ grid:{color:'rgba(255,255,255,0.15)'}, ticks:{color:'#C4B5FD'} }, x:{ grid:{display:false}, ticks:{color:'#C4B5FD'} } } }
-  });
-
-  // by market
+  // rendimiento por mercado (tabla, no depende de graficos)
   const markets = {};
   settled.forEach(b=>{
     if(!markets[b.market]) markets[b.market]={n:0,wins:0,staked:0,pl:0,clv:[]};
@@ -2588,20 +2578,42 @@ function renderDashboard(){
     const c = betCLV(b); if(c!==null) m.clv.push(c);
   });
   const tbody = document.querySelector('#marketTable tbody');
-  tbody.innerHTML='';
-  Object.entries(markets).forEach(([name,m])=>{
-    const mroi = m.staked? (m.pl/m.staked*100):0;
-    const mclv = m.clv.length? m.clv.reduce((a,b)=>a+b,0)/m.clv.length : null;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td style="font-family:Inter;font-weight:600;">${name}</td><td>${m.n}</td><td>${m.wins}</td>
-      <td class="${mroi>=0?'pos':'neg'}">${mroi>=0?'+':''}${mroi.toFixed(1)}%</td>
-      <td>${mclv!==null?(mclv>0?'+':'')+mclv.toFixed(1)+'%':'—'}</td>`;
-    tbody.appendChild(tr);
-  });
-  if(!Object.keys(markets).length){
-    tbody.innerHTML = `<tr><td colspan="5" class="empty">Aún no hay apuestas resueltas.</td></tr>`;
+  if(tbody){
+    tbody.innerHTML='';
+    Object.entries(markets).forEach(([name,m])=>{
+      const mroi = m.staked? (m.pl/m.staked*100):0;
+      const mclv = m.clv.length? m.clv.reduce((a,b)=>a+b,0)/m.clv.length : null;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td style="font-family:Inter;font-weight:600;">${name}</td><td>${m.n}</td><td>${m.wins}</td>
+        <td class="${mroi>=0?'pos':'neg'}">${mroi>=0?'+':''}${mroi.toFixed(1)}%</td>
+        <td>${mclv!==null?(mclv>0?'+':'')+mclv.toFixed(1)+'%':'—'}</td>`;
+      tbody.appendChild(tr);
+    });
+    if(!Object.keys(markets).length){
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">Aún no hay apuestas resueltas.</td></tr>`;
+    }
   }
-  renderCalibration();
+
+  // a partir de aqui, todo lo que pueda fallar (graficos) va protegido, para que nunca se lleve
+  // por delante los numeros de arriba si algo va mal
+  try{
+    const sorted = [...settled].sort((a,b)=>a.date.localeCompare(b.date));
+    let running = BANKCFG.initial;
+    const labels=['Inicio']; const data=[running];
+    sorted.forEach(b=>{ running += betPL(b); labels.push(b.date); data.push(running); });
+    const ctx = document.getElementById('bankChart');
+    if(ctx){
+      if(bankChartInstance) bankChartInstance.destroy();
+      bankChartInstance = new Chart(ctx, {
+        type:'line',
+        data:{ labels, datasets:[{ data, borderColor:'#A855F7', backgroundColor:'rgba(168,85,247,0.18)', fill:true, tension:0.15, pointRadius:2 }] },
+        options:{ plugins:{legend:{display:false}}, scales:{ y:{ grid:{color:'rgba(255,255,255,0.15)'}, ticks:{color:'#C4B5FD'} }, x:{ grid:{display:false}, ticks:{color:'#C4B5FD'} } } }
+      });
+    }
+  }catch(e){ console.error('Error dibujando el grafico de banca:', e); }
+
+  try{ renderClvChart(); }catch(e){ console.error('Error dibujando el grafico de CLV:', e); }
+  try{ renderCalibration(); }catch(e){ console.error('Error dibujando la calibracion:', e); }
 }
 function renderCrossLeaguePicks(){ /* eliminado del Panel a peticion del usuario */ }
 let clvChartInstance = null;
