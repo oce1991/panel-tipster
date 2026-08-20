@@ -78,7 +78,7 @@
   nav.tabs button .num{display:none;}
   nav.tabs button.active{color:#fff; background:rgba(168,85,247,0.18);}
 
-  main{max-width:920px; margin:0 auto; padding:18px 14px calc(130px + env(safe-area-inset-bottom));}
+  main{max-width:920px; margin:0 auto; padding:18px 14px calc(170px + env(safe-area-inset-bottom));}
   .view{display:none;}
   .view.active{display:block;}
 
@@ -591,6 +591,9 @@ function poissonPush(line,lambda){
   return poissonPMF(line,lambda);
 }
 function fmtPct(x){return (x*100).toFixed(1)+'%';}
+function escapeHtml(str){
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 function toggleCard(h2){
   const card = h2.parentElement;
   card.classList.toggle('collapsed');
@@ -1414,7 +1417,7 @@ function refreshPromoSelect(){
   if(!sel) return;
   const current = sel.value;
   const sorted = [...TEAMS].sort((a,b)=> a.liga===b.liga ? a.name.localeCompare(b.name) : a.liga.localeCompare(b.liga));
-  sel.innerHTML = sorted.map(t=>`<option value="${t.liga}||${t.name}">${t.name} (${t.liga})</option>`).join('');
+  sel.innerHTML = sorted.map(t=>`<option value="${escapeHtml(t.liga)}||${escapeHtml(t.name)}">${escapeHtml(t.name)} (${escapeHtml(t.liga)})</option>`).join('');
   if([...sel.options].some(o=>o.value===current)) sel.value = current;
   if(sel.value){
     const name = sel.value.split('||')[1];
@@ -1515,7 +1518,7 @@ function renderTeams(){
   const filterSel = document.getElementById('teamsFilter');
   const currentFilter = filterSel.value;
   const ligas = getLigasPresentes();
-  filterSel.innerHTML = '<option value="">Todas las ligas</option>' + ligas.map(l=>`<option value="${l}">${l}</option>`).join('');
+  filterSel.innerHTML = '<option value="">Todas las ligas</option>' + ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('');
   if(ligas.includes(currentFilter)) filterSel.value = currentFilter;
   const activeFilter = filterSel.value;
 
@@ -1553,7 +1556,7 @@ function refreshTeamSelects(){
   const ligaSel = document.getElementById('m_liga');
   const currentLiga = ligaSel.value;
   const ligas = getLigasPresentes();
-  ligaSel.innerHTML = ligas.map(l=>`<option value="${l}">${l}</option>`).join('');
+  ligaSel.innerHTML = ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('');
   if(ligas.includes(currentLiga)) ligaSel.value = currentLiga;
   refreshMatchTeamSelects();
   refreshBetLigaSelect();
@@ -1565,7 +1568,7 @@ function refreshBetLigaSelect(){
   const baseLigas = ['Primera','Segunda','1ª RFEF - Grupo 1','1ª RFEF - Grupo 2','Premier League','Championship','Ligue 1','Serie A','Eredivisie','Süper Lig'];
   const extra = [...new Set([...getLigasPresentes(), ...FIXTURES.map(f=>f.liga)])].filter(l=>!baseLigas.includes(l));
   const allLigas = [...baseLigas, ...extra.sort(), 'Otra'];
-  sel.innerHTML = allLigas.map(l=>`<option value="${l}">${l}</option>`).join('');
+  sel.innerHTML = allLigas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('');
   if(allLigas.includes(current)) sel.value = current;
   refreshBacktestLigaSelect();
 }
@@ -1573,7 +1576,7 @@ function refreshBacktestLigaSelect(){
   const sel = document.getElementById('bt_liga');
   const sel2 = document.getElementById('btc_liga');
   const ligas = Object.keys(buildCombinedMatchLogs()).sort();
-  const optsHtml = ligas.length ? ligas.map(l=>`<option value="${l}">${l}</option>`).join('') : '<option value="">— sin partidos con fecha importados —</option>';
+  const optsHtml = ligas.length ? ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('') : '<option value="">— sin partidos con fecha importados —</option>';
   if(sel){ const current = sel.value; sel.innerHTML = optsHtml; if(ligas.includes(current)) sel.value = current; }
   if(sel2){ const current2 = sel2.value; sel2.innerHTML = optsHtml; if(ligas.includes(current2)) sel2.value = current2; }
 }
@@ -1583,7 +1586,7 @@ function refreshMatchTeamSelects(){
   ['c_home','c_away'].forEach(id=>{
     const sel = document.getElementById(id);
     const current = sel.value;
-    sel.innerHTML = '<option value="">— manual —</option>' + teamsInLiga.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+    sel.innerHTML = '<option value="">— manual —</option>' + teamsInLiga.map(t=>`<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
     if(teamsInLiga.find(t=>t.id===current)) sel.value = current;
   });
   const infoEl = document.getElementById('ligaStatsInfo');
@@ -2183,7 +2186,7 @@ function refreshJornadaSelect(){
   const current = ligaSel.value;
   const ligas = [...new Set(FIXTURES.map(f=>(f.liga||'').trim()).filter(l=>l.length>0))].sort();
   const options = ['<option value="__ALL__">🔍 Todas las ligas (buscador)</option>']
-    .concat(ligas.map(l=>`<option value="${l}">${l}</option>`));
+    .concat(ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`));
   ligaSel.innerHTML = ligas.length ? options.join('') : '<option value="">— sin calendarios —</option>';
   if(current && (current==='__ALL__' || ligas.includes(current))) ligaSel.value = current;
   refreshJornadaOptions();
