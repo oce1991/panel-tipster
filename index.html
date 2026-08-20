@@ -2181,7 +2181,7 @@ function refreshJornadaSelect(){
   const ligaSel = document.getElementById('jr_liga');
   if(!ligaSel) return;
   const current = ligaSel.value;
-  const ligas = [...new Set(FIXTURES.map(f=>f.liga))].sort();
+  const ligas = [...new Set(FIXTURES.map(f=>(f.liga||'').trim()).filter(l=>l.length>0))].sort();
   const options = ['<option value="__ALL__">🔍 Todas las ligas (buscador)</option>']
     .concat(ligas.map(l=>`<option value="${l}">${l}</option>`));
   ligaSel.innerHTML = ligas.length ? options.join('') : '<option value="">— sin calendarios —</option>';
@@ -2266,6 +2266,11 @@ function renderJornada(){
     `;
     container.appendChild(div);
   });
+  if(matches.length){
+    const spacer = document.createElement('div');
+    spacer.style.height = '20px';
+    container.appendChild(spacer);
+  }
 }
 function openMatchDetail(fxId){
   const fx = FIXTURES.find(f=>f.id===fxId);
@@ -2823,5 +2828,4 @@ async function boot(){
 boot();
 </script>
 </body>
-<!-- refresh-cache -->
 </html>
