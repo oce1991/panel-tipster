@@ -2254,17 +2254,26 @@ function renderJornada(){
     const tc = isPicked ? 'color:#0A2B20;' : '';
     const div = document.createElement('div');
     div.className = 'result-box';
-    div.style.cssText = 'margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer;';
+    div.style.cssText = 'margin-bottom:8px; display:flex; align-items:flex-start; justify-content:space-between; gap:10px; cursor:pointer;';
     div.title = 'Toca la fila para marcar/desmarcar como pick';
     if(isPicked){
       div.style.background = '#39FF14';
       div.style.borderColor = '#2ecc0f';
     }
     div.onclick = (e) => { if(!e.target.closest('.detail-btn')) toggleMatchPick(fx.id); };
+    let statsLine = '';
+    if(!sinDatos){
+      const corners = predictCorners(home, away, matchLiga, 9.5);
+      const goals = predictGoals(home, away, matchLiga, 2.5);
+      statsLine = `<p style="margin:5px 0 0; font-family:'JetBrains Mono'; font-size:11.5px; ${tc}">
+        🚩 ${corners.total.toFixed(1)} córners · Over 9.5: ${fmtPct(corners.pOver)} &nbsp;·&nbsp; ⚽ ${(goals.lh+goals.la).toFixed(1)} goles · 1X2: ${fmtPct(goals.p1)}/${fmtPct(goals.pX)}/${fmtPct(goals.p2)}
+      </p>`;
+    }
     div.innerHTML = `
       <div style="flex:1; min-width:0;">
         <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; ${tc} overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${fx.local} vs ${fx.visitante}</p>
         <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${fx.fecha||''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado' : ''}</p>
+        ${statsLine}
       </div>
       ${!sinDatos ? `<button class="btn detail-btn" onclick="event.stopPropagation(); openMatchDetail('${fx.id}')" style="flex-shrink:0; padding:8px 12px; font-size:11px; white-space:nowrap;">Ver →</button>` : ''}
     `;
