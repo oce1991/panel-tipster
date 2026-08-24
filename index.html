@@ -480,6 +480,13 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <div><label>Liga</label><select id="jr_liga" onchange="refreshJornadaSelect()"></select></div>
         <div><label>Jornada</label><select id="jr_jornada" onchange="renderJornada()"></select></div>
       </div>
+      <label>Ordenar por</label>
+      <select id="jr_sort" onchange="renderJornada()">
+        <option value="default">Sin ordenar (por fecha)</option>
+        <option value="corners">Córners — probabilidad Over 9.5 (mayor a menor)</option>
+        <option value="goals">Goles — probabilidad Over 2.5 (mayor a menor)</option>
+        <option value="cards">Tarjetas — probabilidad Over 4.5 (mayor a menor)</option>
+      </select>
       <div id="jornadaMatches"></div>
       <div class="empty" id="jornadaEmpty" style="display:none;">No hay calendario importado todavía para esta liga.</div>
     </div>
@@ -2240,18 +2247,42 @@ function refreshJornadaOptions(){
 function renderJornada(){
   const liga = document.getElementById('jr_liga').value;
   const jornada = document.getElementById('jr_jornada').value;
+  const sortMode = document.getElementById('jr_sort').value;
   const container = document.getElementById('jornadaMatches');
   const emptyEl = document.getElementById('jornadaEmpty');
   const crossLiga = liga === '__ALL__';
   const matches = FIXTURES.filter(f=> f.jornada===jornada && (crossLiga || f.liga===liga));
   emptyEl.style.display = matches.length ? 'none' : 'block';
   container.innerHTML = '';
-  matches.forEach(fx=>{
+
+  let enriched = matches.map(fx=>{
     const matchLiga = fx.liga;
     const home = findTeamInLiga(fx.local, matchLiga);
     const away = findTeamInLiga(fx.visitante, matchLiga);
-    const isPicked = PICKED_MATCHES.has(fx.id);
     const sinDatos = !home || !away;
+    let corners=null, goals=null, cards=null;
+    if(!sinDatos){
+      corners = predictCorners(home, away, matchLiga, 9.5);
+      goals = predictGoals(home, away, matchLiga, 2.5);
+      cards = predictCards(home, away, 4.5);
+    }
+    return {fx, matchLiga, home, away, sinDatos, corners, goals, cards};
+  });
+
+  if(sortMode!=='default'){
+    const probKey = sortMode==='corners' ? m=>m.corners && m.corners.pOver
+      : sortMode==='goals' ? m=>m.goals && m.goals.pOver
+      : m=>m.cards && m.cards.pOver;
+    enriched.sort((a,b)=>{
+      const pa = probKey(a), pb = probKey(b);
+      if(pa===null || pa===undefined) return 1; // sin datos, siempre al final
+      if(pb===null || pb===undefined) return -1;
+      return pb-pa; // mayor a menor
+    });
+  }
+
+  enriched.forEach(({fx, matchLiga, home, away, sinDatos, corners, goals, cards})=>{
+    const isPicked = PICKED_MATCHES.has(fx.id);
     const tc = isPicked ? 'color:#0A2B20;' : '';
     const div = document.createElement('div');
     div.className = 'result-box';
@@ -2264,10 +2295,9 @@ function renderJornada(){
     div.onclick = (e) => { if(!e.target.closest('.detail-btn')) toggleMatchPick(fx.id); };
     let statsLine = '';
     if(!sinDatos){
-      const corners = predictCorners(home, away, matchLiga, 9.5);
-      const goals = predictGoals(home, away, matchLiga, 2.5);
       statsLine = `<p style="margin:5px 0 0; font-family:'JetBrains Mono'; font-size:11.5px; ${tc}">
         🚩 ${corners.total.toFixed(1)} córners · Over 9.5: ${fmtPct(corners.pOver)} &nbsp;·&nbsp; ⚽ ${(goals.lh+goals.la).toFixed(1)} goles · 1X2: ${fmtPct(goals.p1)}/${fmtPct(goals.pX)}/${fmtPct(goals.p2)}
+        ${cards.pOver!==null ? `<br>🟨 ${cards.total.toFixed(1)} tarjetas · Over 4.5: ${fmtPct(cards.pOver)}` : ''}
       </p>`;
     }
     div.innerHTML = `
