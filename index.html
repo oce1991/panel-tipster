@@ -427,6 +427,14 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <div><label>λ esperado — Visitante</label><input id="cr_la" type="number" step="0.1"></div>
       </div>
       <button class="btn" onclick="loadCardsFromTeams()">Cargar medias de tarjetas de la ficha</button>
+      <div id="foulAdjustInfo" style="margin-top:4px;"></div>
+      <label style="margin-top:10px;">Árbitro (opcional — consulta manual, no se sabe de antemano)</label>
+      <div style="display:flex; gap:8px;">
+        <input id="cr_referee" type="text" list="refereeList" placeholder="Escribe o elige un árbitro conocido" style="flex:1;">
+        <button class="btn" onclick="lookupReferee()" style="flex-shrink:0;">Consultar</button>
+      </div>
+      <datalist id="refereeList"></datalist>
+      <div id="refereeResult" style="margin-top:4px;"></div>
       <div class="grid3">
         <div><label>Línea over/under (total)</label><input id="cr_line" type="number" step="0.5" value="4.5"></div>
         <div><label>Cuota Over</label><input id="cr_oddOver" type="number" step="0.01" placeholder="1.90"></div>
@@ -630,7 +638,7 @@ let BETS = [];
 let BANKCFG = {initial:1000, fraction:0.25, minEV:3};
 let FIXTURES = []; // {id, liga, jornada, fecha, local, visitante}
 let PICKED_MATCHES = new Set(); // ids de partidos marcados en Jornada
-function blankSide(){ return {mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0,crmp:0,crf:0,cra:0,shmp:0,shf:0,sha:0,sotf:0,sota:0}; }
+function blankSide(){ return {mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0,crmp:0,crf:0,cra:0,shmp:0,shf:0,sha:0,sotf:0,sota:0,fmp:0,fl:0}; }
 
 // ---------- Supabase storage layer ----------
 let sbClient = null;
@@ -725,6 +733,7 @@ function recomputeLeagueStats(){
   const acc = {};
   const accSc = {};
   const accSh = {};
+  const accFl = {};
   SEASON_IMPORTS.forEach(imp=>{
     const w = imp.weight;
     if(imp.regression && imp.regression.n){
@@ -743,6 +752,11 @@ function recomputeLeagueStats(){
       const a = accSh[imp.liga]; const r = imp.shotStats;
       a.n += r.n*w; a.sumX += r.sumX*w; a.sumY += r.sumY*w; a.sumXY += r.sumXY*w; a.sumX2 += r.sumX2*w;
       a.nConv += r.nConv*w; a.sumSOT += r.sumSOT*w; a.sumGoalsConv += r.sumGoalsConv*w;
+    }
+    if(imp.foulStats && imp.foulStats.nCards){
+      if(!accFl[imp.liga]) accFl[imp.liga] = {nCards:0, sumFouls:0, sumCardsConv:0};
+      const a = accFl[imp.liga]; const r = imp.foulStats;
+      a.nCards += r.nCards*w; a.sumFouls += r.sumFouls*w; a.sumCardsConv += r.sumCardsConv*w;
     }
   });
   LEAGUE_STATS = {};
@@ -774,6 +788,13 @@ function recomputeLeagueStats(){
     if(a.nConv >= 20 && a.sumSOT>0){
       LEAGUE_STATS[liga].conversionRate = a.sumGoalsConv/a.sumSOT; // goles por tiro a puerta, a nivel liga
       LEAGUE_STATS[liga].convN = Math.round(a.nConv);
+    }
+  });
+  Object.entries(accFl).forEach(([liga,a])=>{
+    if(!LEAGUE_STATS[liga]) LEAGUE_STATS[liga] = {};
+    if(a.nCards >= 20 && a.sumFouls>0){
+      LEAGUE_STATS[liga].cardsPerFoul = a.sumCardsConv/a.sumFouls; // tarjetas por falta cometida, a nivel liga
+      LEAGUE_STATS[liga].foulN = Math.round(a.nCards);
     }
   });
 }
@@ -972,6 +993,7 @@ function recomputeTeams(){
     s.crmp += (sums.crmp||0)*weight; s.crf += (sums.crf||0)*weight; s.cra += (sums.cra||0)*weight;
     s.shmp += (sums.shmp||0)*weight; s.shf += (sums.shf||0)*weight; s.sha += (sums.sha||0)*weight;
     s.sotf += (sums.sotf||0)*weight; s.sota += (sums.sota||0)*weight;
+    s.fmp += (sums.fmp||0)*weight; s.fl += (sums.fl||0)*weight;
   }
   MANUAL_TEAMS.forEach(t=>{
     const e = ensure(t.liga, t.name);
@@ -1012,6 +1034,8 @@ function recomputeTeams(){
       sotfa: e.away.shmp ? e.away.sotf/e.away.shmp : 0,
       sotaa: e.away.shmp ? e.away.sota/e.away.shmp : 0,
       shMatches: {h: e.home.shmp, a: e.away.shmp},
+      flh: e.home.fmp ? e.home.fl/e.home.fmp : 0,
+      fla: e.away.fmp ? e.away.fl/e.away.fmp : 0,
     };
     let recentInfo = null;
     const logs = combinedLogs[e.liga];
@@ -1048,8 +1072,8 @@ function recomputeTeams(){
 const SHRINKAGE_K = 15; // "partidos" de peso que le damos a la media de liga frente a los datos propios del equipo
 function applyShrinkage(){
   const ligas = [...new Set(TEAMS.map(t=>t.liga))];
-  const FIELDS_HOME = ['cfh','cah','gfh','gah','crfh','crah','shfh','shah','sotfh','sotah'];
-  const FIELDS_AWAY = ['cfa','caa','gfa','gaa','crfa','craa','shfa','shaa','sotfa','sotaa'];
+  const FIELDS_HOME = ['cfh','cah','gfh','gah','crfh','crah','shfh','shah','sotfh','sotah','flh'];
+  const FIELDS_AWAY = ['cfa','caa','gfa','gaa','crfa','craa','shfa','shaa','sotfa','sotaa','fla'];
   ligas.forEach(liga=>{
     const inLiga = TEAMS.filter(t=>t.liga===liga);
     const avg = {};
@@ -1109,6 +1133,9 @@ const CSV_ALIASES = {
   oddA: ['avga','b365a','psa','maxa'],
   oddO25: ['avg>2.5','b365>2.5','p>2.5','max>2.5'],
   oddU25: ['avg<2.5','b365<2.5','p<2.5','max<2.5'],
+  hf:   ['hf','homefouls','faltaslocal'],
+  af:   ['af','awayfouls','faltasvisitante'],
+  referee: ['referee','arbitro','árbitro'],
   date: ['date','fecha']
 };
 function findCol(headers, aliases){
@@ -1150,6 +1177,9 @@ function parseCSVText(text){
   const iOddA = findCol(headers, CSV_ALIASES.oddA);
   const iOddO25 = findCol(headers, CSV_ALIASES.oddO25);
   const iOddU25 = findCol(headers, CSV_ALIASES.oddU25);
+  const iHf = findCol(headers, CSV_ALIASES.hf);
+  const iAf = findCol(headers, CSV_ALIASES.af);
+  const iReferee = findCol(headers, CSV_ALIASES.referee);
   const iDate = findCol(headers, CSV_ALIASES.date);
   if(iHome===-1 || iAway===-1 || iFthg===-1 || iFtag===-1){
     return {rows:null, error:'No se han encontrado las columnas de equipos/goles esperadas (HomeTeam, AwayTeam, FTHG, FTAG).'};
@@ -1177,6 +1207,9 @@ function parseCSVText(text){
     const oddA = iOddA!==-1 ? parseFloat(cols[iOddA]) : NaN;
     const oddO25 = iOddO25!==-1 ? parseFloat(cols[iOddO25]) : NaN;
     const oddU25 = iOddU25!==-1 ? parseFloat(cols[iOddU25]) : NaN;
+    const hf = iHf!==-1 ? parseInt(cols[iHf]) : NaN;
+    const af = iAf!==-1 ? parseInt(cols[iAf]) : NaN;
+    const referee = iReferee!==-1 ? (cols[iReferee]||'').trim() : '';
     const dateSort = iDate!==-1 ? parseDateToSortable(cols[iDate]||'') : null;
     rows.push({
       home,away,fthg,ftag,
@@ -1187,10 +1220,11 @@ function parseCSVText(text){
       hst: isNaN(hst)?null:hst, ast: isNaN(ast)?null:ast,
       oddH: isNaN(oddH)?null:oddH, oddD: isNaN(oddD)?null:oddD, oddA: isNaN(oddA)?null:oddA,
       oddO25: isNaN(oddO25)?null:oddO25, oddU25: isNaN(oddU25)?null:oddU25,
+      hf: isNaN(hf)?null:hf, af: isNaN(af)?null:af, referee: referee||null,
       dateSort
     });
   }
-  return {rows, missingCorners: iHc===-1 || iAc===-1, missingCards: iHy===-1 && iHr===-1, missingShots: iHs===-1 && iHst===-1, missingOdds: iOddH===-1 && iOddO25===-1};
+  return {rows, missingCorners: iHc===-1 || iAc===-1, missingCards: iHy===-1 && iHr===-1, missingShots: iHs===-1 && iHst===-1, missingOdds: iOddH===-1 && iOddO25===-1, missingFouls: iHf===-1 && iAf===-1};
 }
 function computeScorelineSums(rows){
   let n=0, sumHome=0, sumAway=0, c00=0, c10=0, c01=0, c11=0;
@@ -1231,6 +1265,15 @@ function computeShotSums(rows){
   });
   return {n,sumX,sumY,sumXY,sumX2,nConv,sumSOT,sumGoalsConv};
 }
+function computeFoulSums(rows){
+  // tasa de conversion tarjetas/falta a nivel liga (dos observaciones por partido: cada equipo con sus propias faltas y sus propias tarjetas)
+  let nCards=0, sumFouls=0, sumCardsConv=0;
+  rows.forEach(r=>{
+    if(r.hf!==null && r.hCards!==null){ nCards++; sumFouls+=r.hf; sumCardsConv+=r.hCards; }
+    if(r.af!==null && r.aCards!==null){ nCards++; sumFouls+=r.af; sumCardsConv+=r.aCards; }
+  });
+  return {nCards, sumFouls, sumCardsConv};
+}
 function aggregateRows(rows){
   const groups = {}; // name -> {home:{mp,gf,ga,cmp,cf,ca,crmp,crf,cra,shmp,shf,sha,sotf,sota}, away:{...}}
   function ensure(name){
@@ -1257,6 +1300,8 @@ function aggregateRows(rows){
         a.away.sotf+=r.ast; a.away.sota+=r.hst;
       }
     }
+    if(r.hf!==null){ h.home.fmp++; h.home.fl+=r.hf; }
+    if(r.af!==null){ a.away.fmp++; a.away.fl+=r.af; }
   });
   return groups;
 }
@@ -1291,13 +1336,15 @@ function importParsedIntoSeason(liga, temporada, weight, parsed){
   const regression = computeRegressionSums(parsed.rows);
   const scorelines = computeScorelineSums(parsed.rows);
   const shotStats = computeShotSums(parsed.rows);
+  const foulStats = computeFoulSums(parsed.rows);
   const matchLog = parsed.rows.filter(r=>r.dateSort).map(r=>({
     d: r.dateSort, h: r.home, a: r.away, hg: r.fthg, ag: r.ftag, hc: r.hc, ac: r.ac,
-    oH: r.oddH, oD: r.oddD, oA: r.oddA, oO25: r.oddO25, oU25: r.oddU25
+    oH: r.oddH, oD: r.oddD, oA: r.oddA, oO25: r.oddO25, oU25: r.oddU25,
+    hf: r.hf, af: r.af, hCards: r.hCards, aCards: r.aCards, ref: r.referee
   }));
   const key = liga.toLowerCase()+'||'+temporada.toLowerCase();
   const existingIdx = SEASON_IMPORTS.findIndex(i => (i.liga.toLowerCase()+'||'+i.temporada.toLowerCase())===key);
-  const record = { id: existingIdx!==-1 ? SEASON_IMPORTS[existingIdx].id : Date.now().toString()+Math.random().toString(36).slice(2,6), liga, temporada, weight, groups, regression, scorelines, shotStats, matchLog };
+  const record = { id: existingIdx!==-1 ? SEASON_IMPORTS[existingIdx].id : Date.now().toString()+Math.random().toString(36).slice(2,6), liga, temporada, weight, groups, regression, scorelines, shotStats, foulStats, matchLog };
   if(existingIdx!==-1) SEASON_IMPORTS[existingIdx] = record; else SEASON_IMPORTS.push(record);
   return matchLog.length;
 }
@@ -1373,7 +1420,7 @@ async function importCSV(){
     return;
   }
   const resultLines = [];
-  let anyMatchLog = false, anyMissingCorners = false, anyHasCards = false, anyHasShots = false;
+  let anyMatchLog = false, anyMissingCorners = false, anyHasCards = false, anyHasShots = false, anyHasFouls = false;
   for(const file of files){
     const temporada = (files.length===1 && manualTemporada) ? manualTemporada : (extractSeasonFromFilename(file.name) || file.name.replace(/\.[^.]+$/,''));
     const text = await file.text();
@@ -1386,18 +1433,21 @@ async function importCSV(){
     const regression = computeRegressionSums(parsed.rows);
     const scorelines = computeScorelineSums(parsed.rows);
     const shotStats = computeShotSums(parsed.rows);
+    const foulStats = computeFoulSums(parsed.rows);
     const matchLog = parsed.rows.filter(r=>r.dateSort).map(r=>({
       d: r.dateSort, h: r.home, a: r.away, hg: r.fthg, ag: r.ftag,
       hc: r.hc, ac: r.ac,
-      oH: r.oddH, oD: r.oddD, oA: r.oddA, oO25: r.oddO25, oU25: r.oddU25
+      oH: r.oddH, oD: r.oddD, oA: r.oddA, oO25: r.oddO25, oU25: r.oddU25,
+      hf: r.hf, af: r.af, hCards: r.hCards, aCards: r.aCards, ref: r.referee
     }));
     if(matchLog.length) anyMatchLog = true;
     if(parsed.missingCorners) anyMissingCorners = true;
     if(!parsed.missingCards) anyHasCards = true;
     if(!parsed.missingShots) anyHasShots = true;
+    if(!parsed.missingFouls) anyHasFouls = true;
     const key = liga.toLowerCase()+'||'+temporada.toLowerCase();
     const existingIdx = SEASON_IMPORTS.findIndex(i => (i.liga.toLowerCase()+'||'+i.temporada.toLowerCase())===key);
-    const record = { id: existingIdx!==-1 ? SEASON_IMPORTS[existingIdx].id : Date.now().toString()+Math.random().toString(36).slice(2,6), liga, temporada, weight, groups, regression, scorelines, shotStats, matchLog };
+    const record = { id: existingIdx!==-1 ? SEASON_IMPORTS[existingIdx].id : Date.now().toString()+Math.random().toString(36).slice(2,6), liga, temporada, weight, groups, regression, scorelines, shotStats, foulStats, matchLog };
     const wasReplace = existingIdx!==-1;
     if(existingIdx!==-1) SEASON_IMPORTS[existingIdx] = record; else SEASON_IMPORTS.push(record);
     resultLines.push(`<p><strong>${file.name}</strong> → temporada <strong>${temporada}</strong>: ${parsed.rows.length} partidos${wasReplace ? ' (sustituida la anterior)' : ''}${parsed.missingCorners ? ' — sin córners' : ''}${parsed.missingCards ? ' — sin tarjetas' : ' — con tarjetas ✓'}${matchLog.length ? ' — con fechas ✓' : ' — sin fechas'}</p>`);
@@ -1409,6 +1459,7 @@ async function importCSV(){
     (anyMissingCorners ? '<p class="hint">Algún archivo no traía columnas de córners (HC/AC) — de esos solo se han importado los goles.</p>' : '') +
     (anyHasCards ? '<p class="hint">Tarjetas detectadas — ya puedes usar la calculadora de tarjetas en 03 Partido para estos equipos.</p>' : '<p class="hint">Ningún archivo traía columnas de tarjetas (amarillas/rojas) — el mercado de tarjetas no tendrá datos para estos equipos hasta que reimportes un CSV que las incluya.</p>') +
     (anyHasShots ? '<p class="hint">Tiros y tiros a puerta detectados — se usarán para afinar el modelo de goles y para probar si correlacionan mejor con los córners que los goles.</p>' : '<p class="hint">Ningún archivo traía columnas de tiros (HS/AS/HST/AST) — esa mejora no estará disponible para estos equipos hasta que reimportes un CSV que las incluya.</p>') +
+    (anyHasFouls ? '<p class="hint">Faltas detectadas — se usarán para afinar el modelo de tarjetas.</p>' : '<p class="hint">Ningún archivo traía columnas de faltas (HF/AF) — el ajuste por faltas del modelo de tarjetas no estará disponible hasta que reimportes un CSV que las incluya.</p>') +
     (anyMatchLog ? '<p class="hint">Fechas detectadas — se usarán para calcular la forma reciente de cada equipo.</p>' : '<p class="hint">Ningún archivo traía columna de fecha reconocible — no se podrá calcular forma reciente con estos datos, solo la media de toda la temporada.</p>');
   fileInput.value = '';
 }
@@ -1804,10 +1855,59 @@ function loadCardsFromTeams(){
   const h = TEAMS.find(t=>t.id===document.getElementById('c_home').value);
   const a = TEAMS.find(t=>t.id===document.getElementById('c_away').value);
   if(!h || !a){ alert('Selecciona local y visitante en el selector de arriba (Córners)'); return; }
-  const lh = ((h.crfh||0) + (a.craa||0))/2;
-  const la = ((a.crfa||0) + (h.crah||0))/2;
+  const rawLh = ((h.crfh||0) + (a.craa||0))/2;
+  const rawLa = ((a.crfa||0) + (h.crah||0))/2;
+  const liga = document.getElementById('m_liga').value;
+  const stats = LEAGUE_STATS[liga];
+  let lh = rawLh, la = rawLa;
+  let foulNote = '';
+  if(!stats || typeof stats.cardsPerFoul!=='number'){
+    foulNote = `<p class="hint">Sin ajuste por faltas: ${liga||'esta liga'} aún no tiene suficientes partidos con columnas de faltas (HF/AF) importados (se necesitan ≥20). ${stats && stats.foulN ? `Ahora mismo tiene ${stats.foulN}.` : 'Ahora mismo tiene 0.'}</p>`;
+  } else if(!h.flh || !a.fla){
+    const falta = [!h.flh?h.name:null, !a.fla?a.name:null].filter(Boolean).join(' y ');
+    foulNote = `<p class="hint">Sin ajuste por faltas: la liga sí tiene datos, pero la ficha de <strong>${falta}</strong> no tiene faltas cometidas calculadas.</p>`;
+  } else {
+    const impliedLh = h.flh * stats.cardsPerFoul;
+    const impliedLa = a.fla * stats.cardsPerFoul;
+    lh = FOUL_BLEND_WEIGHT*impliedLh + (1-FOUL_BLEND_WEIGHT)*rawLh;
+    la = FOUL_BLEND_WEIGHT*impliedLa + (1-FOUL_BLEND_WEIGHT)*rawLa;
+    foulNote = `<p class="hint">Ajuste por faltas cometidas (${(FOUL_BLEND_WEIGHT*100).toFixed(0)}% de peso, conversión real de ${liga}: ${stats.cardsPerFoul.toFixed(3)} tarjetas/falta sobre ${stats.foulN} observaciones): λ local ${rawLh.toFixed(2)}→${lh.toFixed(2)}, λ visitante ${rawLa.toFixed(2)}→${la.toFixed(2)}.</p>`;
+  }
   document.getElementById('cr_lh').value = lh.toFixed(2);
   document.getElementById('cr_la').value = la.toFixed(2);
+  const foulInfoEl = document.getElementById('foulAdjustInfo');
+  if(foulInfoEl) foulInfoEl.innerHTML = foulNote;
+  refreshRefereeList(liga);
+}
+function refreshRefereeList(liga){
+  const listEl = document.getElementById('refereeList');
+  if(!listEl) return;
+  const refs = new Set();
+  SEASON_IMPORTS.forEach(imp=>{
+    if(imp.liga!==liga || !imp.matchLog) return;
+    imp.matchLog.forEach(m=>{ if(m.ref) refs.add(m.ref); });
+  });
+  listEl.innerHTML = [...refs].sort().map(r=>`<option value="${escapeHtml(r)}"></option>`).join('');
+}
+function lookupReferee(){
+  const name = document.getElementById('cr_referee').value.trim();
+  const box = document.getElementById('refereeResult');
+  box.style.display = 'block';
+  if(!name){ box.innerHTML = '<p class="hint">Escribe el nombre de un árbitro.</p>'; return; }
+  const liga = document.getElementById('m_liga').value;
+  let n=0, sumCards=0;
+  SEASON_IMPORTS.forEach(imp=>{
+    if(imp.liga!==liga || !imp.matchLog) return;
+    imp.matchLog.forEach(m=>{
+      if(m.ref && m.ref.toLowerCase()===name.toLowerCase() && m.hCards!==null && m.aCards!==null){
+        n++; sumCards += m.hCards+m.aCards;
+      }
+    });
+  });
+  if(!n){ box.innerHTML = `<p class="hint">No encuentro partidos arbitrados por "${escapeHtml(name)}" en ${liga} con datos de tarjetas. Revisa que esté escrito igual que en el CSV.</p>`; return; }
+  const avgRef = sumCards/n;
+  box.innerHTML = `<p style="font-family:'Space Grotesk'; font-weight:700; font-size:15px;">${escapeHtml(name)}: ${avgRef.toFixed(2)} tarjetas/partido de media (${n} partidos arbitrados en ${liga})</p>
+    <p class="hint">Esto es informativo — no se mezcla automáticamente en el cálculo de arriba, porque para partidos futuros normalmente no se sabe el árbitro con antelación. Si lo tienes confirmado, puedes usarlo como criterio propio para ajustar la línea o la confianza en el pick.</p>`;
 }
 function calcCards(){
   const lh = parseFloat(document.getElementById('cr_lh').value);
@@ -1834,7 +1934,7 @@ function calcCards(){
     const ev = evFromProbPush(pUnder,pPush,oddUnder);
     html += `<p>Under @ ${oddUnder}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
   }
-  html += `<p class="hint">Modelo Poisson simple, sin ajustes adicionales (a diferencia de córners, aquí no hay Dixon-Coles ni ajuste por contexto de gol todavía).</p>`;
+  html += `<p class="hint">Modelo Poisson simple sobre las λ de arriba (que ya incluyen el ajuste por faltas si estaba disponible al pulsar "Cargar medias").</p>`;
   const box = document.getElementById('cardsResult');
   box.style.display='block'; box.innerHTML = html;
 }
@@ -2092,15 +2192,23 @@ function predictCorners(homeTeam, awayTeam, liga, line){
   const pPush = poissonPush(line, total);
   return { baseTotal, total, pOver, pPush, pUnder: Math.max(0,1-pOver-pPush), expectedGoals, expectedShots };
 }
-function predictCards(homeTeam, awayTeam, line){
-  const lh = ((homeTeam.crfh||0) + (awayTeam.craa||0))/2;
-  const la = ((awayTeam.crfa||0) + (homeTeam.crah||0))/2;
+const FOUL_BLEND_WEIGHT = 0.3; // cuanto pesa la estimacion via faltas cometidas frente a las tarjetas reales
+function predictCards(homeTeam, awayTeam, line, liga){
+  const rawLh = ((homeTeam.crfh||0) + (awayTeam.craa||0))/2;
+  const rawLa = ((awayTeam.crfa||0) + (homeTeam.crah||0))/2;
+  let lh = rawLh, la = rawLa;
+  const stats = liga ? LEAGUE_STATS[liga] : null;
+  if(stats && typeof stats.cardsPerFoul==='number' && homeTeam.flh && awayTeam.fla){
+    const impliedLh = homeTeam.flh * stats.cardsPerFoul;
+    const impliedLa = awayTeam.fla * stats.cardsPerFoul;
+    lh = FOUL_BLEND_WEIGHT*impliedLh + (1-FOUL_BLEND_WEIGHT)*rawLh;
+    la = FOUL_BLEND_WEIGHT*impliedLa + (1-FOUL_BLEND_WEIGHT)*rawLa;
+  }
   const total = lh+la;
   const pOver = (lh>0 && la>0) ? poissonOver(line, total) : null;
   const pPush = (lh>0 && la>0) ? poissonPush(line, total) : null;
-  return { lh, la, total, pOver, pPush, pUnder: pOver!==null ? Math.max(0,1-pOver-pPush) : null };
+  return { lh, la, total, pOver, pPush, pUnder: pOver!==null ? Math.max(0,1-pOver-pPush) : null, rawLh, rawLa };
 }
-const SHOT_BLEND_WEIGHT = 0.3; // cuanto pesa la estimacion via tiros a puerta frente a los goles reales
 function predictGoals(homeTeam, awayTeam, liga, line){
   const rawLh = (homeTeam.gfh + awayTeam.gaa)/2;
   const rawLa = (awayTeam.gfa + homeTeam.gah)/2;
@@ -2264,7 +2372,7 @@ function renderJornada(){
     if(!sinDatos){
       corners = predictCorners(home, away, matchLiga, 9.5);
       goals = predictGoals(home, away, matchLiga, 2.5);
-      cards = predictCards(home, away, 4.5);
+      cards = predictCards(home, away, 4.5, matchLiga);
     }
     return {fx, matchLiga, home, away, sinDatos, corners, goals, cards};
   });
