@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/twemoji.min.js"></script>
 <style>
   :root{
     --pitch:#A855F7;
@@ -108,6 +109,23 @@
   }
   input:focus,select:focus{outline:2px solid var(--amber); outline-offset:1px;}
   select option{color:#1a1a1a; background:#fff;}
+  .custom-select-wrapper{position:relative; margin-bottom:10px;}
+  .custom-select-trigger{
+    width:100%; padding:8px 9px; border:1px solid var(--line); border-radius:8px;
+    background:rgba(255,255,255,0.06); font-family:'JetBrains Mono'; font-size:13px; color:var(--ink);
+    display:flex; align-items:center; justify-content:space-between; cursor:pointer; text-align:left;
+  }
+  .custom-select-trigger img{height:14px; vertical-align:middle; margin-right:6px;}
+  .custom-select-trigger .chev{font-size:11px; color:var(--header-muted); margin-left:6px;}
+  .custom-select-list{
+    position:absolute; top:100%; left:0; right:0; z-index:40; margin-top:4px;
+    background:#1a1a2e; border:1px solid var(--line); border-radius:10px;
+    max-height:260px; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,0.4);
+  }
+  .custom-select-opt{padding:9px 12px; font-family:'JetBrains Mono'; font-size:13px; color:#fff; cursor:pointer; display:flex; align-items:center;}
+  .custom-select-opt img{height:14px; vertical-align:middle; margin-right:8px;}
+  .custom-select-opt:hover{background:rgba(168,85,247,0.25);}
+  .custom-select-opt.sel{background:rgba(168,85,247,0.4); font-weight:700;}
 
   button.btn{
     background:rgba(255,255,255,0.08); color:var(--ink); border:1px solid var(--line); padding:10px 16px;
@@ -829,6 +847,54 @@ function ligaLabel(liga){
   const flag = LEAGUE_FLAGS[liga];
   return flag ? `${flag} ${liga}` : liga;
 }
+function twemojify(el){
+  if(window.twemoji) twemoji.parse(el, { base:'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/', folder:'svg', ext:'.svg' });
+}
+function enhanceLigaSelect(selectId){
+  const sel = document.getElementById(selectId);
+  if(!sel) return;
+  if(!sel.dataset.enhanced){
+    sel.dataset.enhanced = '1';
+    sel.style.display = 'none';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'custom-select-wrapper';
+    wrapper.id = selectId + '_customwrap';
+    sel.parentNode.insertBefore(wrapper, sel.nextSibling);
+  }
+  syncCustomLigaDropdown(selectId);
+}
+function syncCustomLigaDropdown(selectId){
+  const sel = document.getElementById(selectId);
+  const wrapper = document.getElementById(selectId + '_customwrap');
+  if(!sel || !wrapper) return;
+  const opts = [...sel.options];
+  const selected = sel.options[sel.selectedIndex];
+  wrapper.innerHTML = `
+    <button type="button" class="custom-select-trigger" onclick="toggleCustomLigaDropdown('${selectId}')">
+      <span>${selected ? escapeHtml(selected.textContent) : ''}</span><span class="chev">▾</span>
+    </button>
+    <div class="custom-select-list" id="${selectId}_customlist" style="display:none;">
+      ${opts.map((o,i)=>`<div class="custom-select-opt ${i===sel.selectedIndex?'sel':''}" onclick="pickCustomLigaOption('${selectId}', ${i})">${escapeHtml(o.textContent)}</div>`).join('')}
+    </div>
+  `;
+  twemojify(wrapper);
+}
+function toggleCustomLigaDropdown(selectId){
+  const list = document.getElementById(selectId+'_customlist');
+  if(!list) return;
+  const wasOpen = list.style.display!=='none';
+  document.querySelectorAll('.custom-select-list').forEach(l=>{ l.style.display='none'; });
+  list.style.display = wasOpen ? 'none' : 'block';
+}
+function pickCustomLigaOption(selectId, idx){
+  const sel = document.getElementById(selectId);
+  if(!sel) return;
+  sel.selectedIndex = idx;
+  sel.dispatchEvent(new Event('change'));
+}
+document.addEventListener('click', e=>{
+  if(!e.target.closest('.custom-select-wrapper')) document.querySelectorAll('.custom-select-list').forEach(l=>l.style.display='none');
+});
 const RECENT_FORM_N = 8; // ultimos N partidos (por cada lado, casa/fuera) que cuentan como "forma reciente"
 function buildCombinedMatchLogs(){
   const byLiga = {};
@@ -1523,6 +1589,7 @@ function refreshDeleteLigaSelect(){
   const ligas = sortLigas([...new Set([...TEAMS.map(t=>t.liga), ...SEASON_IMPORTS.map(i=>i.liga), ...FIXTURES.map(f=>f.liga)])]);
   sel.innerHTML = ligas.length ? ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`).join('') : '<option value="">— sin ligas cargadas —</option>';
   if(ligas.includes(current)) sel.value = current;
+  enhanceLigaSelect('delete_liga');
 }
 async function deleteWholeLiga(){
   const liga = document.getElementById('delete_liga').value;
@@ -1680,6 +1747,7 @@ function refreshTeamSelects(){
   const ligas = getLigasPresentes();
   ligaSel.innerHTML = ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`).join('');
   if(ligas.includes(currentLiga)) ligaSel.value = currentLiga;
+  enhanceLigaSelect('m_liga');
   refreshMatchTeamSelects();
   refreshBetLigaSelect();
 }
@@ -1690,6 +1758,7 @@ function refreshBetLigaSelect(){
   const allLigas = sortLigas([...new Set([...getLigasPresentes(), ...FIXTURES.map(f=>f.liga)])]);
   sel.innerHTML = allLigas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`).join('');
   if(allLigas.includes(current)) sel.value = current;
+  enhanceLigaSelect('b_liga');
   refreshBacktestLigaSelect();
 }
 function refreshBacktestLigaSelect(){
@@ -1697,8 +1766,8 @@ function refreshBacktestLigaSelect(){
   const sel2 = document.getElementById('btc_liga');
   const ligas = sortLigas(Object.keys(buildCombinedMatchLogs()));
   const optsHtml = ligas.length ? ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`).join('') : '<option value="">— sin partidos con fecha importados —</option>';
-  if(sel){ const current = sel.value; sel.innerHTML = optsHtml; if(ligas.includes(current)) sel.value = current; }
-  if(sel2){ const current2 = sel2.value; sel2.innerHTML = optsHtml; if(ligas.includes(current2)) sel2.value = current2; }
+  if(sel){ const current = sel.value; sel.innerHTML = optsHtml; if(ligas.includes(current)) sel.value = current; enhanceLigaSelect('bt_liga'); }
+  if(sel2){ const current2 = sel2.value; sel2.innerHTML = optsHtml; if(ligas.includes(current2)) sel2.value = current2; enhanceLigaSelect('btc_liga'); }
 }
 function refreshMatchTeamSelects(){
   const liga = document.getElementById('m_liga').value;
@@ -2367,6 +2436,7 @@ function refreshJornadaSelect(){
     .concat(ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`));
   ligaSel.innerHTML = ligas.length ? options.join('') : '<option value="">— sin calendarios —</option>';
   if(current && (current==='__ALL__' || ligas.includes(current))) ligaSel.value = current;
+  enhanceLigaSelect('jr_liga');
   refreshJornadaOptions();
 }
 function parseFechaLoose(str){
@@ -2494,6 +2564,7 @@ function openMatchDetail(fxId){
   switchToView('corners');
   const ligaSel = document.getElementById('m_liga');
   if([...ligaSel.options].some(o=>o.value===fx.liga)) ligaSel.value = fx.liga;
+  syncCustomLigaDropdown('m_liga');
   refreshMatchTeamSelects();
   document.getElementById('c_home').value = home.id;
   document.getElementById('c_away').value = away.id;
@@ -2517,6 +2588,7 @@ function prefillBetFromFixture(fxId){
   document.getElementById('b_match').value = `${fx.local} - ${fx.visitante}`;
   const ligaSel = document.getElementById('b_liga');
   if([...ligaSel.options].some(o=>o.value===fx.liga)) ligaSel.value = fx.liga;
+  syncCustomLigaDropdown('b_liga');
   if(fx.fecha){
     const parsed = parseFechaToISO(fx.fecha);
     if(parsed) document.getElementById('b_date').value = parsed;
@@ -3037,6 +3109,7 @@ async function boot(){
   renderDashboard();
   refreshJornadaSelect();
   refreshLineaOptions();
+  ['imp_liga','bulk_liga','promo_target','fx_liga'].forEach(enhanceLigaSelect);
 }
 boot();
 </script>
