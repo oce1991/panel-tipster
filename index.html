@@ -295,7 +295,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <p class="hint"><strong>Carga múltiple:</strong> puedes seleccionar varios archivos de golpe (misma liga). Renómbralos antes para que la app detecte la temporada de cada uno automáticamente — por ejemplo <code>SP1_2223.csv</code>, <code>SP1_2324.csv</code>, <code>SP1_2425.csv</code>, <code>SP1_2526.csv</code> (cualquier "25/26", "2526" o "25-26" en el nombre vale). El peso que pongas se aplica igual a todos los archivos de esta tanda — si quieres pesos distintos por temporada, súbelos en tandas separadas.</p>
       <div class="grid3">
         <div><label>Liga de estos archivos</label>
-          <select id="imp_liga"><option value="Primera">🇪🇸 Primera</option><option value="Segunda">🇪🇸 Segunda</option><option value="Premier League">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League</option><option value="Championship">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship</option><option value="Bundesliga">🇩🇪 Bundesliga</option><option value="Bundesliga 2">🇩🇪 Bundesliga 2</option><option value="Eredivisie">🇳🇱 Eredivisie</option><option value="Ligue 1">🇫🇷 Ligue 1</option><option value="Serie A">🇮🇹 Serie A</option><option value="Süper Lig">🇹🇷 Süper Lig</option><option value="1ª RFEF - Grupo 1">🇪🇸 1ª RFEF - Grupo 1</option><option value="1ª RFEF - Grupo 2">🇪🇸 1ª RFEF - Grupo 2</option></select>
+          <select id="imp_liga"><option value="Primera">Primera</option><option value="Segunda">Segunda</option><option value="Premier League">Premier League</option><option value="Championship">Championship</option><option value="Bundesliga">Bundesliga</option><option value="Bundesliga 2">Bundesliga 2</option><option value="Eredivisie">Eredivisie</option><option value="Ligue 1">Ligue 1</option><option value="Serie A">Serie A</option><option value="Süper Lig">Süper Lig</option><option value="1ª RFEF - Grupo 1">1ª RFEF - Grupo 1</option><option value="1ª RFEF - Grupo 2">1ª RFEF - Grupo 2</option><option value="Escocia">Escocia</option><option value="Serie B">Serie B</option><option value="Ligue 2">Ligue 2</option><option value="Bélgica">Bélgica</option><option value="Portugal">Portugal</option><option value="Grecia">Grecia</option></select>
         </div>
         <div><label>Temporada (solo si subes 1 archivo)</label><input id="imp_temporada" type="text" placeholder="25/26"></div>
         <div><label>Peso</label><input id="imp_weight" type="number" step="0.5" value="1" min="0.5"></div>
@@ -314,7 +314,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <p class="hint">Para cargar de golpe las medias de córners y goles de todos los equipos de una liga (por ejemplo, transcritas de otra web). Columnas esperadas en la primera fila: <strong>Equipo, CF Casa, CA Casa, CF Fuera, CA Fuera, GF Casa, GA Casa, GF Fuera, GA Fuera</strong> (y opcionalmente <strong>TC Casa, TA Casa, TC Fuera, TA Fuera</strong> para tarjetas) — si el archivo trae una columna "Liga" por fila, se usa esa; si no, se aplica la liga que elijas abajo a todas las filas. Si un equipo ya existe con ese nombre en esa liga, se sustituye su ficha entera — no se promedia con lo anterior.</p>
       <div class="grid2">
         <div><label>Liga (si el archivo no trae columna Liga)</label>
-          <select id="bulk_liga"><option value="Primera">🇪🇸 Primera</option><option value="Segunda">🇪🇸 Segunda</option><option value="Premier League">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League</option><option value="Championship">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship</option><option value="Bundesliga">🇩🇪 Bundesliga</option><option value="Bundesliga 2">🇩🇪 Bundesliga 2</option><option value="Eredivisie">🇳🇱 Eredivisie</option><option value="Ligue 1">🇫🇷 Ligue 1</option><option value="Serie A">🇮🇹 Serie A</option><option value="Süper Lig">🇹🇷 Süper Lig</option><option value="1ª RFEF - Grupo 1">🇪🇸 1ª RFEF - Grupo 1</option><option value="1ª RFEF - Grupo 2">🇪🇸 1ª RFEF - Grupo 2</option></select>
+          <select id="bulk_liga"><option value="Primera">Primera</option><option value="Segunda">Segunda</option><option value="Premier League">Premier League</option><option value="Championship">Championship</option><option value="Bundesliga">Bundesliga</option><option value="Bundesliga 2">Bundesliga 2</option><option value="Eredivisie">Eredivisie</option><option value="Ligue 1">Ligue 1</option><option value="Serie A">Serie A</option><option value="Süper Lig">Süper Lig</option><option value="1ª RFEF - Grupo 1">1ª RFEF - Grupo 1</option><option value="1ª RFEF - Grupo 2">1ª RFEF - Grupo 2</option><option value="Escocia">Escocia</option><option value="Serie B">Serie B</option><option value="Ligue 2">Ligue 2</option><option value="Bélgica">Bélgica</option><option value="Portugal">Portugal</option><option value="Grecia">Grecia</option></select>
         </div>
         <div><label>Archivo (.xlsx o .csv)</label><input id="bulk_file" type="file" accept=".xlsx,.xls,.csv"></div>
       </div>
@@ -380,7 +380,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <div class="grid3">
         <div><label>Equipo de origen</label><select id="promo_source" onchange="document.getElementById('promo_name').value = this.value.split('||')[1] || '';"></select></div>
         <div><label>Liga destino</label>
-          <select id="promo_target"><option value="Primera">🇪🇸 Primera</option><option value="Segunda">🇪🇸 Segunda</option><option value="Premier League">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League</option><option value="Championship">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship</option><option value="Bundesliga">🇩🇪 Bundesliga</option><option value="Bundesliga 2">🇩🇪 Bundesliga 2</option><option value="Eredivisie">🇳🇱 Eredivisie</option><option value="Ligue 1">🇫🇷 Ligue 1</option><option value="Serie A">🇮🇹 Serie A</option><option value="Süper Lig">🇹🇷 Süper Lig</option><option value="1ª RFEF - Grupo 1">🇪🇸 1ª RFEF - Grupo 1</option><option value="1ª RFEF - Grupo 2">🇪🇸 1ª RFEF - Grupo 2</option></select>
+          <select id="promo_target"><option value="Primera">Primera</option><option value="Segunda">Segunda</option><option value="Premier League">Premier League</option><option value="Championship">Championship</option><option value="Bundesliga">Bundesliga</option><option value="Bundesliga 2">Bundesliga 2</option><option value="Eredivisie">Eredivisie</option><option value="Ligue 1">Ligue 1</option><option value="Serie A">Serie A</option><option value="Süper Lig">Süper Lig</option><option value="1ª RFEF - Grupo 1">1ª RFEF - Grupo 1</option><option value="1ª RFEF - Grupo 2">1ª RFEF - Grupo 2</option><option value="Escocia">Escocia</option><option value="Serie B">Serie B</option><option value="Ligue 2">Ligue 2</option><option value="Bélgica">Bélgica</option><option value="Portugal">Portugal</option><option value="Grecia">Grecia</option></select>
         </div>
         <div><label>Peso a sus propios datos (%)</label><input id="promo_weight" type="number" step="5" value="50" min="0" max="100"></div>
       </div>
@@ -500,7 +500,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <p class="hint">Crea un Excel con estas columnas exactas en la primera fila: <strong>Liga, Jornada, Fecha, Local, Visitante</strong>. Una fila por partido, para toda la temporada o solo las próximas jornadas. Al importar una liga, se sustituye todo su calendario anterior (para actualizar fechas o resultados de fixture, vuelve a subir el archivo entero de esa liga).</p>
       <div class="grid2">
         <div><label>Liga de este calendario</label>
-          <select id="fx_liga"><option value="Primera">🇪🇸 Primera</option><option value="Segunda">🇪🇸 Segunda</option><option value="Premier League">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League</option><option value="Championship">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship</option><option value="Bundesliga">🇩🇪 Bundesliga</option><option value="Bundesliga 2">🇩🇪 Bundesliga 2</option><option value="Eredivisie">🇳🇱 Eredivisie</option><option value="Ligue 1">🇫🇷 Ligue 1</option><option value="Serie A">🇮🇹 Serie A</option><option value="Süper Lig">🇹🇷 Süper Lig</option><option value="1ª RFEF - Grupo 1">🇪🇸 1ª RFEF - Grupo 1</option><option value="1ª RFEF - Grupo 2">🇪🇸 1ª RFEF - Grupo 2</option></select>
+          <select id="fx_liga"><option value="Primera">Primera</option><option value="Segunda">Segunda</option><option value="Premier League">Premier League</option><option value="Championship">Championship</option><option value="Bundesliga">Bundesliga</option><option value="Bundesliga 2">Bundesliga 2</option><option value="Eredivisie">Eredivisie</option><option value="Ligue 1">Ligue 1</option><option value="Serie A">Serie A</option><option value="Süper Lig">Süper Lig</option><option value="1ª RFEF - Grupo 1">1ª RFEF - Grupo 1</option><option value="1ª RFEF - Grupo 2">1ª RFEF - Grupo 2</option><option value="Escocia">Escocia</option><option value="Serie B">Serie B</option><option value="Ligue 2">Ligue 2</option><option value="Bélgica">Bélgica</option><option value="Portugal">Portugal</option><option value="Grecia">Grecia</option></select>
         </div>
         <div><label>Archivo (.xlsx o .csv)</label><input id="fx_file" type="file" accept=".xlsx,.xls,.csv"></div>
       </div>
@@ -851,8 +851,16 @@ const TURKEY_FLAG_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" heig
   <circle cx="8.9" cy="7" r="2.7" fill="#E30A17"/>
   <polygon points="12.5,5.6 13.6,7 12.5,8.4 13.9,7.9 14.8,9 14.6,7.5 16,6.9 14.5,6.6 14.4,5.1 13.6,6.4" fill="#fff"/>
 </svg>`;
+const SCOTLAND_FLAG_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="14" viewBox="0 0 20 14">
+  <rect width="20" height="14" fill="#005EB8"/>
+  <path d="M0,0 L20,14 M20,0 L0,14" stroke="#fff" stroke-width="3"/>
+</svg>`;
+const PORTUGAL_FLAG_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="14" viewBox="0 0 20 14">
+  <rect width="8" height="14" fill="#046A38"/>
+  <rect x="8" width="12" height="14" fill="#DA291C"/>
+</svg>`;
 function flagDataUri(svg){ return 'data:image/svg+xml,'+encodeURIComponent(svg); }
-const LEAGUE_ORDER = ['Primera','Segunda','Premier League','Championship','Bundesliga','Bundesliga 2','Eredivisie','Ligue 1','Serie A','Süper Lig','1ª RFEF - Grupo 1','1ª RFEF - Grupo 2'];
+const LEAGUE_ORDER = ['Primera','Segunda','Premier League','Championship','Bundesliga','Bundesliga 2','Eredivisie','Ligue 1','Serie A','Süper Lig','1ª RFEF - Grupo 1','1ª RFEF - Grupo 2','Escocia','Serie B','Ligue 2','Bélgica','Portugal','Grecia'];
 const LEAGUE_FLAGS = {
   'Primera': flagDataUri(svgFlag(['#AA151B','#F1BF00','#AA151B'],'h')),
   'Segunda': flagDataUri(svgFlag(['#AA151B','#F1BF00','#AA151B'],'h')),
@@ -864,8 +872,14 @@ const LEAGUE_FLAGS = {
   'Bundesliga 2': flagDataUri(svgFlag(['#000000','#DD0000','#FFCE00'],'h')),
   'Eredivisie': flagDataUri(svgFlag(['#AE1C28','#FFFFFF','#21468B'],'h')),
   'Ligue 1': flagDataUri(svgFlag(['#0055A4','#FFFFFF','#EF4135'],'v')),
+  'Ligue 2': flagDataUri(svgFlag(['#0055A4','#FFFFFF','#EF4135'],'v')),
   'Serie A': flagDataUri(svgFlag(['#009246','#FFFFFF','#CE2B37'],'v')),
+  'Serie B': flagDataUri(svgFlag(['#009246','#FFFFFF','#CE2B37'],'v')),
   'Süper Lig': flagDataUri(TURKEY_FLAG_SVG),
+  'Escocia': flagDataUri(SCOTLAND_FLAG_SVG),
+  'Bélgica': flagDataUri(svgFlag(['#000000','#FDDA24','#EF3340'],'v')),
+  'Portugal': flagDataUri(PORTUGAL_FLAG_SVG),
+  'Grecia': flagDataUri(svgFlag(['#0D5EAF','#FFFFFF','#0D5EAF','#FFFFFF','#0D5EAF'],'h')),
 };
 function sortLigas(ligas){
   return [...ligas].sort((a,b)=>{
@@ -1449,7 +1463,8 @@ function extractSeasonFromFilename(filename){
 const LEAGUE_CODES = {
   'Primera':'SP1','Segunda':'SP2','Premier League':'E0','Championship':'E1',
   'Ligue 1':'F1','Serie A':'I1','Eredivisie':'N1','Süper Lig':'T1',
-  'Bundesliga':'D1','Bundesliga 2':'D2'
+  'Bundesliga':'D1','Bundesliga 2':'D2',
+  'Escocia':'SC0','Serie B':'I2','Ligue 2':'F2','Bélgica':'B1','Portugal':'P1','Grecia':'G1'
 };
 function currentSeasonCode(){
   const now = new Date();
