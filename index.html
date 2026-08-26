@@ -9,7 +9,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/twemoji.min.js"></script>
 <style>
   :root{
     --pitch:#A855F7;
@@ -827,12 +826,46 @@ function recomputeLeagueStats(){
   });
 }
 const RECENT_FORM_WEIGHT = 0.35; // cuanto pesa la forma reciente frente a la media de toda la temporada
+function svgFlag(bands, orientation){
+  const w=20,h=14;
+  let rects;
+  if(orientation==='h'){
+    const bh = h/bands.length;
+    rects = bands.map((c,i)=>`<rect y="${(i*bh).toFixed(2)}" width="${w}" height="${bh.toFixed(2)}" fill="${c}"/>`).join('');
+  } else {
+    const bw = w/bands.length;
+    rects = bands.map((c,i)=>`<rect x="${(i*bw).toFixed(2)}" width="${bw.toFixed(2)}" height="${h}" fill="${c}"/>`).join('');
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${rects}</svg>`;
+}
+const UNION_JACK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="14" viewBox="0 0 20 14">
+  <rect width="20" height="14" fill="#00247d"/>
+  <path d="M0,0 L20,14 M20,0 L0,14" stroke="#fff" stroke-width="2.6"/>
+  <path d="M0,0 L20,14 M20,0 L0,14" stroke="#cf142b" stroke-width="1.1"/>
+  <path d="M10,0 V14 M0,7 H20" stroke="#fff" stroke-width="4.2"/>
+  <path d="M10,0 V14 M0,7 H20" stroke="#cf142b" stroke-width="2"/>
+</svg>`;
+const TURKEY_FLAG_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="14" viewBox="0 0 20 14">
+  <rect width="20" height="14" fill="#E30A17"/>
+  <circle cx="8" cy="7" r="3.4" fill="#fff"/>
+  <circle cx="8.9" cy="7" r="2.7" fill="#E30A17"/>
+  <polygon points="12.5,5.6 13.6,7 12.5,8.4 13.9,7.9 14.8,9 14.6,7.5 16,6.9 14.5,6.6 14.4,5.1 13.6,6.4" fill="#fff"/>
+</svg>`;
+function flagDataUri(svg){ return 'data:image/svg+xml,'+encodeURIComponent(svg); }
 const LEAGUE_ORDER = ['Primera','Segunda','Premier League','Championship','Bundesliga','Bundesliga 2','Eredivisie','Ligue 1','Serie A','Süper Lig','1ª RFEF - Grupo 1','1ª RFEF - Grupo 2'];
 const LEAGUE_FLAGS = {
-  'Primera':'🇪🇸', 'Segunda':'🇪🇸', '1ª RFEF - Grupo 1':'🇪🇸', '1ª RFEF - Grupo 2':'🇪🇸',
-  'Premier League':'🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Championship':'🏴󠁧󠁢󠁥󠁮󠁧󠁿',
-  'Bundesliga':'🇩🇪', 'Bundesliga 2':'🇩🇪',
-  'Eredivisie':'🇳🇱', 'Ligue 1':'🇫🇷', 'Serie A':'🇮🇹', 'Süper Lig':'🇹🇷',
+  'Primera': flagDataUri(svgFlag(['#AA151B','#F1BF00','#AA151B'],'h')),
+  'Segunda': flagDataUri(svgFlag(['#AA151B','#F1BF00','#AA151B'],'h')),
+  '1ª RFEF - Grupo 1': flagDataUri(svgFlag(['#AA151B','#F1BF00','#AA151B'],'h')),
+  '1ª RFEF - Grupo 2': flagDataUri(svgFlag(['#AA151B','#F1BF00','#AA151B'],'h')),
+  'Premier League': flagDataUri(UNION_JACK_SVG),
+  'Championship': flagDataUri(UNION_JACK_SVG),
+  'Bundesliga': flagDataUri(svgFlag(['#000000','#DD0000','#FFCE00'],'h')),
+  'Bundesliga 2': flagDataUri(svgFlag(['#000000','#DD0000','#FFCE00'],'h')),
+  'Eredivisie': flagDataUri(svgFlag(['#AE1C28','#FFFFFF','#21468B'],'h')),
+  'Ligue 1': flagDataUri(svgFlag(['#0055A4','#FFFFFF','#EF4135'],'v')),
+  'Serie A': flagDataUri(svgFlag(['#009246','#FFFFFF','#CE2B37'],'v')),
+  'Süper Lig': flagDataUri(TURKEY_FLAG_SVG),
 };
 function sortLigas(ligas){
   return [...ligas].sort((a,b)=>{
@@ -843,12 +876,10 @@ function sortLigas(ligas){
     return ia-ib;
   });
 }
-function ligaLabel(liga){
-  const flag = LEAGUE_FLAGS[liga];
-  return flag ? `${flag} ${liga}` : liga;
-}
-function twemojify(el){
-  if(window.twemoji) twemoji.parse(el, { base:'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/', folder:'svg', ext:'.svg' });
+function ligaLabel(liga){ return liga; } // el emoji/bandera ya no va en el texto; el desplegable personalizado la añade como imagen
+function flagImgHtml(liga){
+  const src = LEAGUE_FLAGS[liga];
+  return src ? `<img src="${src}" alt="" style="width:18px; height:13px; vertical-align:middle; margin-right:7px; border-radius:2px;">` : '';
 }
 function enhanceLigaSelect(selectId){
   const sel = document.getElementById(selectId);
@@ -871,13 +902,12 @@ function syncCustomLigaDropdown(selectId){
   const selected = sel.options[sel.selectedIndex];
   wrapper.innerHTML = `
     <button type="button" class="custom-select-trigger" onclick="toggleCustomLigaDropdown('${selectId}')">
-      <span>${selected ? escapeHtml(selected.textContent) : ''}</span><span class="chev">▾</span>
+      <span>${selected ? flagImgHtml(selected.value)+escapeHtml(selected.textContent) : ''}</span><span class="chev">▾</span>
     </button>
     <div class="custom-select-list" id="${selectId}_customlist" style="display:none;">
-      ${opts.map((o,i)=>`<div class="custom-select-opt ${i===sel.selectedIndex?'sel':''}" onclick="pickCustomLigaOption('${selectId}', ${i})">${escapeHtml(o.textContent)}</div>`).join('')}
+      ${opts.map((o,i)=>`<div class="custom-select-opt ${i===sel.selectedIndex?'sel':''}" onclick="pickCustomLigaOption('${selectId}', ${i})">${flagImgHtml(o.value)}${escapeHtml(o.textContent)}</div>`).join('')}
     </div>
   `;
-  twemojify(wrapper);
 }
 function toggleCustomLigaDropdown(selectId){
   const list = document.getElementById(selectId+'_customlist');
