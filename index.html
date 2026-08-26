@@ -921,6 +921,7 @@ function pickCustomLigaOption(selectId, idx){
   if(!sel) return;
   sel.selectedIndex = idx;
   sel.dispatchEvent(new Event('change'));
+  syncCustomLigaDropdown(selectId); // por si el select no tiene onchange propio que ya lo haga (ej. delete_liga)
 }
 document.addEventListener('click', e=>{
   if(!e.target.closest('.custom-select-wrapper')) document.querySelectorAll('.custom-select-list').forEach(l=>l.style.display='none');
