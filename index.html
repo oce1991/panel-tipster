@@ -2193,6 +2193,7 @@ function predictCorners(homeTeam, awayTeam, liga, line){
   return { baseTotal, total, pOver, pPush, pUnder: Math.max(0,1-pOver-pPush), expectedGoals, expectedShots };
 }
 const FOUL_BLEND_WEIGHT = 0.3; // cuanto pesa la estimacion via faltas cometidas frente a las tarjetas reales
+const SHOT_BLEND_WEIGHT = 0.3; // cuanto pesa la estimacion via tiros a puerta frente a los goles reales
 function predictCards(homeTeam, awayTeam, line, liga){
   const rawLh = ((homeTeam.crfh||0) + (awayTeam.craa||0))/2;
   const rawLa = ((awayTeam.crfa||0) + (homeTeam.crah||0))/2;
