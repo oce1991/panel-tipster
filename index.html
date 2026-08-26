@@ -278,7 +278,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <p class="hint"><strong>Carga múltiple:</strong> puedes seleccionar varios archivos de golpe (misma liga). Renómbralos antes para que la app detecte la temporada de cada uno automáticamente — por ejemplo <code>SP1_2223.csv</code>, <code>SP1_2324.csv</code>, <code>SP1_2425.csv</code>, <code>SP1_2526.csv</code> (cualquier "25/26", "2526" o "25-26" en el nombre vale). El peso que pongas se aplica igual a todos los archivos de esta tanda — si quieres pesos distintos por temporada, súbelos en tandas separadas.</p>
       <div class="grid3">
         <div><label>Liga de estos archivos</label>
-          <select id="imp_liga"><option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Premier League</option><option>Championship</option><option>Ligue 1</option><option>Serie A</option><option>Eredivisie</option><option>Süper Lig</option><option>Bundesliga</option><option>Bundesliga 2</option></select>
+          <select id="imp_liga"><option value="Primera">🇪🇸 Primera</option><option value="Segunda">🇪🇸 Segunda</option><option value="Premier League">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League</option><option value="Championship">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship</option><option value="Bundesliga">🇩🇪 Bundesliga</option><option value="Bundesliga 2">🇩🇪 Bundesliga 2</option><option value="Eredivisie">🇳🇱 Eredivisie</option><option value="Ligue 1">🇫🇷 Ligue 1</option><option value="Serie A">🇮🇹 Serie A</option><option value="Süper Lig">🇹🇷 Süper Lig</option><option value="1ª RFEF - Grupo 1">🇪🇸 1ª RFEF - Grupo 1</option><option value="1ª RFEF - Grupo 2">🇪🇸 1ª RFEF - Grupo 2</option></select>
         </div>
         <div><label>Temporada (solo si subes 1 archivo)</label><input id="imp_temporada" type="text" placeholder="25/26"></div>
         <div><label>Peso</label><input id="imp_weight" type="number" step="0.5" value="1" min="0.5"></div>
@@ -297,7 +297,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <p class="hint">Para cargar de golpe las medias de córners y goles de todos los equipos de una liga (por ejemplo, transcritas de otra web). Columnas esperadas en la primera fila: <strong>Equipo, CF Casa, CA Casa, CF Fuera, CA Fuera, GF Casa, GA Casa, GF Fuera, GA Fuera</strong> (y opcionalmente <strong>TC Casa, TA Casa, TC Fuera, TA Fuera</strong> para tarjetas) — si el archivo trae una columna "Liga" por fila, se usa esa; si no, se aplica la liga que elijas abajo a todas las filas. Si un equipo ya existe con ese nombre en esa liga, se sustituye su ficha entera — no se promedia con lo anterior.</p>
       <div class="grid2">
         <div><label>Liga (si el archivo no trae columna Liga)</label>
-          <select id="bulk_liga"><option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Premier League</option><option>Championship</option><option>Ligue 1</option><option>Serie A</option><option>Eredivisie</option><option>Süper Lig</option><option>Bundesliga</option><option>Bundesliga 2</option></select>
+          <select id="bulk_liga"><option value="Primera">🇪🇸 Primera</option><option value="Segunda">🇪🇸 Segunda</option><option value="Premier League">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League</option><option value="Championship">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship</option><option value="Bundesliga">🇩🇪 Bundesliga</option><option value="Bundesliga 2">🇩🇪 Bundesliga 2</option><option value="Eredivisie">🇳🇱 Eredivisie</option><option value="Ligue 1">🇫🇷 Ligue 1</option><option value="Serie A">🇮🇹 Serie A</option><option value="Süper Lig">🇹🇷 Süper Lig</option><option value="1ª RFEF - Grupo 1">🇪🇸 1ª RFEF - Grupo 1</option><option value="1ª RFEF - Grupo 2">🇪🇸 1ª RFEF - Grupo 2</option></select>
         </div>
         <div><label>Archivo (.xlsx o .csv)</label><input id="bulk_file" type="file" accept=".xlsx,.xls,.csv"></div>
       </div>
@@ -363,13 +363,23 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <div class="grid3">
         <div><label>Equipo de origen</label><select id="promo_source" onchange="document.getElementById('promo_name').value = this.value.split('||')[1] || '';"></select></div>
         <div><label>Liga destino</label>
-          <select id="promo_target"><option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Premier League</option><option>Ligue 1</option><option>Serie A</option><option>Eredivisie</option><option>Süper Lig</option><option>Championship</option><option>Bundesliga</option><option>Bundesliga 2</option></select>
+          <select id="promo_target"><option value="Primera">🇪🇸 Primera</option><option value="Segunda">🇪🇸 Segunda</option><option value="Premier League">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League</option><option value="Championship">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship</option><option value="Bundesliga">🇩🇪 Bundesliga</option><option value="Bundesliga 2">🇩🇪 Bundesliga 2</option><option value="Eredivisie">🇳🇱 Eredivisie</option><option value="Ligue 1">🇫🇷 Ligue 1</option><option value="Serie A">🇮🇹 Serie A</option><option value="Süper Lig">🇹🇷 Süper Lig</option><option value="1ª RFEF - Grupo 1">🇪🇸 1ª RFEF - Grupo 1</option><option value="1ª RFEF - Grupo 2">🇪🇸 1ª RFEF - Grupo 2</option></select>
         </div>
         <div><label>Peso a sus propios datos (%)</label><input id="promo_weight" type="number" step="5" value="50" min="0" max="100"></div>
       </div>
       <div><label>Nombre en la liga destino (por si cambia)</label><input id="promo_name" placeholder="Se rellena solo al elegir equipo"></div>
       <button class="btn amber" onclick="promoteTeam()">Promocionar con regresión a la media</button>
       <div class="result-box" id="promoResult" style="display:none;"></div>
+    </div>
+
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Limpieza</span> Eliminar una liga por completo<span class="chevron">▾</span></h2>
+      <p class="hint">Borra todos los equipos, temporadas importadas y calendarios de una liga concreta — útil para quitar ligas que no vayas a usar. Esta acción no se puede deshacer.</p>
+      <div class="grid2">
+        <div><label>Liga a eliminar</label><select id="delete_liga"></select></div>
+        <div style="display:flex; align-items:flex-end;"><button class="btn ghost" onclick="deleteWholeLiga()" style="width:100%;">Eliminar esta liga</button></div>
+      </div>
+      <div class="result-box" id="deleteLigaResult" style="display:none;"></div>
     </div>
   </div>
 
@@ -473,7 +483,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <p class="hint">Crea un Excel con estas columnas exactas en la primera fila: <strong>Liga, Jornada, Fecha, Local, Visitante</strong>. Una fila por partido, para toda la temporada o solo las próximas jornadas. Al importar una liga, se sustituye todo su calendario anterior (para actualizar fechas o resultados de fixture, vuelve a subir el archivo entero de esa liga).</p>
       <div class="grid2">
         <div><label>Liga de este calendario</label>
-          <select id="fx_liga"><option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Premier League</option><option>Championship</option><option>Ligue 1</option><option>Serie A</option><option>Eredivisie</option><option>Süper Lig</option><option>Bundesliga</option><option>Bundesliga 2</option></select>
+          <select id="fx_liga"><option value="Primera">🇪🇸 Primera</option><option value="Segunda">🇪🇸 Segunda</option><option value="Premier League">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League</option><option value="Championship">🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship</option><option value="Bundesliga">🇩🇪 Bundesliga</option><option value="Bundesliga 2">🇩🇪 Bundesliga 2</option><option value="Eredivisie">🇳🇱 Eredivisie</option><option value="Ligue 1">🇫🇷 Ligue 1</option><option value="Serie A">🇮🇹 Serie A</option><option value="Süper Lig">🇹🇷 Süper Lig</option><option value="1ª RFEF - Grupo 1">🇪🇸 1ª RFEF - Grupo 1</option><option value="1ª RFEF - Grupo 2">🇪🇸 1ª RFEF - Grupo 2</option></select>
         </div>
         <div><label>Archivo (.xlsx o .csv)</label><input id="fx_file" type="file" accept=".xlsx,.xls,.csv"></div>
       </div>
@@ -799,6 +809,26 @@ function recomputeLeagueStats(){
   });
 }
 const RECENT_FORM_WEIGHT = 0.35; // cuanto pesa la forma reciente frente a la media de toda la temporada
+const LEAGUE_ORDER = ['Primera','Segunda','Premier League','Championship','Bundesliga','Bundesliga 2','Eredivisie','Ligue 1','Serie A','Süper Lig','1ª RFEF - Grupo 1','1ª RFEF - Grupo 2'];
+const LEAGUE_FLAGS = {
+  'Primera':'🇪🇸', 'Segunda':'🇪🇸', '1ª RFEF - Grupo 1':'🇪🇸', '1ª RFEF - Grupo 2':'🇪🇸',
+  'Premier League':'🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Championship':'🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+  'Bundesliga':'🇩🇪', 'Bundesliga 2':'🇩🇪',
+  'Eredivisie':'🇳🇱', 'Ligue 1':'🇫🇷', 'Serie A':'🇮🇹', 'Süper Lig':'🇹🇷',
+};
+function sortLigas(ligas){
+  return [...ligas].sort((a,b)=>{
+    const ia = LEAGUE_ORDER.indexOf(a), ib = LEAGUE_ORDER.indexOf(b);
+    if(ia===-1 && ib===-1) return a.localeCompare(b);
+    if(ia===-1) return 1;
+    if(ib===-1) return -1;
+    return ia-ib;
+  });
+}
+function ligaLabel(liga){
+  const flag = LEAGUE_FLAGS[liga];
+  return flag ? `${flag} ${liga}` : liga;
+}
 const RECENT_FORM_N = 8; // ultimos N partidos (por cada lado, casa/fuera) que cuentan como "forma reciente"
 function buildCombinedMatchLogs(){
   const byLiga = {};
@@ -1484,6 +1514,38 @@ function refreshPromoSelect(){
     const nameInput = document.getElementById('promo_name');
     if(nameInput && !nameInput.value) nameInput.value = name;
   }
+  refreshDeleteLigaSelect();
+}
+function refreshDeleteLigaSelect(){
+  const sel = document.getElementById('delete_liga');
+  if(!sel) return;
+  const current = sel.value;
+  const ligas = sortLigas([...new Set([...TEAMS.map(t=>t.liga), ...SEASON_IMPORTS.map(i=>i.liga), ...FIXTURES.map(f=>f.liga)])]);
+  sel.innerHTML = ligas.length ? ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`).join('') : '<option value="">— sin ligas cargadas —</option>';
+  if(ligas.includes(current)) sel.value = current;
+}
+async function deleteWholeLiga(){
+  const liga = document.getElementById('delete_liga').value;
+  const box = document.getElementById('deleteLigaResult');
+  box.style.display = 'block';
+  if(!liga){ box.innerHTML = '<p class="hint">Selecciona una liga.</p>'; return; }
+  const nTeams = MANUAL_TEAMS.filter(t=>t.liga===liga).length;
+  const nImports = SEASON_IMPORTS.filter(i=>i.liga===liga).length;
+  const nFixtures = FIXTURES.filter(f=>f.liga===liga).length;
+  if(!nTeams && !nImports && !nFixtures){ box.innerHTML = `<p class="hint">${escapeHtml(liga)} no tiene datos guardados (fichas, temporadas ni calendario).</p>`; return; }
+  const ok = confirm(`Vas a eliminar por completo "${liga}": ${nTeams} fichas manuales, ${nImports} temporadas importadas y ${nFixtures} partidos de calendario. Esta acción no se puede deshacer. ¿Seguro?`);
+  if(!ok) return;
+  MANUAL_TEAMS = MANUAL_TEAMS.filter(t=>t.liga!==liga);
+  SEASON_IMPORTS = SEASON_IMPORTS.filter(i=>i.liga!==liga);
+  FIXTURES = FIXTURES.filter(f=>f.liga!==liga);
+  PICKED_MATCHES = new Set([...PICKED_MATCHES].filter(id=>FIXTURES.some(f=>f.id===id)));
+  await persistTeamSources();
+  await saveState();
+  await savePicks();
+  recomputeTeams();
+  renderTeams();
+  refreshJornadaSelect();
+  box.innerHTML = `<p class="hint">Eliminado: ${nTeams} fichas, ${nImports} temporadas y ${nFixtures} partidos de "${escapeHtml(liga)}".</p>`;
 }
 function promoteTeam(){
   const srcVal = document.getElementById('promo_source').value;
@@ -1572,13 +1634,13 @@ async function deleteImport(id){
   renderTeams();
 }
 function getLigasPresentes(){
-  return [...new Set(TEAMS.map(t=>t.liga))].sort();
+  return sortLigas([...new Set(TEAMS.map(t=>t.liga))]);
 }
 function renderTeams(){
   const filterSel = document.getElementById('teamsFilter');
   const currentFilter = filterSel.value;
   const ligas = getLigasPresentes();
-  filterSel.innerHTML = '<option value="">Todas las ligas</option>' + ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('');
+  filterSel.innerHTML = '<option value="">Todas las ligas</option>' + ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`).join('');
   if(ligas.includes(currentFilter)) filterSel.value = currentFilter;
   const activeFilter = filterSel.value;
 
@@ -1616,7 +1678,7 @@ function refreshTeamSelects(){
   const ligaSel = document.getElementById('m_liga');
   const currentLiga = ligaSel.value;
   const ligas = getLigasPresentes();
-  ligaSel.innerHTML = ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('');
+  ligaSel.innerHTML = ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`).join('');
   if(ligas.includes(currentLiga)) ligaSel.value = currentLiga;
   refreshMatchTeamSelects();
   refreshBetLigaSelect();
@@ -1625,18 +1687,16 @@ function refreshBetLigaSelect(){
   const sel = document.getElementById('b_liga');
   if(!sel) return;
   const current = sel.value;
-  const baseLigas = ['Primera','Segunda','1ª RFEF - Grupo 1','1ª RFEF - Grupo 2','Premier League','Championship','Ligue 1','Serie A','Eredivisie','Süper Lig'];
-  const extra = [...new Set([...getLigasPresentes(), ...FIXTURES.map(f=>f.liga)])].filter(l=>!baseLigas.includes(l));
-  const allLigas = [...baseLigas, ...extra.sort()];
-  sel.innerHTML = allLigas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('');
+  const allLigas = sortLigas([...new Set([...getLigasPresentes(), ...FIXTURES.map(f=>f.liga)])]);
+  sel.innerHTML = allLigas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`).join('');
   if(allLigas.includes(current)) sel.value = current;
   refreshBacktestLigaSelect();
 }
 function refreshBacktestLigaSelect(){
   const sel = document.getElementById('bt_liga');
   const sel2 = document.getElementById('btc_liga');
-  const ligas = Object.keys(buildCombinedMatchLogs()).sort();
-  const optsHtml = ligas.length ? ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join('') : '<option value="">— sin partidos con fecha importados —</option>';
+  const ligas = sortLigas(Object.keys(buildCombinedMatchLogs()));
+  const optsHtml = ligas.length ? ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`).join('') : '<option value="">— sin partidos con fecha importados —</option>';
   if(sel){ const current = sel.value; sel.innerHTML = optsHtml; if(ligas.includes(current)) sel.value = current; }
   if(sel2){ const current2 = sel2.value; sel2.innerHTML = optsHtml; if(ligas.includes(current2)) sel2.value = current2; }
 }
@@ -2302,9 +2362,9 @@ function refreshJornadaSelect(){
   const ligaSel = document.getElementById('jr_liga');
   if(!ligaSel) return;
   const current = ligaSel.value;
-  const ligas = [...new Set(FIXTURES.map(f=>(f.liga||'').trim()).filter(l=>l.length>0))].sort();
+  const ligas = sortLigas([...new Set(FIXTURES.map(f=>(f.liga||'').trim()).filter(l=>l.length>0))]);
   const options = ['<option value="__ALL__">🔍 Todas las ligas (buscador)</option>']
-    .concat(ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`));
+    .concat(ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`));
   ligaSel.innerHTML = ligas.length ? options.join('') : '<option value="">— sin calendarios —</option>';
   if(current && (current==='__ALL__' || ligas.includes(current))) ligaSel.value = current;
   refreshJornadaOptions();
