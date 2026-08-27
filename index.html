@@ -691,7 +691,7 @@ function saveSupabaseConfig(){
   }
   location.reload();
 }
-async function loadState(){
+async function loadTeamsState(){
   try{
     const { data, error } = await sbClient.from('tipster_data').select('data').eq('id','main').maybeSingle();
     if(error) throw error;
@@ -702,13 +702,34 @@ async function loadState(){
     return null;
   }
 }
-async function saveState(){
+async function saveTeamsState(){
+  // equipos + temporadas importadas + calendario: pesado, cambia poco (solo al importar), va en su propia fila
   try{
-    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, bets: BETS, bankroll: BANKCFG, fixtures: FIXTURES };
+    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, fixtures: FIXTURES };
     const { error } = await sbClient.from('tipster_data').upsert({ id:'main', data: payload, updated_at: new Date().toISOString() });
     if(error) throw error;
   }catch(e){
-    console.error('Supabase save error', e);
+    console.error('Supabase save error (teams)', e);
+  }
+}
+async function loadBetsState(){
+  try{
+    const { data, error } = await sbClient.from('tipster_data').select('data').eq('id','bets').maybeSingle();
+    if(error) throw error;
+    return data ? data.data : null;
+  }catch(e){
+    console.error('Supabase load error (bets)', e);
+    return null;
+  }
+}
+async function saveBetsState(){
+  // apuestas + config de banca: ligero, cambia con cada apuesta -> fila propia para que guardar sea rapido y fiable
+  try{
+    const payload = { bets: BETS, bankroll: BANKCFG };
+    const { error } = await sbClient.from('tipster_data').upsert({ id:'bets', data: payload, updated_at: new Date().toISOString() });
+    if(error) throw error;
+  }catch(e){
+    console.error('Supabase save error (bets)', e);
   }
 }
 // Los picks se guardan en su propia fila, ligera, para que marcar un partido sea instantaneo
@@ -731,7 +752,7 @@ async function savePicks(){
     console.error('Supabase save picks error', e);
   }
 }
-async function persistTeamSources(){ await saveState(); }
+async function persistTeamSources(){ await saveTeamsState(); }
 
 // ---------- teams ----------
 let LEAGUE_STATS = {}; // liga -> {slope, meanGoals, meanCorners, n, rho, rhoN}
@@ -1653,7 +1674,6 @@ async function deleteWholeLiga(){
   FIXTURES = FIXTURES.filter(f=>f.liga!==liga);
   PICKED_MATCHES = new Set([...PICKED_MATCHES].filter(id=>FIXTURES.some(f=>f.id===id)));
   await persistTeamSources();
-  await saveState();
   await savePicks();
   recomputeTeams();
   renderTeams();
@@ -2481,7 +2501,7 @@ async function importFixtures(){
     // sustituye el calendario previo de cada liga presente en el archivo
     const ligasEnArchivo = new Set(parsed.map(f=>f.liga));
     FIXTURES = FIXTURES.filter(f=>!ligasEnArchivo.has(f.liga)).concat(parsed);
-    await saveState();
+    await saveTeamsState();
     refreshJornadaSelect();
     refreshBetLigaSelect();
     box.innerHTML = `<p class="ev-pos">${parsed.length} partidos importados (${[...ligasEnArchivo].join(', ')}). Se ha sustituido el calendario anterior de esas ligas.</p>`;
@@ -2794,7 +2814,7 @@ async function addBet(){
     note: document.getElementById('b_note').value.trim()
   };
   BETS.push(bet);
-  await saveState();
+  await saveBetsState();
   ['b_match','b_pick','b_odd','b_stake','b_close','b_note'].forEach(id=>document.getElementById(id).value='');
   renderBets();
   renderCalibration();
@@ -2802,14 +2822,14 @@ async function addBet(){
 }
 async function updateBetStatus(id,status){
   const b = BETS.find(x=>x.id===id); if(b) b.status=status;
-  await saveState();
+  await saveBetsState();
   renderBets();
   renderCalibration();
   renderDashboard();
 }
 async function deleteBet(id){
   BETS = BETS.filter(b=>b.id!==id);
-  await saveState();
+  await saveBetsState();
   renderBets();
   renderCalibration();
   renderDashboard();
@@ -2853,7 +2873,7 @@ function renderBets(){
 }
 async function updateBetNote(id, value){
   const b = BETS.find(x=>x.id===id); if(b) b.note = value;
-  await saveState();
+  await saveBetsState();
 }
 function compareOdds(){
   const prob = parseFloat(document.getElementById('cmp_prob').value)/100;
@@ -2911,7 +2931,7 @@ async function saveBankrollConfig(){
     fraction: parseFloat(document.getElementById('bk_fraction').value),
     minEV: parseFloat(document.getElementById('bk_minev').value) || 0
   };
-  await saveState();
+  await saveBetsState();
   alert('Banca guardada');
   renderDashboard();
   renderJornada();
@@ -3121,7 +3141,8 @@ async function importBackup(){
     SEASON_IMPORTS = data.seasonImports || [];
     BETS = data.bets || [];
     BANKCFG = data.bankroll || {initial:1000, fraction:0.25, minEV:3};
-    await saveState();
+    await saveTeamsState();
+    await saveBetsState();
     recomputeTeams();
     document.getElementById('bk_initial').value = BANKCFG.initial;
     document.getElementById('bk_fraction').value = BANKCFG.fraction;
@@ -3152,13 +3173,22 @@ async function boot(){
     return;
   }
   sbClient = supabase.createClient(cfg.url, cfg.key);
-  const state = await loadState();
-  if(state){
-    MANUAL_TEAMS = state.manualTeams || [];
-    SEASON_IMPORTS = state.seasonImports || [];
-    BETS = state.bets || [];
-    BANKCFG = state.bankroll || {initial:1000, fraction:0.25, minEV:3};
-    FIXTURES = state.fixtures || [];
+  const teamsState = await loadTeamsState();
+  if(teamsState){
+    MANUAL_TEAMS = teamsState.manualTeams || [];
+    SEASON_IMPORTS = teamsState.seasonImports || [];
+    FIXTURES = teamsState.fixtures || [];
+  }
+  const betsState = await loadBetsState();
+  if(betsState){
+    BETS = betsState.bets || [];
+    BANKCFG = betsState.bankroll || {initial:1000, fraction:0.25, minEV:3};
+  } else if(teamsState && (teamsState.bets || teamsState.bankroll)){
+    // migracion automatica: version antigua que guardaba todo junto en la fila 'main'.
+    // recuperamos apuestas/banca de ahi y las movemos a su fila propia, mas ligera.
+    BETS = teamsState.bets || [];
+    BANKCFG = teamsState.bankroll || {initial:1000, fraction:0.25, minEV:3};
+    await saveBetsState();
   }
   PICKED_MATCHES = new Set(await loadPicks());
   recomputeTeams();
