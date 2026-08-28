@@ -289,6 +289,18 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <div class="result-box" id="autoUpdateResult" style="display:none;"></div>
     </div>
     <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Todo en 1</span> Subir el Excel combinado de football-data.co.uk<span class="chevron">▾</span></h2>
+      <p class="hint">Football-data.co.uk publica un Excel con todas las ligas juntas, cada una en su propia hoja (identificada por su código, ej. "SP1" para Primera). Súbelo aquí y la app reparte cada hoja a la liga correspondiente automáticamente — sin depender de ningún servicio externo que pueda fallar.</p>
+      <div class="grid2">
+        <div><label>Temporada (ej. 26/27)</label><input id="combo_temporada" type="text" placeholder="26/27"></div>
+        <div><label>Peso</label><input id="combo_weight" type="number" step="0.5" value="3" min="0.5"></div>
+      </div>
+      <label>Archivo Excel combinado (.xlsx)</label>
+      <input id="combo_file" type="file" accept=".xlsx,.xls">
+      <button class="btn amber" onclick="importCombinedExcel()">Repartir e importar todas las hojas</button>
+      <div class="result-box" id="comboImportResult" style="display:none;"></div>
+    </div>
+    <div class="card collapsible collapsed">
       <h2 onclick="toggleCard(this)"><span class="tag">Auto</span> Importar temporada (CSV)<span class="chevron">▾</span></h2>
       <p class="hint">Sube el CSV de una temporada y calculamos las medias de córners y goles por equipo, casa/fuera, automáticamente. Se fusiona con lo que ya tengas guardado (media ponderada por partidos).</p>
       <p class="hint"><strong>Dónde conseguirlo:</strong> Primera/Segunda → football-data.co.uk (columnas HomeTeam, AwayTeam, FTHG, FTAG, HC, AC). 1ª RFEF Grupo 1 → footystats.org/es/spain/primera-division-rfef-group-1 (botón "Descargar datos en CSV"). Cualquier CSV con esas columnas (en inglés o español) sirve.</p>
@@ -1487,6 +1499,47 @@ const LEAGUE_CODES = {
   'Bundesliga':'D1','Bundesliga 2':'D2',
   'Escocia':'SC0','Serie B':'I2','Ligue 2':'F2','Bélgica':'B1','Portugal':'P1','Grecia':'G1'
 };
+const CODE_TO_LEAGUE = Object.fromEntries(Object.entries(LEAGUE_CODES).map(([liga,code])=>[code.toUpperCase(), liga]));
+async function importCombinedExcel(){
+  const fileInput = document.getElementById('combo_file');
+  const temporada = document.getElementById('combo_temporada').value.trim();
+  const weight = parseFloat(document.getElementById('combo_weight').value) || 3;
+  const box = document.getElementById('comboImportResult');
+  box.style.display = 'block';
+  if(!fileInput.files.length){ alert('Selecciona el archivo Excel combinado'); return; }
+  if(!temporada){ alert('Indica la temporada, ej. 26/27'); return; }
+  box.innerHTML = '<p class="hint">Procesando...</p>';
+  try{
+    const buf = await fileInput.files[0].arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const resultLines = [];
+    let anyImported = false;
+    for(const sheetName of wb.SheetNames){
+      const liga = CODE_TO_LEAGUE[sheetName.trim().toUpperCase()];
+      if(!liga){
+        resultLines.push(`<p class="hint">Hoja "${escapeHtml(sheetName)}": código no reconocido, se ha ignorado (dime el nombre exacto si crees que debería importarse).</p>`);
+        continue;
+      }
+      const csvText = XLSX.utils.sheet_to_csv(wb.Sheets[sheetName]);
+      const parsed = parseCSVText(csvText);
+      if(parsed.error || !parsed.rows.length){
+        resultLines.push(`<p class="ev-neg">${escapeHtml(liga)} (hoja "${sheetName}"): ${parsed.error || 'sin partidos legibles en esta hoja'}.</p>`);
+        continue;
+      }
+      importParsedIntoSeason(liga, temporada, weight, parsed);
+      anyImported = true;
+      resultLines.push(`<p class="ev-pos">${escapeHtml(liga)} (hoja "${sheetName}"): ${parsed.rows.length} partidos importados.</p>`);
+    }
+    if(anyImported){
+      await persistTeamSources();
+      recomputeTeams();
+      renderTeams();
+    }
+    box.innerHTML = resultLines.join('') || '<p class="hint">No se ha reconocido ninguna hoja del archivo.</p>';
+  }catch(e){
+    box.innerHTML = `<p class="ev-neg">Error leyendo el archivo: ${e.message}</p>`;
+  }
+}
 function currentSeasonCode(){
   const now = new Date();
   const y = now.getFullYear();
