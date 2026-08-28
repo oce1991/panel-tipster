@@ -677,6 +677,9 @@ let BETS = [];
 let BANKCFG = {initial:1000, fraction:0.25, minEV:3};
 let FIXTURES = []; // {id, liga, jornada, fecha, local, visitante}
 let PICKED_MATCHES = new Set(); // ids de partidos marcados en Jornada
+let MANUAL_RESULTS = {}; // liga -> [ {home,away,fthg,ftag,hc,ac,fxId,dateSort,...} ] - resultados metidos a mano (ligas sin CSV, ej. 1a RFEF)
+const OPEN_RESULT_FORMS = new Set(); // fxId cuyos formularios de "meter resultado" estan abiertos, para que sobrevivan a un rerender
+const MANUAL_RESULT_WEIGHT = 3;
 function blankSide(){ return {mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0,crmp:0,crf:0,cra:0,shmp:0,shf:0,sha:0,sotf:0,sota:0,fmp:0,fl:0}; }
 
 // ---------- Supabase storage layer ----------
@@ -717,7 +720,7 @@ async function loadTeamsState(){
 async function saveTeamsState(){
   // equipos + temporadas importadas + calendario: pesado, cambia poco (solo al importar), va en su propia fila
   try{
-    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, fixtures: FIXTURES };
+    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, fixtures: FIXTURES, manualResults: MANUAL_RESULTS };
     const { error } = await sbClient.from('tipster_data').upsert({ id:'main', data: payload, updated_at: new Date().toISOString() });
     if(error) throw error;
   }catch(e){
@@ -1399,6 +1402,53 @@ function parseCSVText(text){
     });
   }
   return {rows, missingCorners: iHc===-1 || iAc===-1, missingCards: iHy===-1 && iHr===-1, missingShots: iHs===-1 && iHst===-1, missingOdds: iOddH===-1 && iOddO25===-1, missingFouls: iHf===-1 && iAf===-1};
+}
+function addManualResult(fx, fthg, ftag, hc, ac){
+  const liga = fx.liga;
+  if(!MANUAL_RESULTS[liga]) MANUAL_RESULTS[liga] = [];
+  const dateSort = fx.fecha ? parseDateToSortable(fx.fecha) : null;
+  const row = {
+    home: fx.local, away: fx.visitante, fthg, ftag,
+    hc: isNaN(hc)?null:hc, ac: isNaN(ac)?null:ac,
+    hCards:null, aCards:null, hs:null, as:null, hst:null, ast:null,
+    oddH:null, oddD:null, oddA:null, oddO25:null, oddU25:null,
+    hf:null, af:null, referee:null,
+    fxId: fx.id, dateSort
+  };
+  const rows = MANUAL_RESULTS[liga];
+  const existingIdx = rows.findIndex(r=>r.fxId===fx.id);
+  if(existingIdx!==-1) rows[existingIdx] = row; else rows.push(row);
+
+  const groups = aggregateRows(rows);
+  const regression = computeRegressionSums(rows);
+  const scorelines = computeScorelineSums(rows);
+  const matchLog = rows.filter(r=>r.dateSort).map(r=>({d:r.dateSort, h:r.home, a:r.away, hg:r.fthg, ag:r.ftag, hc:r.hc, ac:r.ac}));
+  const key = liga.toLowerCase()+'||manual';
+  const existingSeasonIdx = SEASON_IMPORTS.findIndex(i=>(i.liga.toLowerCase()+'||'+i.temporada.toLowerCase())===key);
+  const record = {
+    id: existingSeasonIdx!==-1 ? SEASON_IMPORTS[existingSeasonIdx].id : Date.now().toString()+Math.random().toString(36).slice(2,6),
+    liga, temporada:'Manual', weight: MANUAL_RESULT_WEIGHT, groups, regression, scorelines, matchLog
+  };
+  if(existingSeasonIdx!==-1) SEASON_IMPORTS[existingSeasonIdx] = record; else SEASON_IMPORTS.push(record);
+}
+function toggleResultForm(fxId){
+  if(OPEN_RESULT_FORMS.has(fxId)) OPEN_RESULT_FORMS.delete(fxId); else OPEN_RESULT_FORMS.add(fxId);
+  renderJornada();
+}
+async function saveManualResult(fxId){
+  const fx = FIXTURES.find(f=>f.id===fxId);
+  if(!fx) return;
+  const hg = parseInt(document.getElementById(`res_hg_${fxId}`).value);
+  const ag = parseInt(document.getElementById(`res_ag_${fxId}`).value);
+  const hc = parseInt(document.getElementById(`res_hc_${fxId}`).value);
+  const ac = parseInt(document.getElementById(`res_ac_${fxId}`).value);
+  if(isNaN(hg) || isNaN(ag)){ alert('Al menos el resultado (goles) es obligatorio.'); return; }
+  addManualResult(fx, hg, ag, hc, ac);
+  OPEN_RESULT_FORMS.delete(fxId);
+  await persistTeamSources();
+  recomputeTeams();
+  renderTeams();
+  renderJornada();
 }
 function computeScorelineSums(rows){
   let n=0, sumHome=0, sumAway=0, c00=0, c10=0, c01=0, c11=0;
@@ -2669,7 +2719,7 @@ function renderJornada(){
       div.style.background = '#39FF14';
       div.style.borderColor = '#2ecc0f';
     }
-    div.onclick = (e) => { if(!e.target.closest('.detail-btn')) toggleMatchPick(fx.id); };
+    div.onclick = (e) => { if(!e.target.closest('.detail-btn') && !e.target.closest('.result-form') && !e.target.closest('.result-toggle-btn')) toggleMatchPick(fx.id); };
     let statsLine = '';
     if(!sinDatos){
       statsLine = `<p style="margin:5px 0 0; font-family:'JetBrains Mono'; font-size:11.5px; ${tc}">
@@ -2677,13 +2727,31 @@ function renderJornada(){
         ${cards.pOver!==null ? `<br>🟨 ${cards.total.toFixed(1)} tarjetas · Over 4.5: ${fmtPct(cards.pOver)}` : ''}
       </p>`;
     }
+    const savedResult = (MANUAL_RESULTS[matchLiga]||[]).find(r=>r.fxId===fx.id);
+    const formOpen = OPEN_RESULT_FORMS.has(fx.id);
+    const resultToggleBtn = `<button class="btn result-toggle-btn" onclick="event.stopPropagation(); toggleResultForm('${fx.id}')" style="flex-shrink:0; padding:8px 12px; font-size:11px; white-space:nowrap; ${savedResult ? 'border-color:#22C55E; color:#22C55E;' : ''}">${savedResult ? '✓ Resultado' : '+ Resultado'}</button>`;
+    const resultForm = formOpen ? `
+      <div class="result-form" style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--line);">
+        <p class="hint" style="${tc}">Mete el resultado y los córners reales de este partido — se suma a las medias del equipo, útil en ligas sin CSV como 1ª RFEF.</p>
+        <div class="grid2">
+          <div><label style="${tc}">Goles local</label><input id="res_hg_${fx.id}" type="number" min="0" value="${savedResult?savedResult.fthg:''}"></div>
+          <div><label style="${tc}">Goles visitante</label><input id="res_ag_${fx.id}" type="number" min="0" value="${savedResult?savedResult.ftag:''}"></div>
+          <div><label style="${tc}">Córners local</label><input id="res_hc_${fx.id}" type="number" min="0" value="${savedResult && savedResult.hc!==null ?savedResult.hc:''}"></div>
+          <div><label style="${tc}">Córners visitante</label><input id="res_ac_${fx.id}" type="number" min="0" value="${savedResult && savedResult.ac!==null ?savedResult.ac:''}"></div>
+        </div>
+        <button class="btn amber" onclick="event.stopPropagation(); saveManualResult('${fx.id}')" style="width:100%;">Guardar resultado</button>
+      </div>` : '';
     div.innerHTML = `
       <div style="flex:1; min-width:0;">
         <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; ${tc} overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${fx.local} vs ${fx.visitante}</p>
         <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${fx.fecha||''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado' : ''}</p>
         ${statsLine}
+        ${resultForm}
       </div>
-      ${!sinDatos ? `<button class="btn detail-btn" onclick="event.stopPropagation(); openMatchDetail('${fx.id}')" style="flex-shrink:0; padding:8px 12px; font-size:11px; white-space:nowrap;">Ver →</button>` : ''}
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        ${!sinDatos ? `<button class="btn detail-btn" onclick="event.stopPropagation(); openMatchDetail('${fx.id}')" style="flex-shrink:0; padding:8px 12px; font-size:11px; white-space:nowrap;">Ver →</button>` : ''}
+        ${resultToggleBtn}
+      </div>
     `;
     container.appendChild(div);
   });
@@ -3232,6 +3300,7 @@ async function boot(){
     MANUAL_TEAMS = teamsState.manualTeams || [];
     SEASON_IMPORTS = teamsState.seasonImports || [];
     FIXTURES = teamsState.fixtures || [];
+    MANUAL_RESULTS = teamsState.manualResults || {};
   }
   const betsState = await loadBetsState();
   if(betsState){
