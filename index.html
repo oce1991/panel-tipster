@@ -1514,7 +1514,7 @@ function importParsedIntoSeason(liga, temporada, weight, parsed){
 async function fetchViaCorsProxy(url){
   const proxies = [
     'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-    'https://corsproxy.io/?url=' + encodeURIComponent(url),
+    'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url),
     'https://thingproxy.freeboard.io/fetch/' + url,
   ];
   let lastError = null;
