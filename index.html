@@ -1515,14 +1515,15 @@ async function fetchViaCorsProxy(url){
   const proxies = [
     'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
     'https://corsproxy.io/?url=' + encodeURIComponent(url),
+    'https://thingproxy.freeboard.io/fetch/' + url,
   ];
   let lastError = null;
   for(const proxyUrl of proxies){
     try{
       const resp = await fetch(proxyUrl);
-      if(!resp.ok) throw new Error('HTTP '+resp.status);
+      if(!resp.ok) throw new Error('HTTP '+resp.status+' ('+proxyUrl.split('/')[2]+')');
       const text = await resp.text();
-      if(!text || text.trim().startsWith('<')) throw new Error('respuesta no valida');
+      if(!text || text.trim().startsWith('<')) throw new Error('respuesta no valida ('+proxyUrl.split('/')[2]+')');
       return text;
     }catch(e){ lastError = e; }
   }
