@@ -125,6 +125,9 @@
   .custom-select-opt img{height:14px; vertical-align:middle; margin-right:8px;}
   .custom-select-opt:hover{background:rgba(168,85,247,0.25);}
   .custom-select-opt.sel{background:rgba(168,85,247,0.4); font-weight:700;}
+  .drag-handle{cursor:grab; font-size:16px; color:var(--header-muted); touch-action:none; user-select:none; padding:6px; text-align:center;}
+  tr.dragging{position:relative; z-index:20; background:rgba(168,85,247,0.18); box-shadow:0 6px 16px rgba(0,0,0,0.4);}
+  tr.drag-ghost{opacity:0.3;}
 
   button.btn{
     background:rgba(255,255,255,0.08); color:var(--ink); border:1px solid var(--line); padding:10px 16px;
@@ -586,7 +589,8 @@ create policy "public update" on tipster_data for update using (true);</pre>
     <div class="card">
       <h2><span class="tag">Historial</span> Todas las apuestas</h2>
       <button class="btn" onclick="exportBetsCSV()" style="margin-bottom:10px;">Exportar historial (CSV)</button>
-      <table id="betsTable"><thead><tr><th>Fecha</th><th>Partido</th><th>Mercado</th><th>Cuota</th><th>Stake</th><th>CLV</th><th>Nota</th><th>Estado</th><th>P/L</th><th></th></tr></thead><tbody></tbody></table>
+      <p class="hint">Mantén pulsado el icono ⠿ y arrastra para reordenar las apuestas como quieras (útil para ponerlas en el orden de hora del partido, que la app no conoce).</p>
+      <table id="betsTable"><thead><tr><th></th><th>Fecha</th><th>Partido</th><th>Mercado</th><th>Cuota</th><th>Stake</th><th>CLV</th><th>Nota</th><th>Estado</th><th>P/L</th><th></th></tr></thead><tbody></tbody></table>
       <div class="empty" id="betsEmpty" style="display:none;">Todavía no has registrado ninguna apuesta.</div>
     </div>
   </div>
@@ -2969,11 +2973,13 @@ function renderBets(){
   const tbody = document.querySelector('#betsTable tbody');
   tbody.innerHTML='';
   document.getElementById('betsEmpty').style.display = BETS.length? 'none':'block';
-  [...BETS].sort((a,b)=>b.date.localeCompare(a.date)).forEach(b=>{
+  BETS.forEach((b,idx)=>{
     const pl = betPL(b);
     const clv = betCLV(b);
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${b.date}</td>
+    tr.dataset.index = idx;
+    tr.innerHTML = `<td class="drag-handle" data-drag-handle>⠿</td>
+      <td>${b.date}</td>
       <td style="font-family:Inter;">${b.match}<br><span class="hint">${b.pick}</span></td>
       <td>${b.market}</td>
       <td>${b.odd}</td>
@@ -2991,6 +2997,49 @@ function renderBets(){
       <td class="${pl>0?'pos':pl<0?'neg':''}">${pl.toFixed(2)}€</td>
       <td><button class="btn ghost" onclick="deleteBet('${b.id}')">×</button></td>`;
     tbody.appendChild(tr);
+  });
+  enableBetsDragReorder();
+}
+let betsDragState = null;
+function enableBetsDragReorder(){
+  const tbody = document.querySelector('#betsTable tbody');
+  tbody.querySelectorAll('[data-drag-handle]').forEach(handle=>{
+    handle.onpointerdown = (e)=>{
+      const tr = handle.closest('tr');
+      const tbodyEl = tr.parentElement;
+      const rows = [...tbodyEl.querySelectorAll('tr')];
+      betsDragState = {
+        fromIndex: parseInt(tr.dataset.index),
+        currentIndex: parseInt(tr.dataset.index),
+        tr, rows,
+        rowHeight: tr.getBoundingClientRect().height,
+        startY: e.clientY,
+      };
+      tr.classList.add('dragging');
+      handle.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    };
+    handle.onpointermove = (e)=>{
+      if(!betsDragState) return;
+      const deltaY = e.clientY - betsDragState.startY;
+      betsDragState.tr.style.transform = `translateY(${deltaY}px)`;
+      const steps = Math.round(deltaY / betsDragState.rowHeight);
+      const newIndex = Math.max(0, Math.min(betsDragState.rows.length-1, betsDragState.fromIndex + steps));
+      betsDragState.currentIndex = newIndex;
+    };
+    handle.onpointerup = (e)=>{
+      if(!betsDragState) return;
+      const { fromIndex, currentIndex, tr } = betsDragState;
+      tr.style.transform = '';
+      tr.classList.remove('dragging');
+      betsDragState = null;
+      if(fromIndex!==currentIndex){
+        const [moved] = BETS.splice(fromIndex,1);
+        BETS.splice(currentIndex,0,moved);
+        renderBets();
+        saveBetsState();
+      }
+    };
   });
 }
 async function updateBetNote(id, value){
