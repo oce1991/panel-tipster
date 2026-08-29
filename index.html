@@ -128,6 +128,7 @@
   .drag-handle{cursor:grab; font-size:16px; color:var(--header-muted); touch-action:none; user-select:none; padding:6px; text-align:center;}
   tr.dragging{position:relative; z-index:20; background:rgba(168,85,247,0.18); box-shadow:0 6px 16px rgba(0,0,0,0.4);}
   tr.drag-ghost{opacity:0.3;}
+  .bets-filter-btn.active{background:var(--amber); color:#fff; border-color:var(--amber);}
 
   button.btn{
     background:rgba(255,255,255,0.08); color:var(--ink); border:1px solid var(--line); padding:10px 16px;
@@ -589,7 +590,14 @@ create policy "public update" on tipster_data for update using (true);</pre>
     <div class="card">
       <h2><span class="tag">Historial</span> Todas las apuestas</h2>
       <button class="btn" onclick="exportBetsCSV()" style="margin-bottom:10px;">Exportar historial (CSV)</button>
-      <p class="hint">Mantén pulsado el icono ⠿ y arrastra para reordenar las apuestas como quieras (útil para ponerlas en el orden de hora del partido, que la app no conoce).</p>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;" id="betsFilterBar">
+        <button class="btn bets-filter-btn" data-filter="all" onclick="setBetsFilter('all')" style="padding:7px 12px; font-size:11px;">Todas</button>
+        <button class="btn bets-filter-btn" data-filter="pending" onclick="setBetsFilter('pending')" style="padding:7px 12px; font-size:11px;">Pendientes</button>
+        <button class="btn bets-filter-btn" data-filter="win" onclick="setBetsFilter('win')" style="padding:7px 12px; font-size:11px;">Ganadas</button>
+        <button class="btn bets-filter-btn" data-filter="loss" onclick="setBetsFilter('loss')" style="padding:7px 12px; font-size:11px;">Perdidas</button>
+        <button class="btn bets-filter-btn" data-filter="void" onclick="setBetsFilter('void')" style="padding:7px 12px; font-size:11px;">Anuladas</button>
+      </div>
+      <p class="hint">Mantén pulsado el icono ⠿ y arrastra para reordenar las apuestas como quieras (útil para ponerlas en el orden de hora del partido, que la app no conoce). Solo se puede reordenar con el filtro en "Todas".</p>
       <table id="betsTable"><thead><tr><th></th><th>Fecha</th><th>Partido</th><th>Mercado</th><th>Cuota</th><th>Stake</th><th>CLV</th><th>Nota</th><th>Estado</th><th>P/L</th><th></th></tr></thead><tbody></tbody></table>
       <div class="empty" id="betsEmpty" style="display:none;">Todavía no has registrado ninguna apuesta.</div>
     </div>
@@ -2939,7 +2947,7 @@ async function addBet(){
     modelProb: computeModelProbForBet(),
     note: document.getElementById('b_note').value.trim()
   };
-  BETS.push(bet);
+  BETS.unshift(bet);
   await saveBetsState();
   ['b_match','b_pick','b_odd','b_stake','b_close','b_note'].forEach(id=>document.getElementById(id).value='');
   renderBets();
@@ -2969,16 +2977,25 @@ function betCLV(b){
   if(!b.close) return null;
   return (b.odd/b.close - 1)*100;
 }
+let BETS_FILTER = 'all';
+function setBetsFilter(f){
+  BETS_FILTER = f;
+  renderBets();
+}
 function renderBets(){
+  document.querySelectorAll('.bets-filter-btn').forEach(b=>b.classList.toggle('active', b.dataset.filter===BETS_FILTER));
   const tbody = document.querySelector('#betsTable tbody');
   tbody.innerHTML='';
-  document.getElementById('betsEmpty').style.display = BETS.length? 'none':'block';
-  BETS.forEach((b,idx)=>{
+  const visible = BETS_FILTER==='all' ? BETS : BETS.filter(b=>b.status===BETS_FILTER);
+  document.getElementById('betsEmpty').style.display = visible.length? 'none':'block';
+  const canDrag = BETS_FILTER==='all';
+  visible.forEach((b)=>{
+    const realIndex = BETS.indexOf(b);
     const pl = betPL(b);
     const clv = betCLV(b);
     const tr = document.createElement('tr');
-    tr.dataset.index = idx;
-    tr.innerHTML = `<td class="drag-handle" data-drag-handle>⠿</td>
+    tr.dataset.index = realIndex;
+    tr.innerHTML = `<td class="drag-handle" ${canDrag ? 'data-drag-handle' : ''}>${canDrag ? '⠿' : ''}</td>
       <td>${b.date}</td>
       <td style="font-family:Inter;">${b.match}<br><span class="hint">${b.pick}</span></td>
       <td>${b.market}</td>
@@ -2998,7 +3015,7 @@ function renderBets(){
       <td><button class="btn ghost" onclick="deleteBet('${b.id}')">×</button></td>`;
     tbody.appendChild(tr);
   });
-  enableBetsDragReorder();
+  if(canDrag) enableBetsDragReorder();
 }
 let betsDragState = null;
 function enableBetsDragReorder(){
