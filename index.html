@@ -70,7 +70,7 @@
   nav.tabs button{
     flex:1 1 0; display:flex; flex-direction:column; align-items:center; gap:2px;
     background:transparent; border:none; color:var(--header-muted);
-    padding:6px 2px; font-family:'Space Grotesk'; font-weight:700; font-size:9.5px; letter-spacing:0.02em;
+    padding:6px 1px; font-family:'Space Grotesk'; font-weight:700; font-size:8.8px; letter-spacing:0.01em;
     cursor:pointer; white-space:nowrap;
     text-transform:uppercase; border-radius:10px;
   }
@@ -215,6 +215,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
   <button data-view="dashboard" class="active"><span class="icon">📊</span>Panel</button>
   <button data-view="teams"><span class="icon">⚽</span>Equipos</button>
   <button data-view="jornada"><span class="icon">📅</span>Jornada</button>
+  <button data-view="standings"><span class="icon">🏆</span>Tabla</button>
   <button data-view="bets"><span class="icon">💰</span>Apuestas</button>
   <button data-view="bankroll"><span class="icon">🏦</span>Banca</button>
 </nav>
@@ -540,6 +541,23 @@ create policy "public update" on tipster_data for update using (true);</pre>
       </select>
       <div id="jornadaMatches"></div>
       <div class="empty" id="jornadaEmpty" style="display:none;">No hay calendario importado todavía para esta liga.</div>
+    </div>
+  </div>
+
+  <!-- CLASIFICACION (TABLA ORDENABLE) -->
+  <div class="view" id="view-standings">
+    <div class="card">
+      <h2><span class="tag">Tabla</span> Clasificación por estadística</h2>
+      <p class="hint">Elige una liga y toca cualquier columna para ordenar por ella (vuelve a tocarla para invertir el orden). Los números son medias por partido, ya con el ajuste por muestra que usa el modelo — no promedios en bruto.</p>
+      <label>Liga</label>
+      <select id="st_liga" onchange="renderStandings()"></select>
+      <div style="overflow-x:auto; margin-top:10px;">
+        <table id="standingsTable" style="min-width:520px;">
+          <thead><tr id="standingsHead"></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="empty" id="standingsEmpty" style="display:none;">No hay equipos cargados en esta liga todavía.</div>
     </div>
   </div>
 
@@ -1824,6 +1842,7 @@ async function deleteWholeLiga(){
   recomputeTeams();
   renderTeams();
   refreshJornadaSelect();
+  refreshStandingsLigaSelect();
   box.innerHTML = `<p class="hint">Eliminado: ${nTeams} fichas, ${nImports} temporadas y ${nFixtures} partidos de "${escapeHtml(liga)}".</p>`;
 }
 function promoteTeam(){
@@ -2649,6 +2668,7 @@ async function importFixtures(){
     FIXTURES = FIXTURES.filter(f=>!ligasEnArchivo.has(f.liga)).concat(parsed);
     await saveTeamsState();
     refreshJornadaSelect();
+  refreshStandingsLigaSelect();
     refreshBetLigaSelect();
     box.innerHTML = `<p class="ev-pos">${parsed.length} partidos importados (${[...ligasEnArchivo].join(', ')}). Se ha sustituido el calendario anterior de esas ligas.</p>`;
     fileInput.value = '';
@@ -2656,6 +2676,61 @@ async function importFixtures(){
     console.error(e);
     box.innerHTML = '<p class="ev-neg">No se ha podido leer el archivo. ¿Es un .xlsx o .csv válido?</p>';
   }
+}
+const STANDINGS_COLS = [
+  {key:'name', label:'Equipo', sortable:false},
+  {key:'mp', label:'PJ', fmt:v=>v.toFixed(0)},
+  {key:'gf', label:'GF', fmt:v=>v.toFixed(2)},
+  {key:'ga', label:'GC', fmt:v=>v.toFixed(2)},
+  {key:'cf', label:'CF', fmt:v=>v.toFixed(2)},
+  {key:'ca', label:'CC', fmt:v=>v.toFixed(2)},
+  {key:'crf', label:'TF', fmt:v=>v.toFixed(2)},
+  {key:'cra', label:'TC', fmt:v=>v.toFixed(2)},
+];
+let STANDINGS_SORT = {key:'gf', dir:'desc'};
+function refreshStandingsLigaSelect(){
+  const sel = document.getElementById('st_liga');
+  if(!sel) return;
+  const current = sel.value;
+  const ligas = sortLigas([...new Set(TEAMS.map(t=>t.liga))]);
+  sel.innerHTML = ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`).join('');
+  if(ligas.includes(current)) sel.value = current;
+  enhanceLigaSelect('st_liga');
+  renderStandings();
+}
+function setStandingsSort(key){
+  if(STANDINGS_SORT.key===key) STANDINGS_SORT.dir = STANDINGS_SORT.dir==='desc' ? 'asc' : 'desc';
+  else STANDINGS_SORT = {key, dir:'desc'};
+  renderStandings();
+}
+function renderStandings(){
+  const liga = document.getElementById('st_liga').value;
+  const inLiga = TEAMS.filter(t=>t.liga===liga).map(t=>{
+    const mh=t.mh||0, ma=t.ma||0, mp=mh+ma;
+    const wavg=(fh,fa)=> mp>0 ? (fh*mh+fa*ma)/mp : 0;
+    return {
+      name: t.name, mp,
+      gf: wavg(t.gfh,t.gfa), ga: wavg(t.gah,t.gaa),
+      cf: wavg(t.cfh,t.cfa), ca: wavg(t.cah,t.caa),
+      crf: wavg(t.crfh,t.crfa), cra: wavg(t.crah,t.craa),
+    };
+  });
+  document.getElementById('standingsEmpty').style.display = inLiga.length ? 'none' : 'block';
+  const head = document.getElementById('standingsHead');
+  head.innerHTML = STANDINGS_COLS.map(c=>{
+    const arrow = STANDINGS_SORT.key===c.key ? (STANDINGS_SORT.dir==='desc'?' ▾':' ▴') : '';
+    return `<th ${c.sortable!==false ? `onclick="setStandingsSort('${c.key}')" style="cursor:pointer;"` : ''}>${c.label}${arrow}</th>`;
+  }).join('');
+  const sorted = [...inLiga].sort((a,b)=>{
+    const k = STANDINGS_SORT.key;
+    if(k==='name') return STANDINGS_SORT.dir==='desc' ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name);
+    return STANDINGS_SORT.dir==='desc' ? b[k]-a[k] : a[k]-b[k];
+  });
+  const tbody = document.querySelector('#standingsTable tbody');
+  tbody.innerHTML = sorted.map(t=>`<tr>
+    <td style="font-family:'Space Grotesk'; font-weight:600;">${escapeHtml(t.name)}</td>
+    ${STANDINGS_COLS.slice(1).map(c=>`<td>${c.fmt(t[c.key])}</td>`).join('')}
+  </tr>`).join('');
 }
 function refreshJornadaSelect(){
   const ligaSel = document.getElementById('jr_liga');
@@ -3429,6 +3504,7 @@ async function boot(){
   renderBets();
   renderDashboard();
   refreshJornadaSelect();
+  refreshStandingsLigaSelect();
   refreshLineaOptions();
   ['imp_liga','bulk_liga','promo_target','fx_liga'].forEach(enhanceLigaSelect);
 }
