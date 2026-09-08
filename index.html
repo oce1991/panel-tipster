@@ -548,11 +548,11 @@ create policy "public update" on tipster_data for update using (true);</pre>
   <div class="view" id="view-standings">
     <div class="card">
       <h2><span class="tag">Tabla</span> Clasificación por estadística</h2>
-      <p class="hint">Elige una liga y toca cualquier columna para ordenar por ella (vuelve a tocarla para invertir el orden). Los números son medias por partido, ya con el ajuste por muestra que usa el modelo — no promedios en bruto.</p>
+      <p class="hint">Elige una liga y toca cualquier columna para ordenar por ella (vuelve a tocarla para invertir el orden). Solo cuenta la temporada 26/27 (incluidos los resultados metidos a mano) — sin mezclar con años anteriores. Se muestran los totales de la temporada y la media por partido, sin ningún ajuste del modelo.</p>
       <label>Liga</label>
       <select id="st_liga" onchange="renderStandings()"></select>
       <div style="overflow-x:auto; margin-top:10px;">
-        <table id="standingsTable" style="min-width:520px;">
+        <table id="standingsTable" style="min-width:900px;">
           <thead><tr id="standingsHead"></tr></thead>
           <tbody></tbody>
         </table>
@@ -2680,14 +2680,50 @@ async function importFixtures(){
 const STANDINGS_COLS = [
   {key:'name', label:'Equipo', sortable:false},
   {key:'mp', label:'PJ', fmt:v=>v.toFixed(0)},
-  {key:'gf', label:'GF', fmt:v=>v.toFixed(2)},
-  {key:'ga', label:'GC', fmt:v=>v.toFixed(2)},
-  {key:'cf', label:'CF', fmt:v=>v.toFixed(2)},
-  {key:'ca', label:'CC', fmt:v=>v.toFixed(2)},
-  {key:'crf', label:'TF', fmt:v=>v.toFixed(2)},
-  {key:'cra', label:'TC', fmt:v=>v.toFixed(2)},
+  {key:'gf', label:'GF', fmt:v=>v.toFixed(0)},
+  {key:'gfAvg', label:'GF/P', fmt:v=>v.toFixed(2)},
+  {key:'ga', label:'GC', fmt:v=>v.toFixed(0)},
+  {key:'gaAvg', label:'GC/P', fmt:v=>v.toFixed(2)},
+  {key:'cf', label:'CF', fmt:v=>v.toFixed(0)},
+  {key:'cfAvg', label:'CF/P', fmt:v=>v.toFixed(2)},
+  {key:'ca', label:'CC', fmt:v=>v.toFixed(0)},
+  {key:'caAvg', label:'CC/P', fmt:v=>v.toFixed(2)},
+  {key:'crf', label:'TF', fmt:v=>v.toFixed(0)},
+  {key:'crfAvg', label:'TF/P', fmt:v=>v.toFixed(2)},
+  {key:'cra', label:'TC', fmt:v=>v.toFixed(0)},
+  {key:'craAvg', label:'TC/P', fmt:v=>v.toFixed(2)},
 ];
 let STANDINGS_SORT = {key:'gf', dir:'desc'};
+function isCurrentSeasonImport(imp){
+  const t = (imp.temporada||'').replace(/[\s-]/g,'/').toLowerCase();
+  return t==='26/27' || imp.temporada==='Manual';
+}
+function computeCurrentSeasonStandings(liga){
+  const relevant = SEASON_IMPORTS.filter(imp=> imp.liga===liga && isCurrentSeasonImport(imp));
+  const acc = {};
+  relevant.forEach(imp=>{
+    Object.entries(imp.groups||{}).forEach(([name,g])=>{
+      if(!acc[name]) acc[name] = {mp:0,gf:0,ga:0,cf:0,ca:0,crf:0,cra:0};
+      const a = acc[name];
+      a.mp += (g.home.mp||0)+(g.away.mp||0);
+      a.gf += (g.home.gf||0)+(g.away.gf||0);
+      a.ga += (g.home.ga||0)+(g.away.ga||0);
+      a.cf += (g.home.cf||0)+(g.away.cf||0);
+      a.ca += (g.home.ca||0)+(g.away.ca||0);
+      a.crf += (g.home.crf||0)+(g.away.crf||0);
+      a.cra += (g.home.cra||0)+(g.away.cra||0);
+    });
+  });
+  return Object.entries(acc).map(([name,a])=>({
+    name, mp:a.mp,
+    gf:a.gf, gfAvg: a.mp?a.gf/a.mp:0,
+    ga:a.ga, gaAvg: a.mp?a.ga/a.mp:0,
+    cf:a.cf, cfAvg: a.mp?a.cf/a.mp:0,
+    ca:a.ca, caAvg: a.mp?a.ca/a.mp:0,
+    crf:a.crf, crfAvg: a.mp?a.crf/a.mp:0,
+    cra:a.cra, craAvg: a.mp?a.cra/a.mp:0,
+  }));
+}
 function refreshStandingsLigaSelect(){
   const sel = document.getElementById('st_liga');
   if(!sel) return;
@@ -2705,16 +2741,7 @@ function setStandingsSort(key){
 }
 function renderStandings(){
   const liga = document.getElementById('st_liga').value;
-  const inLiga = TEAMS.filter(t=>t.liga===liga).map(t=>{
-    const mh=t.mh||0, ma=t.ma||0, mp=mh+ma;
-    const wavg=(fh,fa)=> mp>0 ? (fh*mh+fa*ma)/mp : 0;
-    return {
-      name: t.name, mp,
-      gf: wavg(t.gfh,t.gfa), ga: wavg(t.gah,t.gaa),
-      cf: wavg(t.cfh,t.cfa), ca: wavg(t.cah,t.caa),
-      crf: wavg(t.crfh,t.crfa), cra: wavg(t.crah,t.craa),
-    };
-  });
+  const inLiga = computeCurrentSeasonStandings(liga);
   document.getElementById('standingsEmpty').style.display = inLiga.length ? 'none' : 'block';
   const head = document.getElementById('standingsHead');
   head.innerHTML = STANDINGS_COLS.map(c=>{
