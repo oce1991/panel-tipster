@@ -732,11 +732,31 @@ async function loadTeamsState(){
 async function saveTeamsState(){
   // equipos + temporadas importadas + calendario: pesado, cambia poco (solo al importar), va en su propia fila
   try{
-    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, fixtures: FIXTURES, manualResults: MANUAL_RESULTS };
+    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, fixtures: FIXTURES };
     const { error } = await sbClient.from('tipster_data').upsert({ id:'main', data: payload, updated_at: new Date().toISOString() });
     if(error) throw error;
   }catch(e){
     console.error('Supabase save error (teams)', e);
+  }
+}
+async function loadManualResultsState(){
+  try{
+    const { data, error } = await sbClient.from('tipster_data').select('data').eq('id','manual_results').maybeSingle();
+    if(error) throw error;
+    return data ? data.data : null;
+  }catch(e){
+    console.error('Supabase load error (manual_results)', e);
+    return null;
+  }
+}
+async function saveManualResultsState(){
+  // resultados metidos a mano (ligas sin CSV): ligero, cambia con cada resultado -> fila propia para que guardar sea instantaneo
+  try{
+    const payload = { manualResults: MANUAL_RESULTS };
+    const { error } = await sbClient.from('tipster_data').upsert({ id:'manual_results', data: payload, updated_at: new Date().toISOString() });
+    if(error) throw error;
+  }catch(e){
+    console.error('Supabase save error (manual_results)', e);
   }
 }
 async function loadBetsState(){
@@ -1415,6 +1435,24 @@ function parseCSVText(text){
   }
   return {rows, missingCorners: iHc===-1 || iAc===-1, missingCards: iHy===-1 && iHr===-1, missingShots: iHs===-1 && iHst===-1, missingOdds: iOddH===-1 && iOddO25===-1, missingFouls: iHf===-1 && iAf===-1};
 }
+function rebuildManualSeasonImport(liga){
+  const rows = MANUAL_RESULTS[liga];
+  if(!rows || !rows.length) return;
+  const groups = aggregateRows(rows);
+  const regression = computeRegressionSums(rows);
+  const scorelines = computeScorelineSums(rows);
+  const matchLog = rows.filter(r=>r.dateSort).map(r=>({d:r.dateSort, h:r.home, a:r.away, hg:r.fthg, ag:r.ftag, hc:r.hc, ac:r.ac}));
+  const key = liga.toLowerCase()+'||manual';
+  const existingSeasonIdx = SEASON_IMPORTS.findIndex(i=>(i.liga.toLowerCase()+'||'+i.temporada.toLowerCase())===key);
+  const record = {
+    id: existingSeasonIdx!==-1 ? SEASON_IMPORTS[existingSeasonIdx].id : Date.now().toString()+Math.random().toString(36).slice(2,6),
+    liga, temporada:'Manual', weight: MANUAL_RESULT_WEIGHT, groups, regression, scorelines, matchLog
+  };
+  if(existingSeasonIdx!==-1) SEASON_IMPORTS[existingSeasonIdx] = record; else SEASON_IMPORTS.push(record);
+}
+function rebuildAllManualSeasonImports(){
+  Object.keys(MANUAL_RESULTS).forEach(liga => rebuildManualSeasonImport(liga));
+}
 function addManualResult(fx, fthg, ftag, hc, ac){
   const liga = fx.liga;
   if(!MANUAL_RESULTS[liga]) MANUAL_RESULTS[liga] = [];
@@ -1430,18 +1468,7 @@ function addManualResult(fx, fthg, ftag, hc, ac){
   const rows = MANUAL_RESULTS[liga];
   const existingIdx = rows.findIndex(r=>r.fxId===fx.id);
   if(existingIdx!==-1) rows[existingIdx] = row; else rows.push(row);
-
-  const groups = aggregateRows(rows);
-  const regression = computeRegressionSums(rows);
-  const scorelines = computeScorelineSums(rows);
-  const matchLog = rows.filter(r=>r.dateSort).map(r=>({d:r.dateSort, h:r.home, a:r.away, hg:r.fthg, ag:r.ftag, hc:r.hc, ac:r.ac}));
-  const key = liga.toLowerCase()+'||manual';
-  const existingSeasonIdx = SEASON_IMPORTS.findIndex(i=>(i.liga.toLowerCase()+'||'+i.temporada.toLowerCase())===key);
-  const record = {
-    id: existingSeasonIdx!==-1 ? SEASON_IMPORTS[existingSeasonIdx].id : Date.now().toString()+Math.random().toString(36).slice(2,6),
-    liga, temporada:'Manual', weight: MANUAL_RESULT_WEIGHT, groups, regression, scorelines, matchLog
-  };
-  if(existingSeasonIdx!==-1) SEASON_IMPORTS[existingSeasonIdx] = record; else SEASON_IMPORTS.push(record);
+  rebuildManualSeasonImport(liga); // solo en memoria, rapido -- no se vuelve a subir todo el bloque pesado
 }
 function toggleResultForm(fxId){
   if(OPEN_RESULT_FORMS.has(fxId)) OPEN_RESULT_FORMS.delete(fxId); else OPEN_RESULT_FORMS.add(fxId);
@@ -1457,7 +1484,7 @@ async function saveManualResult(fxId){
   if(isNaN(hg) || isNaN(ag)){ alert('Al menos el resultado (goles) es obligatorio.'); return; }
   addManualResult(fx, hg, ag, hc, ac);
   OPEN_RESULT_FORMS.delete(fxId);
-  await persistTeamSources();
+  await saveManualResultsState();
   recomputeTeams();
   renderTeams();
   renderJornada();
@@ -1789,7 +1816,10 @@ async function deleteWholeLiga(){
   SEASON_IMPORTS = SEASON_IMPORTS.filter(i=>i.liga!==liga);
   FIXTURES = FIXTURES.filter(f=>f.liga!==liga);
   PICKED_MATCHES = new Set([...PICKED_MATCHES].filter(id=>FIXTURES.some(f=>f.id===id)));
+  const hadManualResults = !!MANUAL_RESULTS[liga];
+  delete MANUAL_RESULTS[liga];
   await persistTeamSources();
+  if(hadManualResults) await saveManualResultsState();
   await savePicks();
   recomputeTeams();
   renderTeams();
@@ -3366,8 +3396,16 @@ async function boot(){
     MANUAL_TEAMS = teamsState.manualTeams || [];
     SEASON_IMPORTS = teamsState.seasonImports || [];
     FIXTURES = teamsState.fixtures || [];
-    MANUAL_RESULTS = teamsState.manualResults || {};
   }
+  const manualResultsState = await loadManualResultsState();
+  if(manualResultsState){
+    MANUAL_RESULTS = manualResultsState.manualResults || {};
+  } else if(teamsState && teamsState.manualResults && Object.keys(teamsState.manualResults).length){
+    // migracion automatica: version antigua que guardaba los resultados manuales dentro de la fila pesada 'main'.
+    MANUAL_RESULTS = teamsState.manualResults;
+    await saveManualResultsState();
+  }
+  rebuildAllManualSeasonImports(); // reconstruye en memoria las entradas 'Manual' de SEASON_IMPORTS, sin volver a subir nada pesado
   const betsState = await loadBetsState();
   if(betsState){
     BETS = betsState.bets || [];
