@@ -551,6 +551,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <p class="hint">Elige una liga y toca cualquier columna para ordenar por ella (vuelve a tocarla para invertir el orden). Solo cuenta la temporada 26/27 (incluidos los resultados metidos a mano) — sin mezclar con años anteriores. Se muestran los totales de la temporada y la media por partido, sin ningún ajuste del modelo.</p>
       <label>Liga</label>
       <select id="st_liga" onchange="renderStandings()"></select>
+      <div id="standingsDiag"></div>
       <div style="overflow-x:auto; margin-top:10px;">
         <table id="standingsTable" style="min-width:900px;">
           <thead><tr id="standingsHead"></tr></thead>
@@ -2695,8 +2696,13 @@ const STANDINGS_COLS = [
 ];
 let STANDINGS_SORT = {key:'gf', dir:'desc'};
 function isCurrentSeasonImport(imp){
-  const t = (imp.temporada||'').replace(/[\s-]/g,'/').toLowerCase();
-  return t==='26/27' || imp.temporada==='Manual';
+  if(imp.temporada==='Manual') return true;
+  const seasonCode = currentSeasonCode(); // ej. '2627'
+  const startShort = seasonCode.slice(0,2), endShort = seasonCode.slice(2);
+  const nums = (imp.temporada||'').match(/\d+/g) || [];
+  if(nums.length < 2) return false;
+  const shortify = n => n.length>=2 ? n.slice(-2) : n.padStart(2,'0');
+  return shortify(nums[0])===startShort && shortify(nums[1])===endShort;
 }
 function computeCurrentSeasonStandings(liga){
   const relevant = SEASON_IMPORTS.filter(imp=> imp.liga===liga && isCurrentSeasonImport(imp));
@@ -2743,6 +2749,17 @@ function renderStandings(){
   const liga = document.getElementById('st_liga').value;
   const inLiga = computeCurrentSeasonStandings(liga);
   document.getElementById('standingsEmpty').style.display = inLiga.length ? 'none' : 'block';
+  const allForLiga = SEASON_IMPORTS.filter(i=>i.liga===liga);
+  const usedTemporadas = allForLiga.filter(isCurrentSeasonImport).map(i=>i.temporada);
+  const diagEl = document.getElementById('standingsDiag');
+  if(diagEl){
+    if(!allForLiga.length){
+      diagEl.innerHTML = '';
+    } else {
+      const allTemporadas = allForLiga.map(i=>i.temporada).join(', ');
+      diagEl.innerHTML = `<p class="hint">Contando: ${usedTemporadas.length ? usedTemporadas.join(', ') : '(ninguna coincide con 26/27)'} — temporadas disponibles en esta liga: ${allTemporadas}</p>`;
+    }
+  }
   const head = document.getElementById('standingsHead');
   head.innerHTML = STANDINGS_COLS.map(c=>{
     const arrow = STANDINGS_SORT.key===c.key ? (STANDINGS_SORT.dir==='desc'?' ▾':' ▴') : '';
