@@ -737,11 +737,31 @@ function saveSupabaseConfig(){
   }
   location.reload();
 }
-async function loadTeamsState(){
+function ligaSlug(liga){
+  return 'league_' + liga.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+}
+async function loadOldCombinedMainRow(){
   try{
     const { data, error } = await sbClient.from('tipster_data').select('data').eq('id','main').maybeSingle();
     if(error) throw error;
     return data ? data.data : null;
+  }catch(e){
+    console.error('Supabase load error (main antiguo)', e);
+    return null;
+  }
+}
+async function loadTeamsState(){
+  try{
+    const { data, error } = await sbClient.from('tipster_data').select('data').like('id','league_%');
+    if(error) throw error;
+    if(!data || !data.length) return null;
+    const merged = { manualTeams: [], seasonImports: [], fixtures: [] };
+    data.forEach(row=>{
+      merged.manualTeams.push(...(row.data.manualTeams||[]));
+      merged.seasonImports.push(...(row.data.seasonImports||[]));
+      merged.fixtures.push(...(row.data.fixtures||[]));
+    });
+    return merged;
   }catch(e){
     console.error('Supabase load error', e);
     alert('No se ha podido conectar con tu base de datos. Revisa la URL/clave o vuelve a configurarlas.');
@@ -749,13 +769,30 @@ async function loadTeamsState(){
   }
 }
 async function saveTeamsState(){
-  // equipos + temporadas importadas + calendario: pesado, cambia poco (solo al importar), va en su propia fila
+  // equipos + temporadas importadas + calendario: una fila POR LIGA, para que cada guardado sea pequeño
+  // (todo junto en una sola fila se volvio demasiado grande para Supabase, "statement timeout")
   try{
-    const payload = { manualTeams: MANUAL_TEAMS, seasonImports: SEASON_IMPORTS, fixtures: FIXTURES };
-    const { error } = await sbClient.from('tipster_data').upsert({ id:'main', data: payload, updated_at: new Date().toISOString() });
-    if(error) throw error;
+    const ligas = [...new Set([...MANUAL_TEAMS.map(t=>t.liga), ...SEASON_IMPORTS.map(i=>i.liga), ...FIXTURES.map(f=>f.liga)])];
+    for(const liga of ligas){
+      const payload = {
+        liga,
+        manualTeams: MANUAL_TEAMS.filter(t=>t.liga===liga),
+        seasonImports: SEASON_IMPORTS.filter(i=>i.liga===liga),
+        fixtures: FIXTURES.filter(f=>f.liga===liga),
+      };
+      const { error } = await sbClient.from('tipster_data').upsert({ id: ligaSlug(liga), data: payload, updated_at: new Date().toISOString() });
+      if(error) console.error(`Supabase save error (liga ${liga})`, error);
+    }
   }catch(e){
     console.error('Supabase save error (teams)', e);
+  }
+}
+async function deleteLeagueRow(liga){
+  try{
+    const { error } = await sbClient.from('tipster_data').delete().eq('id', ligaSlug(liga));
+    if(error) console.error(`Supabase delete error (liga ${liga})`, error);
+  }catch(e){
+    console.error('Supabase delete error (teams)', e);
   }
 }
 async function loadManualResultsState(){
@@ -1838,6 +1875,7 @@ async function deleteWholeLiga(){
   const hadManualResults = !!MANUAL_RESULTS[liga];
   delete MANUAL_RESULTS[liga];
   await persistTeamSources();
+  await deleteLeagueRow(liga);
   if(hadManualResults) await saveManualResultsState();
   await savePicks();
   recomputeTeams();
@@ -3510,11 +3548,21 @@ async function boot(){
     return;
   }
   sbClient = supabase.createClient(cfg.url, cfg.key);
-  const teamsState = await loadTeamsState();
+  let teamsState = await loadTeamsState();
   if(teamsState){
     MANUAL_TEAMS = teamsState.manualTeams || [];
     SEASON_IMPORTS = teamsState.seasonImports || [];
     FIXTURES = teamsState.fixtures || [];
+  } else {
+    // no hay filas por liga todavia -> migrar desde la fila antigua 'main' (todo junto), si existe
+    const oldMain = await loadOldCombinedMainRow();
+    if(oldMain && (oldMain.manualTeams?.length || oldMain.seasonImports?.length || oldMain.fixtures?.length)){
+      MANUAL_TEAMS = oldMain.manualTeams || [];
+      SEASON_IMPORTS = oldMain.seasonImports || [];
+      FIXTURES = oldMain.fixtures || [];
+      await saveTeamsState(); // reparte ya en filas por liga
+      teamsState = oldMain;
+    }
   }
   const manualResultsState = await loadManualResultsState();
   if(manualResultsState){
