@@ -510,7 +510,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
 
     <div class="card">
       <h2><span class="tag">Próxima</span> Jornada a analizar</h2>
-      <p class="hint">Elige una liga concreta, o "Todas las ligas" para ver de golpe todos los partidos de ese número de jornada en cualquier liga que tengas cargada. Toca un partido para marcarlo/desmarcarlo como pick (se pone en verde), o "Ver →" para entrar en su análisis completo (córners, goles, tarjetas, hándicap, historial directo...).</p>
+      <p class="hint">Elige una liga concreta, o "Todas las ligas" para ver de golpe todos los partidos de ese número de jornada en cualquier liga que tengas cargada. Toca un partido para marcarlo/desmarcarlo como pick (se pone en verde), o "Ver →" para entrar en su análisis completo (córners, goles, tarjetas, hándicap, historial directo...). Los partidos con córners esperados por encima de 10,7 se marcan en verde solos, sin que tengas que tocarlos.</p>
       <div class="grid2">
         <div><label>Liga</label><select id="jr_liga" onchange="refreshJornadaSelect()"></select></div>
         <div><label>Jornada</label><select id="jr_jornada" onchange="renderJornada()"></select></div>
@@ -694,6 +694,7 @@ let PICKED_MATCHES = new Set(); // ids de partidos marcados en Jornada
 let MANUAL_RESULTS = {}; // liga -> [ {home,away,fthg,ftag,hc,ac,fxId,dateSort,...} ] - resultados metidos a mano (ligas sin CSV, ej. 1a RFEF)
 const OPEN_RESULT_FORMS = new Set(); // fxId cuyos formularios de "meter resultado" estan abiertos, para que sobrevivan a un rerender
 const MANUAL_RESULT_WEIGHT = 3;
+const AUTO_HIGHLIGHT_CORNERS_THRESHOLD = 10.7; // en Jornada, partidos con corners esperados por encima de esto se marcan en verde solos
 function blankSide(){ return {mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0,crmp:0,crf:0,cra:0,shmp:0,shf:0,sha:0,sotf:0,sota:0,fmp:0,fl:0}; }
 
 // ---------- Supabase storage layer ----------
@@ -2833,12 +2834,14 @@ function renderJornada(){
 
   enriched.forEach(({fx, matchLiga, home, away, sinDatos, corners, goals, cards})=>{
     const isPicked = PICKED_MATCHES.has(fx.id);
-    const tc = isPicked ? 'color:#0A2B20;' : '';
+    const autoHighCorners = !sinDatos && corners.total > AUTO_HIGHLIGHT_CORNERS_THRESHOLD;
+    const isGreen = isPicked || autoHighCorners;
+    const tc = isGreen ? 'color:#0A2B20;' : '';
     const div = document.createElement('div');
     div.className = 'result-box';
     div.style.cssText = 'margin-bottom:8px; display:flex; align-items:flex-start; justify-content:space-between; gap:10px; cursor:pointer;';
     div.title = 'Toca la fila para marcar/desmarcar como pick';
-    if(isPicked){
+    if(isGreen){
       div.style.background = '#39FF14';
       div.style.borderColor = '#2ecc0f';
     }
@@ -2867,7 +2870,7 @@ function renderJornada(){
     div.innerHTML = `
       <div style="flex:1; min-width:0;">
         <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; ${tc} overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${fx.local} vs ${fx.visitante}</p>
-        <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${fx.fecha||''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado' : ''}</p>
+        <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${fx.fecha||''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado' : (autoHighCorners ? '🚩 córners altos (>'+AUTO_HIGHLIGHT_CORNERS_THRESHOLD+')' : '')}</p>
         ${statsLine}
         ${resultForm}
       </div>
