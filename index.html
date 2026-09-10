@@ -738,13 +738,23 @@ async function loadTeamsState(){
   try{
     const { data, error } = await sbClient.from('tipster_data').select('data').like('id','league_%');
     if(error) throw error;
-    if(!data || !data.length) return null;
-    const merged = { manualTeams: [], seasonImports: [], fixtures: [] };
-    data.forEach(row=>{
+    const merged = { manualTeams: [], seasonImports: [], fixtures: [], recovered: false };
+    const ligasConFixtures = new Set();
+    (data||[]).forEach(row=>{
       merged.manualTeams.push(...(row.data.manualTeams||[]));
       merged.seasonImports.push(...(row.data.seasonImports||[]));
       merged.fixtures.push(...(row.data.fixtures||[]));
+      if((row.data.fixtures||[]).length) ligasConFixtures.add(row.data.liga);
     });
+    // red de seguridad: si alguna liga no trajo calendario desde su fila (ej. porque el Action de GitHub
+    // creo esa fila antes de que la app migrase y la dejo con fixtures vacio), recuperamos ese calendario
+    // de la fila antigua 'main', que nunca se borra y sigue teniendo los datos originales intactos.
+    const oldMain = await loadOldCombinedMainRow();
+    if(oldMain && oldMain.fixtures && oldMain.fixtures.length){
+      const faltantes = oldMain.fixtures.filter(f=>!ligasConFixtures.has(f.liga));
+      if(faltantes.length){ merged.fixtures.push(...faltantes); merged.recovered = true; }
+    }
+    if(!merged.manualTeams.length && !merged.seasonImports.length && !merged.fixtures.length) return null;
     return merged;
   }catch(e){
     console.error('Supabase load error', e);
@@ -3480,6 +3490,7 @@ async function boot(){
     MANUAL_TEAMS = teamsState.manualTeams || [];
     SEASON_IMPORTS = teamsState.seasonImports || [];
     FIXTURES = teamsState.fixtures || [];
+    if(teamsState.recovered) await saveTeamsState(); // consolida el calendario recuperado en las filas por liga
   } else {
     // no hay filas por liga todavia -> migrar desde la fila antigua 'main' (todo junto), si existe
     const oldMain = await loadOldCombinedMainRow();
