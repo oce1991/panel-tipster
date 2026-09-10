@@ -510,7 +510,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
 
     <div class="card">
       <h2><span class="tag">Próxima</span> Jornada a analizar</h2>
-      <p class="hint">Elige una liga concreta, o "Todas las ligas" para ver de golpe todos los partidos de ese número de jornada en cualquier liga que tengas cargada. Toca un partido para marcarlo/desmarcarlo como pick (se pone en verde), o "Ver →" para entrar en su análisis completo (córners, goles, tarjetas, hándicap, historial directo...). Los partidos con córners esperados por encima de 10,7 se marcan en verde solos, sin que tengas que tocarlos.</p>
+      <p class="hint">Elige una liga concreta, o "Todas las ligas" para ver de golpe todos los partidos de ese número de jornada en cualquier liga que tengas cargada. Toca un partido para marcarlo/desmarcarlo como pick (se pone en verde), o "Ver →" para entrar en su análisis completo (córners, goles, tarjetas, hándicap, historial directo...). Los partidos con córners esperados por encima de 10,7 se marcan en verde solos, sin que tengas que tocarlos. Cuando hay cuota real disponible (ligas grandes, mercado de goles/1X2), se muestra debajo con su EV — la trae el sistema de alertas de Telegram una vez al día, no se actualiza al momento.</p>
       <div class="grid2">
         <div><label>Liga</label><select id="jr_liga" onchange="refreshJornadaSelect()"></select></div>
         <div><label>Jornada</label><select id="jr_jornada" onchange="renderJornada()"></select></div>
@@ -692,6 +692,7 @@ let BANKCFG = {initial:1000, fraction:0.25, minEV:3};
 let FIXTURES = []; // {id, liga, jornada, fecha, local, visitante}
 let PICKED_MATCHES = new Set(); // ids de partidos marcados en Jornada
 let MANUAL_RESULTS = {}; // liga -> [ {home,away,fthg,ftag,hc,ac,fxId,dateSort,...} ] - resultados metidos a mano (ligas sin CSV, ej. 1a RFEF)
+let ODDS_DATA = []; // cuotas reales por partido, leidas de Supabase (las escribe el sistema de alertas de Telegram, no la app)
 const OPEN_RESULT_FORMS = new Set(); // fxId cuyos formularios de "meter resultado" estan abiertos, para que sobrevivan a un rerender
 const MANUAL_RESULT_WEIGHT = 3;
 const AUTO_HIGHLIGHT_CORNERS_THRESHOLD = 10.7; // en Jornada, partidos con corners esperados por encima de esto se marcan en verde solos
@@ -807,6 +808,17 @@ async function saveManualResultsState(){
     if(error) throw error;
   }catch(e){
     console.error('Supabase save error (manual_results)', e);
+  }
+}
+async function loadOddsState(){
+  // cuotas reales (1X2 y Over/Under goles), descargadas por el sistema de alertas de Telegram -- solo lectura, la app nunca las guarda
+  try{
+    const { data, error } = await sbClient.from('tipster_data').select('data').eq('id','odds').maybeSingle();
+    if(error) throw error;
+    return data ? (data.data.matches || []) : [];
+  }catch(e){
+    console.error('Supabase load error (odds)', e);
+    return [];
   }
 }
 async function loadBetsState(){
@@ -2805,6 +2817,15 @@ function refreshJornadaOptions(){
   lastJornadaLiga = liga;
   renderJornada();
 }
+function findOddsForFixture(fx){
+  if(!ODDS_DATA.length) return null;
+  const h = normalizeTeamName(fx.local), a = normalizeTeamName(fx.visitante);
+  return ODDS_DATA.find(m=>{
+    if(m.liga !== fx.liga) return false;
+    const mh = normalizeTeamName(m.home), ma = normalizeTeamName(m.away);
+    return (mh.includes(h)||h.includes(mh)) && (ma.includes(a)||a.includes(ma));
+  }) || null;
+}
 function renderJornada(){
   const liga = document.getElementById('jr_liga').value;
   const jornada = document.getElementById('jr_jornada').value;
@@ -2862,6 +2883,23 @@ function renderJornada(){
         🚩 ${corners.total.toFixed(1)} córners · Over 9.5: ${fmtPct(corners.pOver)} &nbsp;·&nbsp; ⚽ ${(goals.lh+goals.la).toFixed(1)} goles · 1X2: ${fmtPct(goals.p1)}/${fmtPct(goals.pX)}/${fmtPct(goals.p2)}
         ${cards.pOver!==null ? `<br>🟨 ${cards.total.toFixed(1)} tarjetas · Over 4.5: ${fmtPct(cards.pOver)}` : ''}
       </p>`;
+      const oddsMatch = findOddsForFixture(fx);
+      if(oddsMatch){
+        const marketBets = [
+          oddsMatch.odd1 ? {label:'1', prob:goals.p1, odd:oddsMatch.odd1} : null,
+          oddsMatch.oddX ? {label:'X', prob:goals.pX, odd:oddsMatch.oddX} : null,
+          oddsMatch.odd2 ? {label:'2', prob:goals.p2, odd:oddsMatch.odd2} : null,
+          oddsMatch.oddOver25 ? {label:'Over 2.5', prob:goals.pOver, odd:oddsMatch.oddOver25} : null,
+          oddsMatch.oddUnder25 ? {label:'Under 2.5', prob:goals.pUnder, odd:oddsMatch.oddUnder25} : null,
+        ].filter(Boolean).map(b=>({...b, ev: b.prob*b.odd - (1-b.prob)}));
+        const best = marketBets.reduce((m,b)=> (!m || b.ev>m.ev) ? b : m, null);
+        if(best){
+          const evColor = best.ev>0 ? 'color:#22C55E;' : 'color:#FB7185;';
+          statsLine += `<p style="margin:3px 0 0; font-family:'JetBrains Mono'; font-size:11.5px; ${tc}">
+            💰 Cuota real ${best.label} @ ${best.odd} · EV <span style="${evColor}">${best.ev>0?'+':''}${(best.ev*100).toFixed(1)}%</span>
+          </p>`;
+        }
+      }
     }
     const savedResult = (MANUAL_RESULTS[matchLiga]||[]).find(r=>r.fxId===fx.id);
     const formOpen = OPEN_RESULT_FORMS.has(fx.id);
@@ -3511,6 +3549,7 @@ async function boot(){
     await saveManualResultsState();
   }
   rebuildAllManualSeasonImports(); // reconstruye en memoria las entradas 'Manual' de SEASON_IMPORTS, sin volver a subir nada pesado
+  ODDS_DATA = await loadOddsState();
   const betsState = await loadBetsState();
   if(betsState){
     BETS = betsState.bets || [];
