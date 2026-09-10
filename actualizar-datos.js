@@ -307,3 +307,4 @@ async function main(){
 }
 
 main().catch(e=>{ console.error('Error fatal:', e); process.exit(1); });
+
