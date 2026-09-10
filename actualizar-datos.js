@@ -251,21 +251,21 @@ async function upsertSupabaseRow(id, data){
   });
   if(!resp.ok) throw new Error(`Supabase HTTP ${resp.status} guardando fila '${id}': ${await resp.text()}`);
 }
+function ligaSlug(liga){
+  return 'league_' + liga.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+}
 
 // ---------- programa principal ----------
 async function main(){
   const seasonCode = currentSeasonCode();
   const temporada = seasonCode.slice(0,2)+'/'+seasonCode.slice(2);
+  const weight = parseFloat(process.env.WEIGHT || '3');
   console.log(`Temporada actual detectada: ${temporada} (codigo ${seasonCode})`);
-
-  console.log('Leyendo datos actuales de Supabase...');
-  const teamsState = await fetchSupabaseRow('main');
-  if(!teamsState){ console.error('No se ha podido leer la fila "main" de Supabase.'); process.exit(1); }
-  const SEASON_IMPORTS = teamsState.seasonImports || [];
 
   const resultados = [];
   for(const [liga, code] of Object.entries(LEAGUE_CODES)){
     const url = `https://www.football-data.co.uk/mmz4281/${seasonCode}/${code}.csv`;
+    const rowId = ligaSlug(liga);
     try{
       console.log(`Descargando ${liga} (${code})...`);
       const resp = await fetch(url);
@@ -281,19 +281,17 @@ async function main(){
         resultados.push({liga, ok:false, motivo: parsed.error || 'sin partidos'});
         continue;
       }
-      const weight = parseFloat(process.env.WEIGHT || '3');
-      const nPartidos = importParsedIntoSeason(SEASON_IMPORTS, liga, temporada, weight, parsed);
-      console.log(`  -> ${nPartidos} partidos importados`);
+      // leemos solo la fila de ESTA liga (pequeña), para no perder sus fichas manuales / otras temporadas / calendario
+      const existing = (await fetchSupabaseRow(rowId)) || { liga, manualTeams: [], seasonImports: [], fixtures: [] };
+      const nPartidos = importParsedIntoSeason(existing.seasonImports, liga, temporada, weight, parsed);
+      await upsertSupabaseRow(rowId, existing);
+      console.log(`  -> ${nPartidos} partidos importados y guardados`);
       resultados.push({liga, ok:true, partidos:nPartidos});
     }catch(e){
       console.log(`  -> error: ${e.message}`);
       resultados.push({liga, ok:false, motivo:e.message});
     }
   }
-
-  console.log('Guardando en Supabase...');
-  teamsState.seasonImports = SEASON_IMPORTS;
-  await upsertSupabaseRow('main', teamsState);
 
   console.log('\n=== Resumen ===');
   resultados.forEach(r=>{
@@ -307,4 +305,3 @@ async function main(){
 }
 
 main().catch(e=>{ console.error('Error fatal:', e); process.exit(1); });
-
