@@ -277,23 +277,6 @@ create policy "public update" on tipster_data for update using (true);</pre>
   <!-- TEAMS -->
   <div class="view" id="view-teams">
     <div class="card collapsible collapsed">
-      <h2 onclick="toggleCard(this)"><span class="tag">1 clic</span> Actualización automática<span class="chevron">▾</span></h2>
-      <p class="hint">Descarga y sube automáticamente el CSV más reciente de football-data.co.uk para las 10 ligas que tienen código en ese sitio (Primera, Segunda, Premier League, Championship, Ligue 1, Serie A, Eredivisie, Süper Lig, Bundesliga, Bundesliga 2). No incluye 1ª RFEF ni Brasil, que vienen de otras fuentes sin este atajo.</p>
-      <p class="hint"><strong>Aviso honesto:</strong> esto depende de un servicio externo (proxy) que salta la restricción de seguridad del navegador — puede fallar alguna vez. Si una liga falla, súbela a mano como siempre; el resto se actualizará igualmente.</p>
-      <div class="grid2">
-        <div><label>Temporada (código, ej. 2526 para 25/26)</label><input id="auto_season" type="text" placeholder="2526"></div>
-        <div><label>Peso</label><input id="auto_weight" type="number" step="0.5" value="3" min="0.5"></div>
-      </div>
-      <button class="btn amber" onclick="autoUpdateAllLeagues()">Actualizar todas las ligas ahora</button>
-      <div id="autoUpdateProgressWrap" style="display:none; margin-top:10px;">
-        <div style="background:var(--chalk); border:1px solid var(--line); border-radius:6px; height:22px; overflow:hidden;">
-          <div id="autoUpdateProgressBar" style="background:var(--amber); height:100%; width:0%; transition:width 0.2s;"></div>
-        </div>
-        <p class="hint" id="autoUpdateProgressText" style="margin-top:4px; text-align:center;"></p>
-      </div>
-      <div class="result-box" id="autoUpdateResult" style="display:none;"></div>
-    </div>
-    <div class="card collapsible collapsed">
       <h2 onclick="toggleCard(this)"><span class="tag">Todo en 1</span> Subir el Excel combinado de football-data.co.uk<span class="chevron">▾</span></h2>
       <p class="hint">Football-data.co.uk publica un Excel con todas las ligas juntas, cada una en su propia hoja (identificada por su código, ej. "SP1" para Primera). Súbelo aquí y la app reparte cada hoja a la liga correspondiente automáticamente — sin depender de ningún servicio externo que pueda fallar.</p>
       <div class="grid2">
@@ -1708,65 +1691,6 @@ function importParsedIntoSeason(liga, temporada, weight, parsed){
   const record = { id: existingIdx!==-1 ? SEASON_IMPORTS[existingIdx].id : Date.now().toString()+Math.random().toString(36).slice(2,6), liga, temporada, weight, groups, regression, scorelines, shotStats, foulStats, matchLog };
   if(existingIdx!==-1) SEASON_IMPORTS[existingIdx] = record; else SEASON_IMPORTS.push(record);
   return matchLog.length;
-}
-async function fetchViaCorsProxy(url){
-  const proxies = [
-    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-    'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url),
-    'https://thingproxy.freeboard.io/fetch/' + url,
-  ];
-  let lastError = null;
-  for(const proxyUrl of proxies){
-    try{
-      const resp = await fetch(proxyUrl);
-      if(!resp.ok) throw new Error('HTTP '+resp.status+' ('+proxyUrl.split('/')[2]+')');
-      const text = await resp.text();
-      if(!text || text.trim().startsWith('<')) throw new Error('respuesta no valida ('+proxyUrl.split('/')[2]+')');
-      return text;
-    }catch(e){ lastError = e; }
-  }
-  throw lastError || new Error('fallo desconocido');
-}
-async function autoUpdateAllLeagues(){
-  const box = document.getElementById('autoUpdateResult');
-  const progressWrap = document.getElementById('autoUpdateProgressWrap');
-  const progressBar = document.getElementById('autoUpdateProgressBar');
-  const progressText = document.getElementById('autoUpdateProgressText');
-  box.style.display = 'block';
-  const seasonCode = (document.getElementById('auto_season').value.trim() || currentSeasonCode());
-  if(!/^\d{4}$/.test(seasonCode)){ alert('El código de temporada debe tener 4 dígitos, ej. 2526'); return; }
-  const temporada = seasonCode.slice(0,2)+'/'+seasonCode.slice(2);
-  const weight = parseFloat(document.getElementById('auto_weight').value) || 3;
-  const entries = Object.entries(LEAGUE_CODES);
-  const total = entries.length;
-  progressWrap.style.display = 'block';
-  progressBar.style.width = '0%';
-  progressText.textContent = `0 / ${total} ligas`;
-  box.innerHTML = '';
-  const results = [];
-  let done = 0;
-  for(const [liga, code] of entries){
-    progressText.textContent = `Actualizando ${liga}... (${done} / ${total})`;
-    const url = `https://www.football-data.co.uk/mmz4281/${seasonCode}/${code}.csv`;
-    try{
-      const text = await fetchViaCorsProxy(url);
-      const parsed = parseCSVText(text);
-      if(parsed.error || !parsed.rows.length) throw new Error(parsed.error || 'sin partidos en el archivo (¿temporada aún no disponible?)');
-      const nFechas = importParsedIntoSeason(liga, temporada, weight, parsed);
-      results.push(`<p class="ev-pos">${liga}: ${parsed.rows.length} partidos actualizados (${nFechas} con fecha)</p>`);
-    }catch(e){
-      results.push(`<p class="ev-neg">${liga}: no se pudo actualizar automáticamente (${e.message}) — súbelo a mano si hace falta.</p>`);
-    }
-    done++;
-    const pct = Math.round((done/total)*100);
-    progressBar.style.width = pct+'%';
-    progressText.textContent = `${done} / ${total} ligas (${pct}%)`;
-    box.innerHTML = results.join('');
-  }
-  await persistTeamSources();
-  recomputeTeams();
-  renderTeams();
-  progressText.textContent = `Completado: ${done} / ${total} ligas`;
 }
 async function importCSV(){
   const fileInput = document.getElementById('imp_file');
