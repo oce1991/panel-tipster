@@ -230,6 +230,12 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <div style="font-size:11px; color:var(--header-muted); text-transform:uppercase; letter-spacing:0.08em; margin-top:6px;">Banca actual</div>
     </div>
     <div class="statgrid" id="dashStats"></div>
+    <div class="card">
+      <h2><span class="tag">Hoy</span> Mis picks marcados<span id="myPicksCount" style="float:right; font-family:'JetBrains Mono'; font-size:12px; color:var(--header-muted);"></span></h2>
+      <p class="hint">Todos los partidos marcados en verde (a mano o por córners altos), de cualquier liga y jornada, juntos aquí para no tener que ir liga por liga.</p>
+      <div id="myPicksList"></div>
+      <div class="empty" id="myPicksEmpty" style="display:none;">No tienes ningún partido marcado ahora mismo.</div>
+    </div>
     <div class="card collapsible collapsed">
       <h2 onclick="toggleCard(this)"><span class="tag">Evolución</span> Banca acumulada<span class="chevron">▾</span></h2>
       <canvas id="bankChart" height="140"></canvas>
@@ -425,6 +431,28 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <div><label>λ esperado — Local</label><input id="c_lh" type="number" step="0.1"></div>
         <div><label>λ esperado — Visitante</label><input id="c_la" type="number" step="0.1"></div>
       </div>
+      <div class="card collapsible collapsed" style="margin:10px 0; padding:12px;">
+        <h2 onclick="toggleCard(this)" style="font-size:13px;"><span class="tag">Opcional</span> Comparar cuotas de varias casas<span class="chevron">▾</span></h2>
+        <p class="hint">Mete la cuota de córners de hasta 3 casas distintas y te quedas automáticamente con la mejor de cada lado.</p>
+        <div id="cornersBookieRows">
+          <div class="grid3">
+            <div><label>Casa 1</label><input id="bk1_name" type="text" placeholder="Bet365"></div>
+            <div><label>Over</label><input id="bk1_over" type="number" step="0.01"></div>
+            <div><label>Under</label><input id="bk1_under" type="number" step="0.01"></div>
+          </div>
+          <div class="grid3">
+            <div><label>Casa 2</label><input id="bk2_name" type="text" placeholder="Bwin"></div>
+            <div><label>Over</label><input id="bk2_over" type="number" step="0.01"></div>
+            <div><label>Under</label><input id="bk2_under" type="number" step="0.01"></div>
+          </div>
+          <div class="grid3">
+            <div><label>Casa 3</label><input id="bk3_name" type="text" placeholder="Codere"></div>
+            <div><label>Over</label><input id="bk3_over" type="number" step="0.01"></div>
+            <div><label>Under</label><input id="bk3_under" type="number" step="0.01"></div>
+          </div>
+        </div>
+        <button class="btn ghost" onclick="useBestCornersOdds()" style="width:100%; margin-top:6px;">Usar la mejor cuota de cada lado</button>
+      </div>
       <div class="grid3">
         <div><label>Línea over/under (total)</label><input id="c_line" type="number" step="0.5" value="9.5"></div>
         <div><label>Cuota Over</label><input id="c_oddOver" type="number" step="0.01" placeholder="1.90"></div>
@@ -522,6 +550,10 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <option value="goals">Goles — probabilidad Over 2.5 (mayor a menor)</option>
         <option value="cards">Tarjetas — probabilidad Over 4.5 (mayor a menor)</option>
       </select>
+      <label style="display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer;">
+        <input type="checkbox" id="jr_onlyInteresting" onchange="renderJornada()" style="width:auto; margin:0;">
+        Mostrar solo partidos interesantes (córners altos o marcados)
+      </label>
       <div id="jornadaMatches"></div>
       <div class="empty" id="jornadaEmpty" style="display:none;">No hay calendario importado todavía para esta liga.</div>
     </div>
@@ -693,6 +725,8 @@ let FIXTURES = []; // {id, liga, jornada, fecha, local, visitante}
 let PICKED_MATCHES = new Set(); // ids de partidos marcados en Jornada
 let MANUAL_RESULTS = {}; // liga -> [ {home,away,fthg,ftag,hc,ac,fxId,dateSort,...} ] - resultados metidos a mano (ligas sin CSV, ej. 1a RFEF)
 let ODDS_DATA = []; // cuotas reales por partido, leidas de Supabase (las escribe el sistema de alertas de Telegram, no la app)
+let MATCH_META = {}; // matchKey -> {hora, nota} -- info manual por partido (hora exacta, notas de bajas/contexto), sobrevive a reimportar el calendario
+function matchMetaKey(fx){ return `${fx.liga}||${fx.jornada}||${fx.local}||${fx.visitante}`; }
 const OPEN_RESULT_FORMS = new Set(); // fxId cuyos formularios de "meter resultado" estan abiertos, para que sobrevivan a un rerender
 const MANUAL_RESULT_WEIGHT = 3;
 const AUTO_HIGHLIGHT_CORNERS_THRESHOLD = 10.7; // en Jornada, partidos con corners esperados por encima de esto se marcan en verde solos
@@ -808,6 +842,24 @@ async function saveManualResultsState(){
     if(error) throw error;
   }catch(e){
     console.error('Supabase save error (manual_results)', e);
+  }
+}
+async function loadMatchMetaState(){
+  try{
+    const { data, error } = await sbClient.from('tipster_data').select('data').eq('id','match_meta').maybeSingle();
+    if(error) throw error;
+    return data ? (data.data.matchMeta || {}) : {};
+  }catch(e){
+    console.error('Supabase load error (match_meta)', e);
+    return {};
+  }
+}
+async function saveMatchMetaState(){
+  try{
+    const { error } = await sbClient.from('tipster_data').upsert({ id:'match_meta', data:{ matchMeta: MATCH_META }, updated_at: new Date().toISOString() });
+    if(error) throw error;
+  }catch(e){
+    console.error('Supabase save error (match_meta)', e);
   }
 }
 async function loadOddsState(){
@@ -1536,6 +1588,23 @@ function toggleResultForm(fxId){
   if(OPEN_RESULT_FORMS.has(fxId)) OPEN_RESULT_FORMS.delete(fxId); else OPEN_RESULT_FORMS.add(fxId);
   renderJornada();
 }
+const OPEN_META_FORMS = new Set();
+function toggleMetaForm(fxId){
+  if(OPEN_META_FORMS.has(fxId)) OPEN_META_FORMS.delete(fxId); else OPEN_META_FORMS.add(fxId);
+  renderJornada();
+}
+async function saveMatchMeta(fxId){
+  const fx = FIXTURES.find(f=>f.id===fxId);
+  if(!fx) return;
+  const key = matchMetaKey(fx);
+  const hora = document.getElementById(`meta_hora_${fxId}`).value;
+  const nota = document.getElementById(`meta_nota_${fxId}`).value.trim();
+  if(!hora && !nota) delete MATCH_META[key];
+  else MATCH_META[key] = { hora: hora||'', nota: nota||'' };
+  OPEN_META_FORMS.delete(fxId);
+  await saveMatchMetaState();
+  renderJornada();
+}
 async function saveManualResult(fxId){
   const fx = FIXTURES.find(f=>f.id===fxId);
   if(!fx) return;
@@ -2085,6 +2154,19 @@ function renderHeadToHead(homeName, awayName, liga){
 }
 
 // ---------- corners model ----------
+function useBestCornersOdds(){
+  const overs = ['bk1_over','bk2_over','bk3_over'].map(id=>({id, name: document.getElementById(id.replace('_over','_name')).value.trim(), val: parseFloat(document.getElementById(id).value)})).filter(o=>!isNaN(o.val));
+  const unders = ['bk1_under','bk2_under','bk3_under'].map(id=>({id, name: document.getElementById(id.replace('_under','_name')).value.trim(), val: parseFloat(document.getElementById(id).value)})).filter(o=>!isNaN(o.val));
+  if(!overs.length && !unders.length){ alert('Mete al menos una cuota de Over o Under de alguna casa.'); return; }
+  if(overs.length){
+    const best = overs.reduce((m,o)=> o.val>m.val ? o : m, overs[0]);
+    document.getElementById('c_oddOver').value = best.val;
+  }
+  if(unders.length){
+    const best = unders.reduce((m,o)=> o.val>m.val ? o : m, unders[0]);
+    document.getElementById('c_oddUnder').value = best.val;
+  }
+}
 function calcCorners(){
   const lh = parseFloat(document.getElementById('c_lh').value);
   const la = parseFloat(document.getElementById('c_la').value);
@@ -2834,7 +2916,6 @@ function renderJornada(){
   const emptyEl = document.getElementById('jornadaEmpty');
   const crossLiga = liga === '__ALL__';
   const matches = FIXTURES.filter(f=> f.jornada===jornada && (crossLiga || f.liga===liga));
-  emptyEl.style.display = matches.length ? 'none' : 'block';
   container.innerHTML = '';
 
   let enriched = matches.map(fx=>{
@@ -2861,6 +2942,17 @@ function renderJornada(){
       if(pb===null || pb===undefined) return -1;
       return pb-pa; // mayor a menor
     });
+  }
+
+  const onlyInteresting = document.getElementById('jr_onlyInteresting').checked;
+  if(onlyInteresting){
+    enriched = enriched.filter(m=> PICKED_MATCHES.has(m.fx.id) || (!m.sinDatos && m.corners.total > AUTO_HIGHLIGHT_CORNERS_THRESHOLD));
+  }
+  emptyEl.style.display = enriched.length ? 'none' : 'block';
+  if(onlyInteresting && !enriched.length && matches.length){
+    emptyEl.textContent = 'Ningún partido de esta jornada cumple el criterio de "interesante" ahora mismo.';
+  } else {
+    emptyEl.textContent = 'No hay calendario importado todavía para esta liga.';
   }
 
   enriched.forEach(({fx, matchLiga, home, away, sinDatos, corners, goals, cards})=>{
@@ -2915,16 +3007,32 @@ function renderJornada(){
         </div>
         <button class="btn amber" onclick="event.stopPropagation(); saveManualResult('${fx.id}')" style="width:100%;">Guardar resultado</button>
       </div>` : '';
+    const meta = MATCH_META[matchMetaKey(fx)];
+    const metaFormOpen = OPEN_META_FORMS.has(fx.id);
+    const metaToggleBtn = `<button class="btn result-toggle-btn" onclick="event.stopPropagation(); toggleMetaForm('${fx.id}')" style="flex-shrink:0; padding:8px 12px; font-size:11px; white-space:nowrap; ${meta ? 'border-color:#F59E0B; color:#F59E0B;' : ''}">${meta ? '✓ Hora/Nota' : '🕐 Hora/Nota'}</button>`;
+    const metaForm = metaFormOpen ? `
+      <div class="result-form" style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--line);">
+        <p class="hint" style="${tc}">Hora exacta del partido y notas propias (bajas, lesiones, contexto) — queda guardado aunque reimportes el calendario más adelante.</p>
+        <div class="grid2">
+          <div><label style="${tc}">Hora</label><input id="meta_hora_${fx.id}" type="time" value="${meta?meta.hora:''}"></div>
+        </div>
+        <label style="${tc}">Nota</label>
+        <textarea id="meta_nota_${fx.id}" rows="2" placeholder="Ej. baja el portero titular">${meta?escapeHtml(meta.nota):''}</textarea>
+        <button class="btn amber" onclick="event.stopPropagation(); saveMatchMeta('${fx.id}')" style="width:100%;">Guardar hora/nota</button>
+      </div>` : '';
     div.innerHTML = `
       <div style="flex:1; min-width:0;">
         <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; ${tc} overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${fx.local} vs ${fx.visitante}</p>
-        <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${fx.fecha||''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado' : (autoHighCorners ? '🚩 córners altos (>'+AUTO_HIGHLIGHT_CORNERS_THRESHOLD+')' : '')}</p>
+        <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${fx.fecha||''}${meta && meta.hora ? ' · 🕐 '+meta.hora : ''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado' : (autoHighCorners ? '🚩 córners altos (>'+AUTO_HIGHLIGHT_CORNERS_THRESHOLD+')' : '')}</p>
+        ${meta && meta.nota ? `<p class="hint" style="margin:2px 0 0; font-style:italic; ${tc}">📝 ${escapeHtml(meta.nota)}</p>` : ''}
         ${statsLine}
         ${resultForm}
+        ${metaForm}
       </div>
       <div style="display:flex; flex-direction:column; gap:6px;">
         ${!sinDatos ? `<button class="btn detail-btn" onclick="event.stopPropagation(); openMatchDetail('${fx.id}')" style="flex-shrink:0; padding:8px 12px; font-size:11px; white-space:nowrap;">Ver →</button>` : ''}
         ${resultToggleBtn}
+        ${metaToggleBtn}
       </div>
     `;
     container.appendChild(div);
@@ -2955,6 +3063,7 @@ async function toggleMatchPick(fxId){
   if(wasPicked) PICKED_MATCHES.delete(fxId);
   else PICKED_MATCHES.add(fxId);
   renderJornada();
+  renderMyPicks();
   if(!wasPicked){
     prefillBetFromFixture(fxId);
   }
@@ -3305,7 +3414,44 @@ function calcKelly(){
 
 // ---------- dashboard ----------
 let bankChartInstance = null;
+function renderMyPicks(){
+  const listEl = document.getElementById('myPicksList');
+  const emptyEl = document.getElementById('myPicksEmpty');
+  const countEl = document.getElementById('myPicksCount');
+  if(!listEl) return; // vista aun no en el DOM la primera vez que se llama
+  const picks = FIXTURES.filter(fx=>PICKED_MATCHES.has(fx.id));
+  countEl.textContent = picks.length ? `${picks.length} marcado${picks.length===1?'':'s'}` : '';
+  emptyEl.style.display = picks.length ? 'none' : 'block';
+  const sorted = [...picks].sort((a,b)=>{
+    const da = parseFechaLoose(a.fecha), db = parseFechaLoose(b.fecha);
+    if(!da && !db) return 0;
+    if(!da) return 1;
+    if(!db) return -1;
+    return da - db;
+  });
+  listEl.innerHTML = sorted.map(fx=>{
+    const home = findTeamInLiga(fx.local, fx.liga);
+    const away = findTeamInLiga(fx.visitante, fx.liga);
+    const sinDatos = !home || !away;
+    let statsLine = '';
+    if(!sinDatos){
+      const corners = predictCorners(home, away, fx.liga, 9.5);
+      const goals = predictGoals(home, away, fx.liga, 2.5);
+      statsLine = `<p style="margin:3px 0 0; font-family:'JetBrains Mono'; font-size:11px;">🚩 ${corners.total.toFixed(1)} córners · Over 9.5: ${fmtPct(corners.pOver)} &nbsp;·&nbsp; ⚽ ${(goals.lh+goals.la).toFixed(1)} goles</p>`;
+    }
+    const meta = MATCH_META[matchMetaKey(fx)];
+    return `<div class="result-box" style="margin-bottom:8px; display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
+      <div style="flex:1; min-width:0;">
+        <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(fx.local)} vs ${escapeHtml(fx.visitante)}</p>
+        <p class="hint" style="margin:2px 0 0;">${escapeHtml(fx.liga)} · ${fx.fecha||''}${meta && meta.hora ? ' · 🕐 '+meta.hora : ''}</p>
+        ${statsLine}
+      </div>
+      ${!sinDatos ? `<button class="btn detail-btn" onclick="openMatchDetail('${fx.id}')" style="flex-shrink:0; padding:8px 12px; font-size:11px; white-space:nowrap;">Ver →</button>` : ''}
+    </div>`;
+  }).join('');
+}
 function renderDashboard(){
+  renderMyPicks();
   const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
   const totalStaked = settled.reduce((s,b)=>s+b.stake,0);
   const totalPL = settled.reduce((s,b)=>s+betPL(b),0);
@@ -3550,6 +3696,7 @@ async function boot(){
   }
   rebuildAllManualSeasonImports(); // reconstruye en memoria las entradas 'Manual' de SEASON_IMPORTS, sin volver a subir nada pesado
   ODDS_DATA = await loadOddsState();
+  MATCH_META = await loadMatchMetaState();
   const betsState = await loadBetsState();
   if(betsState){
     BETS = betsState.bets || [];
