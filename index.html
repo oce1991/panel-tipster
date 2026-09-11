@@ -231,10 +231,10 @@ create policy "public update" on tipster_data for update using (true);</pre>
     </div>
     <div class="statgrid" id="dashStats"></div>
     <div class="card">
-      <h2><span class="tag">Hoy</span> Mis picks marcados<span id="myPicksCount" style="float:right; font-family:'JetBrains Mono'; font-size:12px; color:var(--header-muted);"></span></h2>
-      <p class="hint">Todos los partidos marcados en verde (a mano o por córners altos), de cualquier liga y jornada, juntos aquí para no tener que ir liga por liga.</p>
+      <h2><span class="tag">Pendientes</span> Mis apuestas<span id="myPicksCount" style="float:right; font-family:'JetBrains Mono'; font-size:12px; color:var(--header-muted);"></span></h2>
+      <p class="hint">Las apuestas que ya has registrado y siguen pendientes de resultado, juntas aquí sin tener que ir a la pestaña Apuestas.</p>
       <div id="myPicksList"></div>
-      <div class="empty" id="myPicksEmpty" style="display:none;">No tienes ningún partido marcado ahora mismo.</div>
+      <div class="empty" id="myPicksEmpty" style="display:none;">No tienes ninguna apuesta pendiente ahora mismo.</div>
     </div>
     <div class="card collapsible collapsed">
       <h2 onclick="toggleCard(this)"><span class="tag">Evolución</span> Banca acumulada<span class="chevron">▾</span></h2>
@@ -3419,34 +3419,17 @@ function renderMyPicks(){
   const emptyEl = document.getElementById('myPicksEmpty');
   const countEl = document.getElementById('myPicksCount');
   if(!listEl) return; // vista aun no en el DOM la primera vez que se llama
-  const picks = FIXTURES.filter(fx=>PICKED_MATCHES.has(fx.id));
-  countEl.textContent = picks.length ? `${picks.length} marcado${picks.length===1?'':'s'}` : '';
-  emptyEl.style.display = picks.length ? 'none' : 'block';
-  const sorted = [...picks].sort((a,b)=>{
-    const da = parseFechaLoose(a.fecha), db = parseFechaLoose(b.fecha);
-    if(!da && !db) return 0;
-    if(!da) return 1;
-    if(!db) return -1;
-    return da - db;
-  });
-  listEl.innerHTML = sorted.map(fx=>{
-    const home = findTeamInLiga(fx.local, fx.liga);
-    const away = findTeamInLiga(fx.visitante, fx.liga);
-    const sinDatos = !home || !away;
-    let statsLine = '';
-    if(!sinDatos){
-      const corners = predictCorners(home, away, fx.liga, 9.5);
-      const goals = predictGoals(home, away, fx.liga, 2.5);
-      statsLine = `<p style="margin:3px 0 0; font-family:'JetBrains Mono'; font-size:11px;">🚩 ${corners.total.toFixed(1)} córners · Over 9.5: ${fmtPct(corners.pOver)} &nbsp;·&nbsp; ⚽ ${(goals.lh+goals.la).toFixed(1)} goles</p>`;
-    }
-    const meta = MATCH_META[matchMetaKey(fx)];
+  const pending = BETS.filter(b=>b.status==='pending');
+  countEl.textContent = pending.length ? `${pending.length} pendiente${pending.length===1?'':'s'}` : '';
+  emptyEl.style.display = pending.length ? 'none' : 'block';
+  const sorted = [...pending].sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+  listEl.innerHTML = sorted.map(b=>{
     return `<div class="result-box" style="margin-bottom:8px; display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
       <div style="flex:1; min-width:0;">
-        <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(fx.local)} vs ${escapeHtml(fx.visitante)}</p>
-        <p class="hint" style="margin:2px 0 0;">${escapeHtml(fx.liga)} · ${fx.fecha||''}${meta && meta.hora ? ' · 🕐 '+meta.hora : ''}</p>
-        ${statsLine}
+        <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(b.match)}</p>
+        <p class="hint" style="margin:2px 0 0;">${escapeHtml(b.liga||'')} · ${b.date||''} · ${escapeHtml(b.market||'')}</p>
+        <p style="margin:3px 0 0; font-family:'JetBrains Mono'; font-size:11px;">${escapeHtml(b.pick||'')} @ ${b.odd} · Stake ${b.stake}€</p>
       </div>
-      ${!sinDatos ? `<button class="btn detail-btn" onclick="openMatchDetail('${fx.id}')" style="flex-shrink:0; padding:8px 12px; font-size:11px; white-space:nowrap;">Ver →</button>` : ''}
     </div>`;
   }).join('');
 }
