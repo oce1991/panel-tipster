@@ -229,6 +229,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
       <div id="dashHeroNum" style="font-family:'Space Grotesk'; font-weight:800; font-size:44px; line-height:1; background:linear-gradient(90deg,#C4B5FD,#F9A8D4); -webkit-background-clip:text; background-clip:text; color:transparent;">—</div>
       <div style="font-size:11px; color:var(--header-muted); text-transform:uppercase; letter-spacing:0.08em; margin-top:6px;">Banca actual</div>
     </div>
+    <p id="lastUpdateInfo" class="hint" style="text-align:center; margin:-10px 0 14px;"></p>
     <div class="statgrid" id="dashStats"></div>
     <div class="card">
       <h2><span class="tag">Pendientes</span> Mis apuestas<span id="myPicksCount" style="float:right; font-family:'JetBrains Mono'; font-size:12px; color:var(--header-muted);"></span></h2>
@@ -726,6 +727,7 @@ let PICKED_MATCHES = new Set(); // ids de partidos marcados en Jornada
 let MANUAL_RESULTS = {}; // liga -> [ {home,away,fthg,ftag,hc,ac,fxId,dateSort,...} ] - resultados metidos a mano (ligas sin CSV, ej. 1a RFEF)
 let ODDS_DATA = []; // cuotas reales por partido, leidas de Supabase (las escribe el sistema de alertas de Telegram, no la app)
 let MATCH_META = {}; // matchKey -> {hora, nota} -- info manual por partido (hora exacta, notas de bajas/contexto), sobrevive a reimportar el calendario
+let LAST_DATA_UPDATE = null; // fecha/hora de la ultima vez que alguna liga se actualizo en Supabase (via el script de GitHub Actions)
 function matchMetaKey(fx){ return `${fx.liga}||${fx.jornada}||${fx.local}||${fx.visitante}`; }
 const OPEN_RESULT_FORMS = new Set(); // fxId cuyos formularios de "meter resultado" estan abiertos, para que sobrevivan a un rerender
 const MANUAL_RESULT_WEIGHT = 3;
@@ -771,15 +773,16 @@ async function loadOldCombinedMainRow(){
 }
 async function loadTeamsState(){
   try{
-    const { data, error } = await sbClient.from('tipster_data').select('data').like('id','league_%');
+    const { data, error } = await sbClient.from('tipster_data').select('data,updated_at').like('id','league_%');
     if(error) throw error;
-    const merged = { manualTeams: [], seasonImports: [], fixtures: [], recovered: false };
+    const merged = { manualTeams: [], seasonImports: [], fixtures: [], recovered: false, lastUpdate: null };
     const ligasConFixtures = new Set();
     (data||[]).forEach(row=>{
       merged.manualTeams.push(...(row.data.manualTeams||[]));
       merged.seasonImports.push(...(row.data.seasonImports||[]));
       merged.fixtures.push(...(row.data.fixtures||[]));
       if((row.data.fixtures||[]).length) ligasConFixtures.add(row.data.liga);
+      if(row.updated_at && (!merged.lastUpdate || row.updated_at > merged.lastUpdate)) merged.lastUpdate = row.updated_at;
     });
     // red de seguridad: si alguna liga no trajo calendario desde su fila (ej. porque el Action de GitHub
     // creo esa fila antes de que la app migrase y la dejo con fixtures vacio), recuperamos ese calendario
@@ -3433,7 +3436,25 @@ function renderMyPicks(){
     </div>`;
   }).join('');
 }
+function renderLastUpdateInfo(){
+  const el = document.getElementById('lastUpdateInfo');
+  if(!el) return;
+  if(!LAST_DATA_UPDATE){
+    el.textContent = '';
+    return;
+  }
+  const then = new Date(LAST_DATA_UPDATE);
+  const diffMs = Date.now() - then.getTime();
+  const diffMin = diffMs/60000;
+  let rel;
+  if(diffMin < 60) rel = `hace ${Math.max(1,Math.round(diffMin))} min`;
+  else if(diffMin < 60*24) rel = `hace ${Math.round(diffMin/60)} h`;
+  else rel = `hace ${Math.round(diffMin/(60*24))} días`;
+  const stale = diffMin > 60*36; // mas de 36h sin actualizar ninguna liga -> probable fallo del Action diario
+  el.innerHTML = `Datos actualizados ${rel} (${then.toLocaleDateString('es-ES')} ${then.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})})${stale ? ' <span style="color:#FB7185;">⚠ revisa el Action de GitHub</span>' : ''}`;
+}
 function renderDashboard(){
+  renderLastUpdateInfo();
   renderMyPicks();
   const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
   const totalStaked = settled.reduce((s,b)=>s+b.stake,0);
@@ -3657,6 +3678,7 @@ async function boot(){
     MANUAL_TEAMS = teamsState.manualTeams || [];
     SEASON_IMPORTS = teamsState.seasonImports || [];
     FIXTURES = teamsState.fixtures || [];
+    LAST_DATA_UPDATE = teamsState.lastUpdate || null;
     if(teamsState.recovered) await saveTeamsState(); // consolida el calendario recuperado en las filas por liga
   } else {
     // no hay filas por liga todavia -> migrar desde la fila antigua 'main' (todo junto), si existe
