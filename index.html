@@ -555,6 +555,10 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <input type="checkbox" id="jr_onlyInteresting" onchange="renderJornada()" style="width:auto; margin:0;">
         Mostrar solo partidos interesantes (córners altos o marcados)
       </label>
+      <label style="display:flex; align-items:center; gap:8px; margin-top:8px; cursor:pointer;">
+        <input type="checkbox" id="jr_onlyHighHitRate" onchange="renderJornada()" style="width:auto; margin:0;">
+        Mostrar solo con línea 9.5 córners cumplida ≥80% en los últimos partidos
+      </label>
       <div id="jornadaMatches"></div>
       <div class="empty" id="jornadaEmpty" style="display:none;">No hay calendario importado todavía para esta liga.</div>
     </div>
@@ -1134,6 +1138,27 @@ function buildCombinedMatchLogs(){
     byLiga[imp.liga].push(...imp.matchLog);
   });
   return byLiga;
+}
+const LINE_HIT_RATE_N = 8; // ultimos N partidos por equipo que cuentan para el % de acierto real de la linea
+function computeMatchLineHitRate(home, away, liga, line, n){
+  const logs = buildCombinedMatchLogs()[liga] || [];
+  function recentFor(teamName){
+    const name = (teamName||'').toLowerCase();
+    const teamMatches = logs.filter(m=> (m.h && m.h.toLowerCase()===name) || (m.a && m.a.toLowerCase()===name));
+    const withCorners = teamMatches.filter(m=>m.hc!==null && m.hc!==undefined && m.ac!==null && m.ac!==undefined && m.d);
+    return [...withCorners].sort((a,b)=> b.d.localeCompare(a.d)).slice(0, n);
+  }
+  const homeRecent = recentFor(home);
+  const awayRecent = recentFor(away);
+  const combined = [...homeRecent, ...awayRecent];
+  if(!combined.length) return null;
+  const hitRate = (arr) => arr.length ? arr.filter(m=>(m.hc+m.ac)>line).length/arr.length : null;
+  return {
+    total: combined.length,
+    rate: hitRate(combined),
+    homeRate: hitRate(homeRecent), homeN: homeRecent.length,
+    awayRate: hitRate(awayRecent), awayN: awayRecent.length,
+  };
 }
 const BACKTEST_MIN_MATCHES = 6; // partidos previos minimos (en su lado) antes de fiarse de la media de un equipo
 function runBacktest(liga){
@@ -2926,13 +2951,14 @@ function renderJornada(){
     const home = findTeamInLiga(fx.local, matchLiga);
     const away = findTeamInLiga(fx.visitante, matchLiga);
     const sinDatos = !home || !away;
-    let corners=null, goals=null, cards=null;
+    let corners=null, goals=null, cards=null, hitRate=null;
     if(!sinDatos){
       corners = predictCorners(home, away, matchLiga, 9.5);
       goals = predictGoals(home, away, matchLiga, 2.5);
       cards = predictCards(home, away, 4.5, matchLiga);
+      hitRate = computeMatchLineHitRate(fx.local, fx.visitante, matchLiga, 9.5, LINE_HIT_RATE_N);
     }
-    return {fx, matchLiga, home, away, sinDatos, corners, goals, cards};
+    return {fx, matchLiga, home, away, sinDatos, corners, goals, cards, hitRate};
   });
 
   if(sortMode!=='default'){
@@ -2951,14 +2977,18 @@ function renderJornada(){
   if(onlyInteresting){
     enriched = enriched.filter(m=> PICKED_MATCHES.has(m.fx.id) || (!m.sinDatos && m.corners.total > AUTO_HIGHLIGHT_CORNERS_THRESHOLD));
   }
+  const onlyHighHitRate = document.getElementById('jr_onlyHighHitRate').checked;
+  if(onlyHighHitRate){
+    enriched = enriched.filter(m=> m.hitRate && m.hitRate.rate>=0.8);
+  }
   emptyEl.style.display = enriched.length ? 'none' : 'block';
-  if(onlyInteresting && !enriched.length && matches.length){
-    emptyEl.textContent = 'Ningún partido de esta jornada cumple el criterio de "interesante" ahora mismo.';
+  if((onlyInteresting || onlyHighHitRate) && !enriched.length && matches.length){
+    emptyEl.textContent = 'Ningún partido de esta jornada cumple el criterio elegido ahora mismo.';
   } else {
     emptyEl.textContent = 'No hay calendario importado todavía para esta liga.';
   }
 
-  enriched.forEach(({fx, matchLiga, home, away, sinDatos, corners, goals, cards})=>{
+  enriched.forEach(({fx, matchLiga, home, away, sinDatos, corners, goals, cards, hitRate})=>{
     const isPicked = PICKED_MATCHES.has(fx.id);
     const autoHighCorners = !sinDatos && corners.total > AUTO_HIGHLIGHT_CORNERS_THRESHOLD;
     const isGreen = isPicked || autoHighCorners;
@@ -2977,6 +3007,7 @@ function renderJornada(){
       statsLine = `<p style="margin:5px 0 0; font-family:'JetBrains Mono'; font-size:11.5px; ${tc}">
         🚩 ${corners.total.toFixed(1)} córners · Over 9.5: ${fmtPct(corners.pOver)} &nbsp;·&nbsp; ⚽ ${(goals.lh+goals.la).toFixed(1)} goles · 1X2: ${fmtPct(goals.p1)}/${fmtPct(goals.pX)}/${fmtPct(goals.p2)}
         ${cards.pOver!==null ? `<br>🟨 ${cards.total.toFixed(1)} tarjetas · Over 4.5: ${fmtPct(cards.pOver)}` : ''}
+        ${hitRate ? `<br>📈 Línea 9.5 cumplida en los últimos partidos: <strong>${fmtPct(hitRate.rate)}</strong> (${hitRate.total} partidos — local ${hitRate.homeN?fmtPct(hitRate.homeRate):'—'}, visitante ${hitRate.awayN?fmtPct(hitRate.awayRate):'—'})` : ''}
       </p>`;
       const oddsMatch = findOddsForFixture(fx);
       if(oddsMatch){
