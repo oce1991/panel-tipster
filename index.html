@@ -551,13 +551,19 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <option value="goals">Goles — probabilidad Over 2.5 (mayor a menor)</option>
         <option value="cards">Tarjetas — probabilidad Over 4.5 (mayor a menor)</option>
       </select>
+      <label>Línea de córners para el análisis</label>
+      <select id="jr_cornersLine" onchange="renderJornada()">
+        <option value="8.5">8.5</option>
+        <option value="9.5" selected>9.5</option>
+        <option value="10.5">10.5</option>
+      </select>
       <label style="display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer;">
         <input type="checkbox" id="jr_onlyInteresting" onchange="renderJornada()" style="width:auto; margin:0;">
         Mostrar solo partidos interesantes (córners altos o marcados)
       </label>
       <label style="display:flex; align-items:center; gap:8px; margin-top:8px; cursor:pointer;">
         <input type="checkbox" id="jr_onlyHighHitRate" onchange="renderJornada()" style="width:auto; margin:0;">
-        Mostrar solo con línea 9.5 córners cumplida ≥80% en los últimos partidos
+        Mostrar solo con la línea elegida cumplida ≥80% en los últimos partidos
       </label>
       <div id="jornadaMatches"></div>
       <div class="empty" id="jornadaEmpty" style="display:none;">No hay calendario importado todavía para esta liga.</div>
@@ -2940,6 +2946,7 @@ function renderJornada(){
   const liga = document.getElementById('jr_liga').value;
   const jornada = document.getElementById('jr_jornada').value;
   const sortMode = document.getElementById('jr_sort').value;
+  const cornersLine = parseFloat(document.getElementById('jr_cornersLine').value);
   const container = document.getElementById('jornadaMatches');
   const emptyEl = document.getElementById('jornadaEmpty');
   const crossLiga = liga === '__ALL__';
@@ -2953,10 +2960,10 @@ function renderJornada(){
     const sinDatos = !home || !away;
     let corners=null, goals=null, cards=null, hitRate=null;
     if(!sinDatos){
-      corners = predictCorners(home, away, matchLiga, 9.5);
+      corners = predictCorners(home, away, matchLiga, cornersLine);
       goals = predictGoals(home, away, matchLiga, 2.5);
       cards = predictCards(home, away, 4.5, matchLiga);
-      hitRate = computeMatchLineHitRate(fx.local, fx.visitante, matchLiga, 9.5, LINE_HIT_RATE_N);
+      hitRate = computeMatchLineHitRate(fx.local, fx.visitante, matchLiga, cornersLine, LINE_HIT_RATE_N);
     }
     return {fx, matchLiga, home, away, sinDatos, corners, goals, cards, hitRate};
   });
@@ -3005,9 +3012,9 @@ function renderJornada(){
     let statsLine = '';
     if(!sinDatos){
       statsLine = `<p style="margin:5px 0 0; font-family:'JetBrains Mono'; font-size:11.5px; ${tc}">
-        🚩 ${corners.total.toFixed(1)} córners · Over 9.5: ${fmtPct(corners.pOver)} &nbsp;·&nbsp; ⚽ ${(goals.lh+goals.la).toFixed(1)} goles · 1X2: ${fmtPct(goals.p1)}/${fmtPct(goals.pX)}/${fmtPct(goals.p2)}
+        🚩 ${corners.total.toFixed(1)} córners · Over ${cornersLine}: ${fmtPct(corners.pOver)} &nbsp;·&nbsp; ⚽ ${(goals.lh+goals.la).toFixed(1)} goles · 1X2: ${fmtPct(goals.p1)}/${fmtPct(goals.pX)}/${fmtPct(goals.p2)}
         ${cards.pOver!==null ? `<br>🟨 ${cards.total.toFixed(1)} tarjetas · Over 4.5: ${fmtPct(cards.pOver)}` : ''}
-        ${hitRate ? `<br>📈 Línea 9.5 cumplida en los últimos partidos: <strong>${fmtPct(hitRate.rate)}</strong> (${hitRate.total} partidos — local ${hitRate.homeN?fmtPct(hitRate.homeRate):'—'}, visitante ${hitRate.awayN?fmtPct(hitRate.awayRate):'—'})` : ''}
+        ${hitRate ? `<br>📈 Línea ${cornersLine} cumplida en los últimos partidos: <strong>${fmtPct(hitRate.rate)}</strong> (${hitRate.total} partidos — local ${hitRate.homeN?fmtPct(hitRate.homeRate):'—'}, visitante ${hitRate.awayN?fmtPct(hitRate.awayRate):'—'})` : ''}
       </p>`;
       const oddsMatch = findOddsForFixture(fx);
       if(oddsMatch){
