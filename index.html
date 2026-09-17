@@ -400,6 +400,14 @@ create policy "public update" on tipster_data for update using (true);</pre>
     </div>
 
     <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Peso</span> Ajustar peso de temporadas importadas<span class="chevron">▾</span></h2>
+      <p class="hint">El modelo mezcla todas las temporadas que tengas cargadas de cada liga, ponderadas por este número — no solo por cuántos partidos lleva cada una. Al principio de temporada, con pocos partidos jugados del año actual, las temporadas viejas pueden pesar más de lo que deberían aunque bajes su peso a un número pequeño, simplemente porque tienen muchos más partidos. Sube el peso de la temporada actual y/o baja el de las antiguas para corregirlo.</p>
+      <label>Liga</label>
+      <select id="sw_liga" onchange="renderSeasonWeights()"></select>
+      <div id="seasonWeightsList"></div>
+    </div>
+
+    <div class="card collapsible collapsed">
       <h2 onclick="toggleCard(this)"><span class="tag">Limpieza</span> Eliminar una liga por completo<span class="chevron">▾</span></h2>
       <p class="hint">Borra todos los equipos, temporadas importadas y calendarios de una liga concreta — útil para quitar ligas que no vayas a usar. Esta acción no se puede deshacer.</p>
       <div class="grid2">
@@ -1900,6 +1908,47 @@ function refreshPromoSelect(){
     if(nameInput && !nameInput.value) nameInput.value = name;
   }
   refreshDeleteLigaSelect();
+  refreshSeasonWeightsLigaSelect();
+}
+function refreshSeasonWeightsLigaSelect(){
+  const sel = document.getElementById('sw_liga');
+  if(!sel) return;
+  const current = sel.value;
+  const ligas = sortLigas([...new Set(SEASON_IMPORTS.map(i=>i.liga))]);
+  sel.innerHTML = ligas.length ? ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`).join('') : '<option value="">— sin temporadas importadas —</option>';
+  if(ligas.includes(current)) sel.value = current;
+  enhanceLigaSelect('sw_liga');
+  renderSeasonWeights();
+}
+function renderSeasonWeights(){
+  const liga = document.getElementById('sw_liga').value;
+  const listEl = document.getElementById('seasonWeightsList');
+  if(!listEl) return;
+  const entries = SEASON_IMPORTS.filter(i=>i.liga===liga).sort((a,b)=> b.temporada.localeCompare(a.temporada));
+  if(!entries.length){ listEl.innerHTML = '<p class="hint">Sin temporadas importadas en esta liga todavía.</p>'; return; }
+  listEl.innerHTML = entries.map(e=>{
+    const nPartidos = Object.values(e.groups||{}).reduce((s,g)=> s + (g.home.mp||0) + (g.away.mp||0), 0) / 2; // cada partido cuenta 2 veces (local+visitante)
+    return `<div class="result-box" style="margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+      <div>
+        <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px;">${escapeHtml(e.temporada)}</p>
+        <p class="hint" style="margin:2px 0 0;">${Math.round(nPartidos)} partidos</p>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <input id="sw_weight_${escapeHtml(e.id)}" type="number" step="0.5" min="0" value="${e.weight}" style="width:70px; margin:0;">
+        <button class="btn ghost" onclick="saveSeasonWeight('${e.id}')">Guardar</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function saveSeasonWeight(seasonId){
+  const entry = SEASON_IMPORTS.find(i=>i.id===seasonId);
+  if(!entry) return;
+  const val = parseFloat(document.getElementById(`sw_weight_${seasonId}`).value);
+  if(isNaN(val) || val<0){ alert('El peso tiene que ser un número igual o mayor que 0.'); return; }
+  entry.weight = val;
+  await persistTeamSources();
+  recomputeTeams();
+  renderTeams();
 }
 function refreshDeleteLigaSelect(){
   const sel = document.getElementById('delete_liga');
