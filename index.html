@@ -2326,11 +2326,11 @@ function calcCorners(){
   <hr class="divider">`;
   if(oddOver){
     const ev = evFromProbPush(pOver,pPush,oddOver);
-    html += `<p>Over @ ${oddOver}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span> ${ev>0 ? `<button class="btn amber" onclick="addBetFromCorners('over')" style="margin-left:8px; padding:4px 10px; font-size:11px;">➕ Añadir apuesta</button>` : ''}</p>`;
+    html += `<p>Over @ ${oddOver}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span> <button class="btn amber" onclick="addBetFromCorners('over')" style="margin-left:8px; padding:4px 10px; font-size:11px;">➕ Añadir apuesta</button></p>`;
   }
   if(oddUnder){
     const ev = evFromProbPush(pUnder,pPush,oddUnder);
-    html += `<p>Under @ ${oddUnder}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span> ${ev>0 ? `<button class="btn amber" onclick="addBetFromCorners('under')" style="margin-left:8px; padding:4px 10px; font-size:11px;">➕ Añadir apuesta</button>` : ''}</p>`;
+    html += `<p>Under @ ${oddUnder}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span> <button class="btn amber" onclick="addBetFromCorners('under')" style="margin-left:8px; padding:4px 10px; font-size:11px;">➕ Añadir apuesta</button></p>`;
   }
   html += `<p class="hint">EV positivo no garantiza acierto en un solo partido — es una ventaja estadística que solo se demuestra en volumen. Registra la apuesta en 04 Apuestas para hacer seguimiento real.</p>`;
   if(h && a){
