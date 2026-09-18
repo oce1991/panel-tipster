@@ -749,6 +749,7 @@ let MANUAL_RESULTS = {}; // liga -> [ {home,away,fthg,ftag,hc,ac,fxId,dateSort,.
 let ODDS_DATA = []; // cuotas reales por partido, leidas de Supabase (las escribe el sistema de alertas de Telegram, no la app)
 let MATCH_META = {}; // matchKey -> {hora, nota} -- info manual por partido (hora exacta, notas de bajas/contexto), sobrevive a reimportar el calendario
 let LAST_DATA_UPDATE = null; // fecha/hora de la ultima vez que alguna liga se actualizo en Supabase (via el script de GitHub Actions)
+let LAST_CORNERS_CALC = null; // ultimo resultado de calcCorners(), para poder anadir la apuesta directamente sin recalcular
 function matchMetaKey(fx){ return `${fx.liga}||${fx.jornada}||${fx.local}||${fx.visitante}`; }
 const OPEN_RESULT_FORMS = new Set(); // fxId cuyos formularios de "meter resultado" estan abiertos, para que sobrevivan a un rerender
 const MANUAL_RESULT_WEIGHT = 3;
@@ -1176,6 +1177,19 @@ function computeMatchLineHitRate(home, away, liga, line, n){
     homeRate: hitRate(homeRecent), homeN: homeRecent.length,
     awayRate: hitRate(awayRecent), awayN: awayRecent.length,
   };
+}
+function getRecentMatchesList(teamName, liga, line, n){
+  const logs = buildCombinedMatchLogs()[liga] || [];
+  const name = (teamName||'').toLowerCase();
+  const teamMatches = logs.filter(m=> (m.h && m.h.toLowerCase()===name) || (m.a && m.a.toLowerCase()===name));
+  const withCorners = teamMatches.filter(m=>m.hc!==null && m.hc!==undefined && m.ac!==null && m.ac!==undefined && m.d);
+  const recent = [...withCorners].sort((a,b)=> b.d.localeCompare(a.d)).slice(0, n);
+  return recent.map(m=>{
+    const isHome = m.h.toLowerCase()===name;
+    const rival = isHome ? m.a : m.h;
+    const total = m.hc + m.ac;
+    return { fecha: m.d, rival, esLocal: isHome, total, cumple: total > line };
+  });
 }
 const BACKTEST_MIN_MATCHES = 6; // partidos previos minimos (en su lado) antes de fiarse de la media de un equipo
 function runBacktest(liga){
@@ -2312,15 +2326,61 @@ function calcCorners(){
   <hr class="divider">`;
   if(oddOver){
     const ev = evFromProbPush(pOver,pPush,oddOver);
-    html += `<p>Over @ ${oddOver}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
+    html += `<p>Over @ ${oddOver}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span> ${ev>0 ? `<button class="btn amber" onclick="addBetFromCorners('over')" style="margin-left:8px; padding:4px 10px; font-size:11px;">➕ Añadir apuesta</button>` : ''}</p>`;
   }
   if(oddUnder){
     const ev = evFromProbPush(pUnder,pPush,oddUnder);
-    html += `<p>Under @ ${oddUnder}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
+    html += `<p>Under @ ${oddUnder}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span> ${ev>0 ? `<button class="btn amber" onclick="addBetFromCorners('under')" style="margin-left:8px; padding:4px 10px; font-size:11px;">➕ Añadir apuesta</button>` : ''}</p>`;
   }
   html += `<p class="hint">EV positivo no garantiza acierto en un solo partido — es una ventaja estadística que solo se demuestra en volumen. Registra la apuesta en 04 Apuestas para hacer seguimiento real.</p>`;
+  if(h && a){
+    const renderMatchList = (teamName, label) => {
+      const matches = getRecentMatchesList(teamName, liga, line, 10);
+      if(!matches.length) return `<p class="hint">${label}: sin partidos con córners registrados en el histórico.</p>`;
+      const rows = matches.map(m=>`<div style="display:flex; justify-content:space-between; padding:4px 8px; margin-bottom:2px; border-radius:6px; background:${m.cumple ? 'rgba(34,197,94,0.18)' : 'rgba(251,113,133,0.12)'};">
+        <span>${m.fecha} · ${m.esLocal?'vs':'@'} ${escapeHtml(m.rival)}</span>
+        <span style="font-family:'JetBrains Mono';">${m.total} córners ${m.cumple?'✓':'✗'}</span>
+      </div>`).join('');
+      const hits = matches.filter(m=>m.cumple).length;
+      return `<p style="margin:8px 0 4px; font-weight:600;">${label} — últimos ${matches.length}: ${hits}/${matches.length} (${fmtPct(hits/matches.length)}) cumplieron ${line}</p>${rows}`;
+    };
+    html += `<hr class="divider">` + renderMatchList(h.name, 'Local') + renderMatchList(a.name, 'Visitante');
+  }
   const box = document.getElementById('cornersResult');
   box.style.display='block'; box.innerHTML = html;
+  LAST_CORNERS_CALC = { line, total, pOver, pPush, pUnder, oddOver, oddUnder };
+}
+async function addBetFromCorners(side){
+  if(!LAST_CORNERS_CALC) return;
+  const { line, pOver, pPush, pUnder, oddOver, oddUnder } = LAST_CORNERS_CALC;
+  const odd = side==='over' ? oddOver : oddUnder;
+  const prob = side==='over' ? pOver : pUnder;
+  if(!odd || !prob){ alert('Falta la cuota de este lado.'); return; }
+  const h = TEAMS.find(t=>t.id===document.getElementById('c_home').value);
+  const a = TEAMS.find(t=>t.id===document.getElementById('c_away').value);
+  if(!h || !a){ alert('Selecciona local y visitante primero.'); return; }
+  const liga = document.getElementById('m_liga').value;
+  const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
+  const totalPL = settled.reduce((s,b)=>s+betPL(b),0);
+  const bank = BANKCFG.initial + totalPL;
+  const b_ = odd-1;
+  const pLoss = Math.max(0, 1-prob-pPush);
+  const kellyFull = b_>0 ? (prob*b_ - pLoss)/(b_*(prob+pLoss)) : 0;
+  const stake = Math.max(0, kellyFull * BANKCFG.fraction) * bank;
+
+  switchToView('bets');
+  document.getElementById('b_match').value = `${h.name} - ${a.name}`;
+  const ligaSel = document.getElementById('b_liga');
+  if([...ligaSel.options].some(o=>o.value===liga)) ligaSel.value = liga;
+  syncCustomLigaDropdown('b_liga');
+  document.getElementById('b_market').value = 'Corners';
+  refreshLineaOptions();
+  const sel = document.getElementById('b_linea');
+  const opt = `${side==='over'?'Over':'Under'} ${line} corners`;
+  if([...sel.options].some(o=>o.value===opt)) sel.value = opt;
+  applyLineaToPick();
+  document.getElementById('b_odd').value = odd;
+  document.getElementById('b_stake').value = stake.toFixed(2);
 }
 
 function cornerDiffProbability(lh, la, handicap){
