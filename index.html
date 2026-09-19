@@ -1656,10 +1656,11 @@ async function saveMatchMeta(fxId){
   const fx = FIXTURES.find(f=>f.id===fxId);
   if(!fx) return;
   const key = matchMetaKey(fx);
+  const fecha = document.getElementById(`meta_fecha_${fxId}`).value;
   const hora = document.getElementById(`meta_hora_${fxId}`).value;
   const nota = document.getElementById(`meta_nota_${fxId}`).value.trim();
-  if(!hora && !nota) delete MATCH_META[key];
-  else MATCH_META[key] = { hora: hora||'', nota: nota||'' };
+  if(!fecha && !hora && !nota) delete MATCH_META[key];
+  else MATCH_META[key] = { fecha: fecha||'', hora: hora||'', nota: nota||'' };
   OPEN_META_FORMS.delete(fxId);
   await saveMatchMetaState();
   renderJornada();
@@ -3165,8 +3166,9 @@ function renderJornada(){
     const metaToggleBtn = `<button class="btn result-toggle-btn" onclick="event.stopPropagation(); toggleMetaForm('${fx.id}')" style="flex-shrink:0; padding:8px 12px; font-size:11px; white-space:nowrap; ${meta ? 'border-color:#F59E0B; color:#F59E0B;' : ''}">${meta ? '✓ Hora/Nota' : '🕐 Hora/Nota'}</button>`;
     const metaForm = metaFormOpen ? `
       <div class="result-form" style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--line);">
-        <p class="hint" style="${tc}">Hora exacta del partido y notas propias (bajas, lesiones, contexto) — queda guardado aunque reimportes el calendario más adelante.</p>
+        <p class="hint" style="${tc}">Fecha y hora exactas del partido, y notas propias (bajas, lesiones, contexto) — queda guardado aunque reimportes el calendario más adelante. La fecha exacta sustituye a la que trae el calendario en la lista.</p>
         <div class="grid2">
+          <div><label style="${tc}">Fecha exacta</label><input id="meta_fecha_${fx.id}" type="date" value="${meta && meta.fecha ? meta.fecha : ''}"></div>
           <div><label style="${tc}">Hora</label><input id="meta_hora_${fx.id}" type="time" value="${meta?meta.hora:''}"></div>
         </div>
         <label style="${tc}">Nota</label>
@@ -3176,7 +3178,7 @@ function renderJornada(){
     div.innerHTML = `
       <div style="flex:1; min-width:0;">
         <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; ${tc} overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${fx.local} vs ${fx.visitante}</p>
-        <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${fx.fecha||''}${meta && meta.hora ? ' · 🕐 '+meta.hora : ''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado' : (autoHighCorners ? '🚩 córners altos (>'+AUTO_HIGHLIGHT_CORNERS_THRESHOLD+')' : '')}</p>
+        <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${meta && meta.fecha ? meta.fecha.split('-').reverse().join('/') : (fx.fecha||'')}${meta && meta.hora ? ' · 🕐 '+meta.hora : ''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado' : (autoHighCorners ? '🚩 córners altos (>'+AUTO_HIGHLIGHT_CORNERS_THRESHOLD+')' : '')}</p>
         ${meta && meta.nota ? `<p class="hint" style="margin:2px 0 0; font-style:italic; ${tc}">📝 ${escapeHtml(meta.nota)}</p>` : ''}
         ${statsLine}
         ${resultForm}
