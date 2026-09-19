@@ -653,7 +653,8 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <button class="btn bets-filter-btn" data-filter="loss" onclick="setBetsFilter('loss')" style="padding:7px 12px; font-size:11px;">Perdidas</button>
         <button class="btn bets-filter-btn" data-filter="void" onclick="setBetsFilter('void')" style="padding:7px 12px; font-size:11px;">Anuladas</button>
       </div>
-      <p class="hint">Mantén pulsado el icono ⠿ y arrastra para reordenar las apuestas como quieras (útil para ponerlas en el orden de hora del partido, que la app no conoce). Solo se puede reordenar con el filtro en "Todas".</p>
+      <p class="hint">Mantén pulsado el icono ⠿ y arrastra para reordenar las apuestas como quieras, o pon fecha y hora en cada una y usa el botón de abajo para que se ordenen solas de la más próxima a la más lejana. Solo se puede arrastrar con el filtro en "Todas".</p>
+      <button class="btn ghost" onclick="sortBetsByDateTime()" style="margin-bottom:10px;">📅 Ordenar por fecha y hora (antes → después)</button>
       <table id="betsTable"><thead><tr><th></th><th>Fecha</th><th>Partido</th><th>Mercado</th><th>Cuota</th><th>Stake</th><th>CLV</th><th>Nota</th><th>Estado</th><th>P/L</th><th></th></tr></thead><tbody></tbody></table>
       <div class="empty" id="betsEmpty" style="display:none;">Todavía no has registrado ninguna apuesta.</div>
     </div>
@@ -3422,7 +3423,10 @@ function renderBets(){
     const tr = document.createElement('tr');
     tr.dataset.index = realIndex;
     tr.innerHTML = `<td class="drag-handle" ${canDrag ? 'data-drag-handle' : ''}>${canDrag ? '⠿' : ''}</td>
-      <td>${b.date}</td>
+      <td>
+        <input type="date" value="${b.date||''}" style="margin:0; padding:3px 4px; font-size:11px; width:110px;" onchange="updateBetDate('${b.id}',this.value)">
+        <input type="time" value="${b.hora||''}" style="margin:2px 0 0; padding:3px 4px; font-size:11px; width:110px;" onchange="updateBetTime('${b.id}',this.value)">
+      </td>
       <td style="font-family:Inter;">${b.match}<br><span class="hint">${b.pick}</span></td>
       <td>${b.market}</td>
       <td>${b.odd}</td>
@@ -3442,6 +3446,27 @@ function renderBets(){
     tbody.appendChild(tr);
   });
   if(canDrag) enableBetsDragReorder();
+}
+async function updateBetDate(id, val){
+  const b = BETS.find(x=>x.id===id);
+  if(!b) return;
+  b.date = val;
+  await saveBetsState();
+}
+async function updateBetTime(id, val){
+  const b = BETS.find(x=>x.id===id);
+  if(!b) return;
+  b.hora = val;
+  await saveBetsState();
+}
+async function sortBetsByDateTime(){
+  BETS.sort((a,b)=>{
+    const da = (a.date||'')+' '+(a.hora||'00:00');
+    const db = (b.date||'')+' '+(b.hora||'00:00');
+    return da.localeCompare(db);
+  });
+  renderBets();
+  await saveBetsState();
 }
 let betsDragState = null;
 function enableBetsDragReorder(){
