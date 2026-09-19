@@ -3430,7 +3430,7 @@ function renderBets(){
       <td style="font-family:Inter;">${b.match}<br><span class="hint">${b.pick}</span></td>
       <td>${b.market}</td>
       <td>${b.odd}</td>
-      <td>${b.stake}€</td>
+      <td><input type="number" step="0.5" min="0" value="${b.stake}" style="margin:0; padding:3px 4px; font-size:11px; width:70px;" onchange="updateBetStake('${b.id}',this.value)"></td>
       <td>${clv!==null ? (clv>0?'+':'')+clv.toFixed(1)+'%' : '—'}</td>
       <td><input value="${(b.note||'').replace(/"/g,'&quot;')}" placeholder="—" style="margin:0; padding:4px 6px; font-size:11px; width:110px;" onchange="updateBetNote('${b.id}',this.value)"></td>
       <td>
@@ -3451,6 +3451,16 @@ async function updateBetDate(id, val){
   const b = BETS.find(x=>x.id===id);
   if(!b) return;
   b.date = val;
+  await saveBetsState();
+}
+async function updateBetStake(id, val){
+  const b = BETS.find(x=>x.id===id);
+  if(!b) return;
+  const num = parseFloat(val);
+  if(isNaN(num) || num<0){ alert('El stake tiene que ser un número igual o mayor que 0.'); renderBets(); return; }
+  b.stake = num;
+  renderBets(); // el P/L mostrado depende del stake, hay que refrescarlo
+  renderDashboard();
   await saveBetsState();
 }
 async function updateBetTime(id, val){
