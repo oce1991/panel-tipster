@@ -3612,12 +3612,16 @@ function renderMyPicks(){
   const pending = BETS.filter(b=>b.status==='pending');
   countEl.textContent = pending.length ? `${pending.length} pendiente${pending.length===1?'':'s'}` : '';
   emptyEl.style.display = pending.length ? 'none' : 'block';
-  const sorted = [...pending].sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+  const sorted = [...pending].sort((a,b)=>{
+    const da = (a.date||'')+' '+(a.hora||'00:00');
+    const db = (b.date||'')+' '+(b.hora||'00:00');
+    return da.localeCompare(db);
+  });
   listEl.innerHTML = sorted.map(b=>{
     return `<div class="result-box" style="margin-bottom:8px; display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
       <div style="flex:1; min-width:0;">
         <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(b.match)}</p>
-        <p class="hint" style="margin:2px 0 0;">${escapeHtml(b.liga||'')} · ${b.date||''} · ${escapeHtml(b.market||'')}</p>
+        <p class="hint" style="margin:2px 0 0;">${escapeHtml(b.liga||'')} · ${b.date||''}${b.hora ? ' · 🕐 '+b.hora : ''} · ${escapeHtml(b.market||'')}</p>
         <p style="margin:3px 0 0; font-family:'JetBrains Mono'; font-size:11px;">${escapeHtml(b.pick||'')} @ ${b.odd} · Stake ${b.stake}€</p>
       </div>
     </div>`;
