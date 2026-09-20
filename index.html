@@ -282,6 +282,15 @@ create policy "public update" on tipster_data for update using (true);</pre>
       </div>
       <div class="result-box" id="backtestCornersResult" style="display:none;"></div>
     </div>
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Backtest</span> Calibración del modelo de Ambos marcan<span class="chevron">▾</span></h2>
+      <p class="hint">Igual que el backtest de córners: sin cuotas históricas, comprueba si el modelo está bien calibrado — cuando dice "65% de que ambos marcan", ¿pasa el 65% de las veces de verdad? Cada partido se predice solo con datos anteriores a esa fecha (walk-forward). Aquí se usa Poisson simple, sin el ajuste Dixon-Coles que sí aplica Jornada/Partido — es una simplificación, así que trata el resultado como orientativo, no como el número exacto que verás en el análisis real.</p>
+      <div class="grid2">
+        <div><label>Liga</label><select id="btb_liga"></select></div>
+        <div style="display:flex; align-items:flex-end;"><button class="btn amber" onclick="renderBttsBacktest()" style="width:100%;">Ejecutar</button></div>
+      </div>
+      <div class="result-box" id="backtestBttsResult" style="display:none;"></div>
+    </div>
   </div>
 
   <!-- TEAMS -->
@@ -523,9 +532,14 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <div><label>Cuota X</label><input id="g_oddX" type="number" step="0.01" placeholder="3.30"></div>
         <div><label>Cuota 2</label><input id="g_odd2" type="number" step="0.01" placeholder="3.40"></div>
       </div>
-      <div class="grid2">
+      <div class="grid3">
         <div><label>Línea goles O/U</label><input id="g_line" type="number" step="0.5" value="2.5"></div>
         <div><label>Cuota Over goles</label><input id="g_oddOver" type="number" step="0.01" placeholder="1.85"></div>
+        <div><label>Cuota Under goles</label><input id="g_oddUnder" type="number" step="0.01" placeholder="1.95"></div>
+      </div>
+      <div class="grid2">
+        <div><label>Cuota Ambos marcan — Sí</label><input id="g_oddBttsYes" type="number" step="0.01" placeholder="1.75"></div>
+        <div><label>Cuota Ambos marcan — No</label><input id="g_oddBttsNo" type="number" step="0.01" placeholder="2.05"></div>
       </div>
       <button class="btn amber" onclick="calcGoals()">Calcular goles/1X2</button>
       <div class="result-box" id="goalsResult" style="display:none;"></div>
@@ -609,7 +623,7 @@ create policy "public update" on tipster_data for update using (true);</pre>
           <select id="b_liga"><option>Primera</option><option>Segunda</option><option>1ª RFEF - Grupo 1</option><option>1ª RFEF - Grupo 2</option><option>Premier League</option><option>Championship</option><option>Ligue 1</option><option>Serie A</option><option>Eredivisie</option><option>Süper Lig</option><option>Bundesliga</option><option>Bundesliga 2</option></select>
         </div>
         <div><label>Mercado</label>
-          <select id="b_market" onchange="refreshLineaOptions()"><option>Corners</option><option>1X2</option><option>Goles O/U</option><option>Tarjetas O/U</option><option>Otro</option></select>
+          <select id="b_market" onchange="refreshLineaOptions()"><option>Corners</option><option>1X2</option><option>Goles O/U</option><option>Ambos marcan</option><option>Tarjetas O/U</option><option>Otro</option></select>
         </div>
       </div>
       <div class="grid3">
@@ -1342,6 +1356,55 @@ function renderCornersBacktest(){
   });
   html += `</tbody></table>`;
   box.innerHTML = html;
+}
+function runBttsBacktest(liga){
+  const logs = (buildCombinedMatchLogs()[liga] || []).filter(m=>m.d);
+  const sorted = [...logs].sort((a,b)=> a.d.localeCompare(b.d));
+  const tally = {};
+  function ensure(name){
+    if(!tally[name]) tally[name] = { home:{mp:0,gf:0,ga:0}, away:{mp:0,gf:0,ga:0} };
+    return tally[name];
+  }
+  const buckets = Array.from({length:10}, ()=>({n:0, wins:0, sumProb:0}));
+  let n=0, skippedNoHistory=0;
+  sorted.forEach(m=>{
+    const h = ensure(m.h), a = ensure(m.a);
+    const hasHistory = h.home.mp>=BACKTEST_MIN_MATCHES && a.away.mp>=BACKTEST_MIN_MATCHES;
+    if(hasHistory){
+      const lh = (h.home.gf/h.home.mp + a.away.ga/a.away.mp)/2;
+      const la = (a.away.gf/a.away.mp + h.home.ga/h.home.mp)/2;
+      let pBTTS=0;
+      for(let i=1;i<=10;i++) for(let j=1;j<=10;j++) pBTTS += poissonPMF(i,lh)*poissonPMF(j,la);
+      const actualBTTS = m.hg>0 && m.ag>0;
+      n++;
+      const bIdx = Math.min(9, Math.max(0, Math.floor(pBTTS*10)));
+      buckets[bIdx].n++; buckets[bIdx].sumProb += pBTTS;
+      if(actualBTTS) buckets[bIdx].wins++;
+    } else { skippedNoHistory++; }
+    h.home.mp++; h.home.gf+=m.hg; h.home.ga+=m.ag;
+    a.away.mp++; a.away.gf+=m.ag; a.away.ga+=m.hg;
+  });
+  return { totalMatches: sorted.length, n, skippedNoHistory, buckets: buckets.filter(b=>b.n>0) };
+}
+function renderBttsBacktest(){
+  const liga = document.getElementById('btb_liga').value;
+  const box = document.getElementById('backtestBttsResult');
+  box.style.display = 'block';
+  if(!liga){ box.innerHTML = '<p class="hint">Selecciona una liga.</p>'; return; }
+  const r = runBttsBacktest(liga);
+  if(!r.n){
+    box.innerHTML = `<p class="hint">No se ha podido analizar ningún partido en ${liga}. Partidos con fecha: ${r.totalMatches} · sin historial previo suficiente: ${r.skippedNoHistory}.</p>`;
+    return;
+  }
+  let html2 = `<p class="hint">Partidos analizados: <strong>${r.n}</strong> (se han saltado ${r.skippedNoHistory} por no tener aún ${BACKTEST_MIN_MATCHES} partidos previos de cada equipo).</p>
+  <table><thead><tr><th>Tramo</th><th>Partidos</th><th>Media predicha</th><th>Acierto real</th></tr></thead><tbody>`;
+  r.buckets.forEach(b=>{
+    const avgPred = b.sumProb/b.n, actual = b.wins/b.n;
+    const diff = Math.abs(avgPred-actual);
+    html2 += `<tr><td>${(Math.floor(avgPred*10)*10)}-${(Math.floor(avgPred*10)*10+10)}%</td><td>${b.n}</td><td>${fmtPct(avgPred)}</td><td class="${diff<0.1?'pos':'neg'}">${fmtPct(actual)}</td></tr>`;
+  });
+  html2 += `</tbody></table>`;
+  box.innerHTML = html2;
 }
 function computeRecentForm(logs, teamName){
   const n = teamName.toLowerCase();
@@ -2152,10 +2215,12 @@ function refreshBetLigaSelect(){
 function refreshBacktestLigaSelect(){
   const sel = document.getElementById('bt_liga');
   const sel2 = document.getElementById('btc_liga');
+  const sel3 = document.getElementById('btb_liga');
   const ligas = sortLigas(Object.keys(buildCombinedMatchLogs()));
   const optsHtml = ligas.length ? ligas.map(l=>`<option value="${escapeHtml(l)}">${escapeHtml(ligaLabel(l))}</option>`).join('') : '<option value="">— sin partidos con fecha importados —</option>';
   if(sel){ const current = sel.value; sel.innerHTML = optsHtml; if(ligas.includes(current)) sel.value = current; enhanceLigaSelect('bt_liga'); }
   if(sel2){ const current2 = sel2.value; sel2.innerHTML = optsHtml; if(ligas.includes(current2)) sel2.value = current2; enhanceLigaSelect('btc_liga'); }
+  if(sel3){ const current3 = sel3.value; sel3.innerHTML = optsHtml; if(ligas.includes(current3)) sel3.value = current3; enhanceLigaSelect('btb_liga'); }
 }
 function refreshMatchTeamSelects(){
   const liga = document.getElementById('m_liga').value;
@@ -2558,6 +2623,9 @@ function calcGoals(){
     pUnderGoals -= pPushGoals;
   }
   const pOverGoals = Math.max(0, 1-pUnderGoals-pPushGoals);
+  let pBTTS=0;
+  for(let i=1;i<=8;i++) for(let j=1;j<=8;j++) pBTTS+=matrix[i][j];
+  const pNoBTTS = Math.max(0, 1-pBTTS);
 
   const dcNote = rho!==null
     ? `<p class="hint">Ajuste Dixon-Coles aplicado en ${liga} (ρ=${rho.toFixed(3)}, calculado sobre ${stats.rhoN} partidos reales): corrige la sobre/infra-estimación del Poisson simple en marcadores 0-0, 1-0, 0-1 y 1-1.</p>`
@@ -2569,22 +2637,87 @@ function calcGoals(){
     <div><div class="hint">P(X)</div><div class="display" style="font-size:22px;">${fmtPct(pX)}</div></div>
     <div><div class="hint">P(2)</div><div class="display" style="font-size:22px;">${fmtPct(p2)}</div></div>
   </div>
-  <p class="hint">Goles esperados: ${(lh+la).toFixed(2)} · P(Over ${line}) ${fmtPct(pOverGoals)} · P(Under ${line}) ${fmtPct(pUnderGoals)}${pushNoteGoals}</p>
+  <p class="hint">Goles esperados: ${(lh+la).toFixed(2)} · P(Over ${line}) ${fmtPct(pOverGoals)} · P(Under ${line}) ${fmtPct(pUnderGoals)}${pushNoteGoals} · P(Ambos marcan) ${fmtPct(pBTTS)}</p>
   ${dcNote}
   <hr class="divider">`;
   const o1 = parseFloat(document.getElementById('g_odd1').value);
   const oX = parseFloat(document.getElementById('g_oddX').value);
   const o2 = parseFloat(document.getElementById('g_odd2').value);
   const oOver = parseFloat(document.getElementById('g_oddOver').value);
-  const rows = [['1',p1,o1,0],['X',pX,oX,0],['2',p2,o2,0],['Over '+line,pOverGoals,oOver,pPushGoals]];
-  rows.forEach(([label,prob,odd,push])=>{
+  const oUnder = parseFloat(document.getElementById('g_oddUnder').value);
+  const oBttsYes = parseFloat(document.getElementById('g_oddBttsYes').value);
+  const oBttsNo = parseFloat(document.getElementById('g_oddBttsNo').value);
+  const rows = [
+    ['1',p1,o1,0,'1','1X2'],
+    ['X',pX,oX,0,'X','1X2'],
+    ['2',p2,o2,0,'2','1X2'],
+    ['Over '+line,pOverGoals,oOver,pPushGoals,'Over '+line+' goles','Goles O/U'],
+    ['Under '+line,pUnderGoals,oUnder,pPushGoals,'Under '+line+' goles','Goles O/U'],
+    ['Ambos marcan — Sí',pBTTS,oBttsYes,0,'Sí','Ambos marcan'],
+    ['Ambos marcan — No',pNoBTTS,oBttsNo,0,'No','Ambos marcan'],
+  ];
+  rows.forEach(([label,prob,odd,push,pick,market])=>{
     if(odd){
       const ev = push>0 ? evFromProbPush(prob,push,odd) : evFromProb(prob,odd);
-      html += `<p>${label} @ ${odd}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span></p>`;
+      html += `<p>${label} @ ${odd}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span> <button class="btn amber" onclick="addBetFromGoals('${market}', '${pick.replace(/'/g,"\\'")}', ${prob}, ${odd}, ${push})" style="margin-left:8px; padding:4px 10px; font-size:11px;">➕ Añadir apuesta</button></p>`;
     }
   });
+  html += `<p class="hint">EV positivo no garantiza acierto en un solo partido — es una ventaja estadística que solo se demuestra en volumen. Registra la apuesta en 04 Apuestas para hacer seguimiento real.</p>`;
+
+  const h = TEAMS.find(t=>t.id===document.getElementById('c_home').value);
+  const a = TEAMS.find(t=>t.id===document.getElementById('c_away').value);
+  if(h && a){
+    const renderScoringList = (teamName, label) => {
+      const matches = getRecentScoringList(teamName, liga, 10);
+      if(!matches.length) return `<p class="hint">${label}: sin partidos con goles registrados en el histórico.</p>`;
+      const rows = matches.map(m=>`<div style="display:flex; justify-content:space-between; padding:4px 8px; margin-bottom:2px; border-radius:6px; background:${m.marco ? 'rgba(34,197,94,0.18)' : 'rgba(251,113,133,0.12)'};">
+        <span>${m.fecha} · ${m.esLocal?'vs':'@'} ${escapeHtml(m.rival)}</span>
+        <span style="font-family:'JetBrains Mono';">${m.gf}-${m.gc} ${m.marco?'✓ marcó':'✗ no marcó'}</span>
+      </div>`).join('');
+      const hits = matches.filter(m=>m.marco).length;
+      return `<p style="margin:8px 0 4px; font-weight:600;">${label} — últimos ${matches.length}: marcó en ${hits}/${matches.length} (${fmtPct(hits/matches.length)})</p>${rows}`;
+    };
+    html += `<hr class="divider"><p style="font-weight:700;">Racha goleadora reciente (contexto para Ambos marcan)</p>` + renderScoringList(h.name, 'Local') + renderScoringList(a.name, 'Visitante');
+  }
+
   const box = document.getElementById('goalsResult');
   box.style.display='block'; box.innerHTML = html;
+}
+function getRecentScoringList(teamName, liga, n){
+  const logs = buildCombinedMatchLogs()[liga] || [];
+  const name = (teamName||'').toLowerCase();
+  const teamMatches = logs.filter(m=> (m.h && m.h.toLowerCase()===name) || (m.a && m.a.toLowerCase()===name)).filter(m=>m.d);
+  const recent = [...teamMatches].sort((a,b)=> b.d.localeCompare(a.d)).slice(0, n);
+  return recent.map(m=>{
+    const isHome = m.h.toLowerCase()===name;
+    const rival = isHome ? m.a : m.h;
+    const gf = isHome ? m.hg : m.ag;
+    const gc = isHome ? m.ag : m.hg;
+    return { fecha: m.d, rival, esLocal: isHome, gf, gc, marco: gf>0 };
+  });
+}
+async function addBetFromGoals(market, pick, prob, odd, pPush){
+  const h = TEAMS.find(t=>t.id===document.getElementById('c_home').value);
+  const a = TEAMS.find(t=>t.id===document.getElementById('c_away').value);
+  if(!h || !a){ alert('Selecciona local y visitante primero.'); return; }
+  const liga = document.getElementById('m_liga').value;
+  const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
+  const totalPL = settled.reduce((s,b)=>s+betPL(b),0);
+  const bank = BANKCFG.initial + totalPL;
+  const b_ = odd-1;
+  const pLoss = Math.max(0, 1-prob-pPush);
+  const kellyFull = b_>0 ? (prob*b_ - pLoss)/(b_*(prob+pLoss)) : 0;
+  const stake = Math.max(0, kellyFull * BANKCFG.fraction) * bank;
+
+  switchToView('bets');
+  document.getElementById('b_match').value = `${h.name} - ${a.name}`;
+  const ligaSel = document.getElementById('b_liga');
+  if([...ligaSel.options].some(o=>o.value===liga)) ligaSel.value = liga;
+  syncCustomLigaDropdown('b_liga');
+  document.getElementById('b_market').value = market;
+  document.getElementById('b_pick').value = pick;
+  document.getElementById('b_odd').value = odd;
+  document.getElementById('b_stake').value = stake.toFixed(2);
 }
 
 // ---------- bulk team stats import ----------
@@ -2841,7 +2974,9 @@ function predictGoals(homeTeam, awayTeam, liga, line){
     for(let i=0;i<=8;i++) for(let j=0;j<=8;j++) if(i+j===line) pPush+=matrix[i][j];
     pUnder -= pPush; // pUnder ya no debe incluir la cifra exacta del push
   }
-  return { lh, la, p1, pX, p2, pOver: Math.max(0,1-pUnder-pPush), pPush, pUnder: Math.max(0,pUnder), rho, shotInfo };
+  let pBTTS=0;
+  for(let i=1;i<=8;i++) for(let j=1;j<=8;j++) pBTTS+=matrix[i][j]; // ambos marcan = ambos anotan al menos 1
+  return { lh, la, p1, pX, p2, pOver: Math.max(0,1-pUnder-pPush), pPush, pUnder: Math.max(0,pUnder), pBTTS, rho, shotInfo };
 }
 async function importFixtures(){
   const fileInput = document.getElementById('fx_file');
@@ -3126,7 +3261,7 @@ function renderJornada(){
     let statsLine = '';
     if(!sinDatos){
       statsLine = `<p style="margin:5px 0 0; font-family:'JetBrains Mono'; font-size:11.5px; ${tc}">
-        🚩 ${corners.total.toFixed(1)} córners · Over ${cornersLine}: ${fmtPct(corners.pOver)} &nbsp;·&nbsp; ⚽ ${(goals.lh+goals.la).toFixed(1)} goles · 1X2: ${fmtPct(goals.p1)}/${fmtPct(goals.pX)}/${fmtPct(goals.p2)}
+        🚩 ${corners.total.toFixed(1)} córners · Over ${cornersLine}: ${fmtPct(corners.pOver)} &nbsp;·&nbsp; ⚽ ${(goals.lh+goals.la).toFixed(1)} goles · 1X2: ${fmtPct(goals.p1)}/${fmtPct(goals.pX)}/${fmtPct(goals.p2)} · BTTS: ${fmtPct(goals.pBTTS)}
         ${cards.pOver!==null ? `<br>🟨 ${cards.total.toFixed(1)} tarjetas · Over 4.5: ${fmtPct(cards.pOver)}` : ''}
         ${hitRate ? `<br>📈 Línea ${cornersLine} cumplida en los últimos partidos: <strong>${fmtPct(hitRate.rate)}</strong> (${hitRate.total} partidos — local ${hitRate.homeN?fmtPct(hitRate.homeRate):'—'}, visitante ${hitRate.awayN?fmtPct(hitRate.awayRate):'—'})` : ''}
       </p>`;
@@ -3281,6 +3416,8 @@ function refreshLineaOptions(){
     [2,2.5,3,3.5,4,4.5,5,5.5,6,6.5].forEach(l=>{ options.push(`Over ${l} tarjetas`); options.push(`Under ${l} tarjetas`); });
   } else if(market === '1X2'){
     options = ['1 (Local)','X (Empate)','2 (Visitante)'];
+  } else if(market === 'Ambos marcan'){
+    options = ['Sí','No'];
   } else {
     options = [];
   }
@@ -3353,6 +3490,16 @@ function computeModelProbForBet(){
     if(pick.includes('local') || pick.trim()==='1') return p1;
     if(pick.includes('empate') || pick.trim()==='x') return pX;
     if(pick.includes('visitante') || pick.trim()==='2') return p2;
+    return null;
+  }
+  if(market === 'Ambos marcan'){
+    const lh = parseFloat(document.getElementById('g_lh').value);
+    const la = parseFloat(document.getElementById('g_la').value);
+    if(!lh || !la) return null;
+    let pBTTS=0;
+    for(let i=1;i<=10;i++) for(let j=1;j<=10;j++) pBTTS += poissonPMF(i,lh)*poissonPMF(j,la);
+    if(pick.trim()==='sí' || pick.trim()==='si') return pBTTS;
+    if(pick.trim()==='no') return Math.max(0,1-pBTTS);
     return null;
   }
   return null;
