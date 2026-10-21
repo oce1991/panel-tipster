@@ -3209,9 +3209,9 @@ function findOddsForFixture(fx){
   }) || null;
 }
 // ---------- selector automatico de picks (corners + ambos marcan) ----------
-const SELECTOR_DEFAULT = {minHit:0.8, minProb:0.62, minSample:12, minSideSample:5, minOdd:1.5, maxPicks:3};
+const SELECTOR_DEFAULT = {minHit:0.7, minProb:0.6, minSample:12, minSideSample:5, minOdd:1.6, maxPicks:5};
 let SELECTOR_CFG = {...SELECTOR_DEFAULT};
-try{ const s = localStorage.getItem('tipster_selector_cfg'); if(s) SELECTOR_CFG = {...SELECTOR_DEFAULT, ...JSON.parse(s)}; }catch(e){}
+try{ const s = localStorage.getItem('tipster_selector_cfg2'); if(s) SELECTOR_CFG = {...SELECTOR_DEFAULT, ...JSON.parse(s)}; }catch(e){}
 const SELECTOR_LINES = [8.5, 9.5, 10.5];
 function readSelectorCfgFromUI(){
   const num = (id, def) => { const el = document.getElementById(id); const v = el ? parseFloat(el.value) : NaN; return isNaN(v) ? def : v; };
@@ -3223,12 +3223,12 @@ function readSelectorCfgFromUI(){
     minOdd: num('sel_minOdd', SELECTOR_CFG.minOdd),
     maxPicks: Math.max(1, Math.round(num('sel_maxPicks', SELECTOR_CFG.maxPicks))),
   };
-  try{ localStorage.setItem('tipster_selector_cfg', JSON.stringify(SELECTOR_CFG)); }catch(e){}
+  try{ localStorage.setItem('tipster_selector_cfg2', JSON.stringify(SELECTOR_CFG)); }catch(e){}
 }
 function applySelectorCfg(){ readSelectorCfgFromUI(); renderJornada(); }
 function resetSelectorCfg(){
   SELECTOR_CFG = {...SELECTOR_DEFAULT};
-  try{ localStorage.removeItem('tipster_selector_cfg'); }catch(e){}
+  try{ localStorage.removeItem('tipster_selector_cfg2'); }catch(e){}
   fillSelectorInputs(); renderJornada();
 }
 function fillSelectorInputs(){
@@ -3306,26 +3306,35 @@ function renderAutoPicksBox(fixtures){
   }
   box.innerHTML = `<p style="font-family:'Space Grotesk'; font-weight:700; font-size:13px; margin:0 0 6px;">🎯 Picks automáticos (${picks.length})</p>` + picks.map((c,i)=>{
     const fair = 1/c.prob;
-    const minOdd = Math.max(cfg.minOdd, fair);
-    return `<div class="result-box" style="margin-bottom:6px;">
+        return `<div class="result-box" style="margin-bottom:6px;">
       <strong>${c.fx.local} - ${c.fx.visitante}</strong> <span class="hint">· ${c.fx.liga}</span><br>
       <span style="font-family:'JetBrains Mono'; font-size:12px;">${c.market==='Corners'?'🚩':'⚽'} ${c.pick}${c.market==='Ambos marcan'?' (Ambos marcan)':''} · modelo ${fmtPct(c.prob)} · acierto real reciente ${fmtPct(c.hit)} (${c.n} partidos)</span><br>
-      <span class="hint">Cuota mínima para entrar: <strong>@${minOdd.toFixed(2)}</strong> (cuota justa del modelo @${fair.toFixed(2)})</span>
+      <span class="hint">Entra solo si la casa paga ≥ <strong>@${cfg.minOdd.toFixed(2)}</strong> (cuota justa del modelo @${fair.toFixed(2)}; con menos de esa no hay valor)</span>
       <div style="display:flex; gap:8px; margin-top:6px; align-items:center;">
-        <input id="autopick_odd_${i}" type="number" step="0.01" placeholder="cuota real" style="max-width:110px; margin:0;">
+        <input id="autopick_odd_${i}" type="number" step="0.01" placeholder="cuota real" oninput="updateAutoPickOdd(${i})" style="max-width:110px; margin:0;">
+        <span id="autopick_status_${i}" class="hint"></span>
         <button class="btn amber" style="padding:8px 12px; font-size:12px;" onclick="addBetFromAutoPick(${i})">Añadir apuesta</button>
       </div></div>`;
   }).join('');
   window.__autoPicks = picks;
   return new Set(picks.map(c=>c.fx.id));
 }
+function updateAutoPickOdd(i){
+  const c = (window.__autoPicks||[])[i];
+  const el = document.getElementById('autopick_status_'+i);
+  if(!c || !el) return;
+  const odd = parseFloat(document.getElementById('autopick_odd_'+i).value);
+  if(!odd){ el.textContent = ''; return; }
+  const ev = c.prob*odd - 1;
+  if(odd < SELECTOR_CFG.minOdd){ el.innerHTML = `<span style="color:#FB7185;">❌ descartar (cuota < ${SELECTOR_CFG.minOdd})</span>`; return; }
+  el.innerHTML = `<span style="color:${ev>=0?'#22C55E':'#FBBF24'};">✅ cuota OK · EV ${ev>=0?'+':''}${(ev*100).toFixed(1)}%${ev<0?' (el modelo no ve valor)':''}</span>`;
+}
 function addBetFromAutoPick(i){
   const c = (window.__autoPicks||[])[i];
   if(!c) return;
   const odd = parseFloat(document.getElementById('autopick_odd_'+i).value);
   if(!odd){ alert('Escribe primero la cuota real que te dan.'); return; }
-  const minOdd = Math.max(SELECTOR_CFG.minOdd, 1/c.prob);
-  if(odd < minOdd && !confirm(`La cuota ${odd} está por debajo de la mínima (${minOdd.toFixed(2)}). ¿Añadir igualmente?`)) return;
+  if(odd < SELECTOR_CFG.minOdd && !confirm(`La cuota ${odd} está por debajo de tu mínima (${SELECTOR_CFG.minOdd}). ¿Añadir igualmente?`)) return;
   const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
   const bank = BANKCFG.initial + settled.reduce((s,b)=>s+betPL(b),0);
   const b_ = odd-1;
