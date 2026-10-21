@@ -590,6 +590,23 @@ create policy "public update" on tipster_data for update using (true);</pre>
         <input type="checkbox" id="jr_onlyHighHitRate" onchange="renderJornada()" style="width:auto; margin:0;">
         Mostrar solo con la línea elegida cumplida ≥80% en los últimos partidos
       </label>
+      <details class="card" style="margin-top:12px;" id="selectorCfgBox">
+        <summary style="cursor:pointer; font-weight:700;">🎯 Selector automático de picks (córners + Ambos marcan)</summary>
+        <p class="hint">Elige solos los picks más sólidos: solo sale un pick si cumple TODOS los filtros. Si ninguno los cumple, no hay pick.</p>
+        <div class="grid3">
+          <div><label>Acierto real mín. (%)</label><input id="sel_minHit" type="number" onchange="applySelectorCfg()"></div>
+          <div><label>Prob. modelo mín. (%)</label><input id="sel_minProb" type="number" onchange="applySelectorCfg()"></div>
+          <div><label>Muestra mín. (partidos)</label><input id="sel_minSample" type="number" onchange="applySelectorCfg()"></div>
+        </div>
+        <div class="grid2">
+          <div><label>Cuota mínima</label><input id="sel_minOdd" type="number" step="0.01" onchange="applySelectorCfg()"></div>
+          <div><label>Máx. picks por liga y jornada</label><input id="sel_maxPicks" type="number" onchange="applySelectorCfg()"></div>
+        </div>
+        <button class="btn" onclick="resetSelectorCfg()">Valores por defecto</button>
+        <button class="btn amber" onclick="renderSelectorBacktest()">Probar el selector con el histórico</button>
+        <div class="result-box" id="selectorBacktestResult" style="display:none; margin-top:10px;"></div>
+      </details>
+      <div id="autoPicksBox" style="margin-top:12px;"></div>
       <div id="jornadaMatches"></div>
       <div class="empty" id="jornadaEmpty" style="display:none;">No hay calendario importado todavía para esta liga.</div>
     </div>
@@ -3191,6 +3208,257 @@ function findOddsForFixture(fx){
     return (mh.includes(h)||h.includes(mh)) && (ma.includes(a)||a.includes(ma));
   }) || null;
 }
+// ---------- selector automatico de picks (corners + ambos marcan) ----------
+const SELECTOR_DEFAULT = {minHit:0.8, minProb:0.62, minSample:12, minSideSample:5, minOdd:1.5, maxPicks:3};
+let SELECTOR_CFG = {...SELECTOR_DEFAULT};
+try{ const s = localStorage.getItem('tipster_selector_cfg'); if(s) SELECTOR_CFG = {...SELECTOR_DEFAULT, ...JSON.parse(s)}; }catch(e){}
+const SELECTOR_LINES = [8.5, 9.5, 10.5];
+function readSelectorCfgFromUI(){
+  const num = (id, def) => { const el = document.getElementById(id); const v = el ? parseFloat(el.value) : NaN; return isNaN(v) ? def : v; };
+  SELECTOR_CFG = {
+    minHit: num('sel_minHit', SELECTOR_CFG.minHit*100)/100,
+    minProb: num('sel_minProb', SELECTOR_CFG.minProb*100)/100,
+    minSample: Math.round(num('sel_minSample', SELECTOR_CFG.minSample)),
+    minSideSample: SELECTOR_CFG.minSideSample,
+    minOdd: num('sel_minOdd', SELECTOR_CFG.minOdd),
+    maxPicks: Math.max(1, Math.round(num('sel_maxPicks', SELECTOR_CFG.maxPicks))),
+  };
+  try{ localStorage.setItem('tipster_selector_cfg', JSON.stringify(SELECTOR_CFG)); }catch(e){}
+}
+function applySelectorCfg(){ readSelectorCfgFromUI(); renderJornada(); }
+function resetSelectorCfg(){
+  SELECTOR_CFG = {...SELECTOR_DEFAULT};
+  try{ localStorage.removeItem('tipster_selector_cfg'); }catch(e){}
+  fillSelectorInputs(); renderJornada();
+}
+function fillSelectorInputs(){
+  const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.value=v; };
+  set('sel_minHit', Math.round(SELECTOR_CFG.minHit*100));
+  set('sel_minProb', Math.round(SELECTOR_CFG.minProb*100));
+  set('sel_minSample', SELECTOR_CFG.minSample);
+  set('sel_minOdd', SELECTOR_CFG.minOdd);
+  set('sel_maxPicks', SELECTOR_CFG.maxPicks);
+}
+function computeBttsHitRate(home, away, liga, n){
+  const logs = buildCombinedMatchLogs()[liga] || [];
+  function recentFor(teamName){
+    const name = (teamName||'').toLowerCase();
+    return logs.filter(m=> m.d && m.hg!=null && m.ag!=null && ((m.h && m.h.toLowerCase()===name) || (m.a && m.a.toLowerCase()===name)))
+      .sort((a,b)=> b.d.localeCompare(a.d)).slice(0, n);
+  }
+  const hr = recentFor(home), ar = recentFor(away);
+  const all = [...hr, ...ar];
+  if(!all.length) return null;
+  return { total: all.length, homeN: hr.length, awayN: ar.length, rate: all.filter(m=>m.hg>0 && m.ag>0).length/all.length };
+}
+// candidatos de un partido: cada uno lleva prob del modelo, % real reciente y tamaño de muestra
+function buildPickCandidates(fx){
+  const home = findTeamInLiga(fx.local, fx.liga), away = findTeamInLiga(fx.visitante, fx.liga);
+  if(!home || !away) return [];
+  const out = [];
+  SELECTOR_LINES.forEach(line=>{
+    const c = predictCorners(home, away, fx.liga, line);
+    const hr = computeMatchLineHitRate(fx.local, fx.visitante, fx.liga, line, LINE_HIT_RATE_N);
+    if(!c || !hr || hr.rate===null) return;
+    const base = {fx, market:'Corners', line, n:hr.total, minSide:Math.min(hr.homeN, hr.awayN)};
+    out.push({...base, pick:`Over ${line} corners`, prob:c.pOver, hit:hr.rate});
+    out.push({...base, pick:`Under ${line} corners`, prob:c.pUnder, hit:1-hr.rate});
+  });
+  const g = predictGoals(home, away, fx.liga, 2.5);
+  const bh = computeBttsHitRate(fx.local, fx.visitante, fx.liga, LINE_HIT_RATE_N);
+  if(g && bh){
+    const base = {fx, market:'Ambos marcan', n:bh.total, minSide:Math.min(bh.homeN, bh.awayN)};
+    out.push({...base, pick:'Sí', prob:g.pBTTS, hit:bh.rate});
+    out.push({...base, pick:'No', prob:1-g.pBTTS, hit:1-bh.rate});
+  }
+  return out;
+}
+function candidatePasses(c, cfg){
+  return c.prob>=cfg.minProb && c.hit>=cfg.minHit && c.n>=cfg.minSample && c.minSide>=cfg.minSideSample;
+}
+const candScore = c => (c.prob + c.hit)/2;
+// de cada partido nos quedamos con su mejor candidato, y de cada grupo (jornada) con los N mejores
+function selectBest(cands, cfg, groupKey){
+  const bestByMatch = new Map();
+  cands.filter(c=>candidatePasses(c,cfg)).forEach(c=>{
+    const k = c.matchKey;
+    if(!bestByMatch.has(k) || candScore(c) > candScore(bestByMatch.get(k))) bestByMatch.set(k, c);
+  });
+  const groups = {};
+  bestByMatch.forEach(c=>{ const g = groupKey(c); (groups[g] = groups[g] || []).push(c); });
+  const picked = [];
+  Object.values(groups).forEach(arr=>{ arr.sort((a,b)=>candScore(b)-candScore(a)); picked.push(...arr.slice(0, cfg.maxPicks)); });
+  return picked;
+}
+function getAutoPicksForFixtures(fixtures){
+  const cands = [];
+  fixtures.forEach(fx=> buildPickCandidates(fx).forEach(c=>{ c.matchKey = fx.id; c.liga = fx.liga; cands.push(c); }));
+  return selectBest(cands, SELECTOR_CFG, c=>c.liga).sort((a,b)=>candScore(b)-candScore(a));
+}
+function renderAutoPicksBox(fixtures){
+  const box = document.getElementById('autoPicksBox');
+  if(!box) return new Set();
+  const picks = getAutoPicksForFixtures(fixtures);
+  const cfg = SELECTOR_CFG;
+  if(!picks.length){
+    box.innerHTML = `<p class="hint" style="margin:0;">🎯 Ningún partido de esta jornada supera todos los filtros (acierto real ≥${Math.round(cfg.minHit*100)}%, prob. modelo ≥${Math.round(cfg.minProb*100)}%, ≥${cfg.minSample} partidos de muestra). Es normal: mejor no apostar que forzar un pick.</p>`;
+    return new Set();
+  }
+  box.innerHTML = `<p style="font-family:'Space Grotesk'; font-weight:700; font-size:13px; margin:0 0 6px;">🎯 Picks automáticos (${picks.length})</p>` + picks.map((c,i)=>{
+    const fair = 1/c.prob;
+    const minOdd = Math.max(cfg.minOdd, fair);
+    return `<div class="result-box" style="margin-bottom:6px;">
+      <strong>${c.fx.local} - ${c.fx.visitante}</strong> <span class="hint">· ${c.fx.liga}</span><br>
+      <span style="font-family:'JetBrains Mono'; font-size:12px;">${c.market==='Corners'?'🚩':'⚽'} ${c.pick}${c.market==='Ambos marcan'?' (Ambos marcan)':''} · modelo ${fmtPct(c.prob)} · acierto real reciente ${fmtPct(c.hit)} (${c.n} partidos)</span><br>
+      <span class="hint">Cuota mínima para entrar: <strong>@${minOdd.toFixed(2)}</strong> (cuota justa del modelo @${fair.toFixed(2)})</span>
+      <div style="display:flex; gap:8px; margin-top:6px; align-items:center;">
+        <input id="autopick_odd_${i}" type="number" step="0.01" placeholder="cuota real" style="max-width:110px; margin:0;">
+        <button class="btn amber" style="padding:8px 12px; font-size:12px;" onclick="addBetFromAutoPick(${i})">Añadir apuesta</button>
+      </div></div>`;
+  }).join('');
+  window.__autoPicks = picks;
+  return new Set(picks.map(c=>c.fx.id));
+}
+function addBetFromAutoPick(i){
+  const c = (window.__autoPicks||[])[i];
+  if(!c) return;
+  const odd = parseFloat(document.getElementById('autopick_odd_'+i).value);
+  if(!odd){ alert('Escribe primero la cuota real que te dan.'); return; }
+  const minOdd = Math.max(SELECTOR_CFG.minOdd, 1/c.prob);
+  if(odd < minOdd && !confirm(`La cuota ${odd} está por debajo de la mínima (${minOdd.toFixed(2)}). ¿Añadir igualmente?`)) return;
+  const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
+  const bank = BANKCFG.initial + settled.reduce((s,b)=>s+betPL(b),0);
+  const b_ = odd-1;
+  const kellyFull = b_>0 ? (c.prob*b_ - (1-c.prob))/b_ : 0;
+  const stake = Math.max(0, kellyFull*BANKCFG.fraction)*bank;
+  switchToView('bets');
+  document.getElementById('b_match').value = `${c.fx.local} - ${c.fx.visitante}`;
+  const ligaSel = document.getElementById('b_liga');
+  if([...ligaSel.options].some(o=>o.value===c.fx.liga)) ligaSel.value = c.fx.liga;
+  syncCustomLigaDropdown('b_liga');
+  if(c.fx.fecha){ const p = parseFechaToISO(c.fx.fecha); if(p) document.getElementById('b_date').value = p; }
+  document.getElementById('b_market').value = c.market;
+  refreshLineaOptions();
+  const sel = document.getElementById('b_linea');
+  if(c.market==='Corners'){
+    const opt = `${c.pick}`;
+    if([...sel.options].some(o=>o.value===opt)) sel.value = opt;
+    applyLineaToPick();
+  } else {
+    if([...sel.options].some(o=>o.value===c.pick)) sel.value = c.pick;
+    applyLineaToPick();
+  }
+  document.getElementById('b_pick').value = c.market==='Corners' ? c.pick : `Ambos marcan: ${c.pick}`;
+  document.getElementById('b_odd').value = odd;
+  document.getElementById('b_stake').value = stake.toFixed(2);
+}
+// ---------- backtest walk-forward del selector ----------
+function buildSelectorBacktestCandidates(liga){
+  const logs = (buildCombinedMatchLogs()[liga] || []).filter(m=>m.d && m.hg!=null && m.ag!=null);
+  const sorted = [...logs].sort((a,b)=> a.d.localeCompare(b.d));
+  const stats = LEAGUE_STATS[liga];
+  const tally = {}, hist = {};
+  const ens = n => tally[n] || (tally[n] = {home:{mp:0,gf:0,ga:0,cf:0,ca:0,cm:0}, away:{mp:0,gf:0,ga:0,cf:0,ca:0,cm:0}});
+  const cands = [];
+  const weekOf = d => { const t = new Date(d+'T00:00:00Z'); const day = Math.floor(t.getTime()/86400000); return Math.floor((day+3)/7); };
+  sorted.forEach((m, idx)=>{
+    const h = ens(m.h), a = ens(m.a);
+    const hasCorners = m.hc!=null && m.ac!=null;
+    const ok = h.home.mp>=BACKTEST_MIN_MATCHES && a.away.mp>=BACKTEST_MIN_MATCHES;
+    const hh = hist[m.h] || [], ah = hist[m.a] || [];
+    if(ok){
+      const group = liga+'|'+weekOf(m.d);
+      const key = liga+'|'+idx;
+      // BTTS
+      const lh = (h.home.gf/h.home.mp + a.away.ga/a.away.mp)/2;
+      const la = (a.away.gf/a.away.mp + h.home.ga/h.home.mp)/2;
+      const pB = (1-Math.exp(-lh))*(1-Math.exp(-la));
+      const hl = hh.slice(-LINE_HIT_RATE_N), al = ah.slice(-LINE_HIT_RATE_N);
+      const comb = [...hl, ...al];
+      if(comb.length){
+        const r = comb.filter(x=>x.hg>0 && x.ag>0).length/comb.length;
+        const win = m.hg>0 && m.ag>0;
+        const base = {liga, group, matchKey:key, d:m.d, market:'Ambos marcan', n:comb.length, minSide:Math.min(hl.length, al.length)};
+        cands.push({...base, pick:'Sí', prob:pB, hit:r, win});
+        cands.push({...base, pick:'No', prob:1-pB, hit:1-r, win:!win});
+      }
+      // corners
+      const hasHist = h.home.cm>=BACKTEST_MIN_MATCHES && a.away.cm>=BACKTEST_MIN_MATCHES;
+      if(hasCorners && hasHist){
+        const clh = (h.home.cf/h.home.cm + a.away.ca/a.away.cm)/2;
+        const cla = (a.away.cf/a.away.cm + h.home.ca/h.home.cm)/2;
+        const baseTotal = clh+cla;
+        let total = baseTotal;
+        if(stats && typeof stats.slope==='number'){
+          const eg = lh+la;
+          total = Math.max(baseTotal*0.6, Math.min(baseTotal*1.6, baseTotal + stats.slope*(eg-stats.meanGoals)));
+        }
+        const hlc = hh.filter(x=>x.hc!=null).slice(-LINE_HIT_RATE_N), alc = ah.filter(x=>x.hc!=null).slice(-LINE_HIT_RATE_N);
+        const cc = [...hlc, ...alc];
+        if(cc.length){
+          const tot = m.hc+m.ac;
+          SELECTOR_LINES.forEach(line=>{
+            const po = poissonOver(line, total);
+            const r = cc.filter(x=>(x.hc+x.ac)>line).length/cc.length;
+            const base = {liga, group, matchKey:key, d:m.d, market:'Corners', n:cc.length, minSide:Math.min(hlc.length, alc.length)};
+            cands.push({...base, pick:`Over ${line}`, prob:po, hit:r, win:tot>line});
+            cands.push({...base, pick:`Under ${line}`, prob:1-po, hit:1-r, win:tot<line});
+          });
+        }
+      }
+    }
+    // actualizar historial y tallies despues de predecir
+    h.home.mp++; h.home.gf+=m.hg; h.home.ga+=m.ag;
+    a.away.mp++; a.away.gf+=m.ag; a.away.ga+=m.hg;
+    if(hasCorners){ h.home.cf+=m.hc; h.home.ca+=m.ac; h.home.cm++; a.away.cf+=m.ac; a.away.ca+=m.hc; a.away.cm++; }
+    (hist[m.h] = hist[m.h] || []).push(m);
+    (hist[m.a] = hist[m.a] || []).push(m);
+  });
+  return cands;
+}
+function evalSelector(cands, cfg){
+  const picks = selectBest(cands, cfg, c=>c.group);
+  const n = picks.length, wins = picks.filter(p=>p.win).length;
+  const sortedD = [...picks].sort((a,b)=>a.d.localeCompare(b.d));
+  const half = Math.floor(n/2);
+  const rate = arr => arr.length ? arr.filter(p=>p.win).length/arr.length : null;
+  return {n, wins, rate: n?wins/n:null, first: rate(sortedD.slice(0,half)), second: rate(sortedD.slice(half)), nFirst: half, nSecond: n-half};
+}
+try{ fillSelectorInputs(); }catch(e){}
+function renderSelectorBacktest(){
+  const box = document.getElementById('selectorBacktestResult');
+  box.style.display = 'block';
+  readSelectorCfgFromUI();
+  const ligas = Object.keys(buildCombinedMatchLogs());
+  let cands = [];
+  ligas.forEach(l=>{ cands.push(...buildSelectorBacktestCandidates(l)); });
+  if(!cands.length){ box.innerHTML = '<p class="hint">No hay histórico suficiente para el backtest.</p>'; return; }
+  const cfg = SELECTOR_CFG;
+  const cur = evalSelector(cands, cfg);
+  const noHit = evalSelector(cands, {...cfg, minHit:0, minSample:0, minSideSample:0});
+  const pc = x => x===null ? '—' : fmtPct(x);
+  const baseRate = cands.filter(c=>c.prob>=0.5).length ? cands.filter(c=>c.prob>=0.5 && c.win).length/cands.filter(c=>c.prob>=0.5).length : null;
+  let html = `<p class="hint">Simulación partido a partido sobre ${ligas.length} ligas con histórico (en cada partido solo se usan los datos anteriores a su fecha). Los picks son el mejor de cada partido y como mucho ${cfg.maxPicks} por liga y semana.</p>
+  <table><thead><tr><th>Escenario</th><th>Picks</th><th>Acierto</th></tr></thead><tbody>
+  <tr><td>Todo candidato con prob. modelo ≥50% (sin filtrar)</td><td>${cands.filter(c=>c.prob>=0.5).length}</td><td>${pc(baseRate)}</td></tr>
+  <tr><td>Solo por prob. modelo ≥${Math.round(cfg.minProb*100)}% (sin filtro de acierto real)</td><td>${noHit.n}</td><td>${pc(noHit.rate)}</td></tr>
+  <tr><td><strong>Tu configuración actual</strong></td><td>${cur.n}</td><td class="${cur.rate>=0.7?'pos':'neg'}">${pc(cur.rate)}</td></tr>
+  </tbody></table>
+  <p class="hint" style="margin-top:6px;">Estabilidad de tu configuración: primera mitad del tiempo ${pc(cur.first)} (${cur.nFirst} picks) · segunda mitad ${pc(cur.second)} (${cur.nSecond} picks). Si las dos mitades se parecen, el filtro es fiable; si difieren mucho, es casualidad.</p>
+  <p class="hint">Para ser rentable a largo plazo, la cuota media debe superar 1 / acierto (p. ej. con ${pc(cur.rate)} de acierto, cuota > ${cur.rate?(1/cur.rate).toFixed(2):'—'}).</p>
+  <hr class="divider"><p style="font-family:'Space Grotesk'; font-weight:700; font-size:13px;">Sensibilidad (acierto % / nº picks)</p>`;
+  const hits = [0.7,0.75,0.8,0.85,0.9], probs = [0.55,0.6,0.65,0.7];
+  html += `<div style="overflow-x:auto;"><table><thead><tr><th>Acierto real mín. ↓ / Prob. modelo mín. →</th>${probs.map(p=>`<th>${Math.round(p*100)}%</th>`).join('')}</tr></thead><tbody>`;
+  hits.forEach(hv=>{
+    html += `<tr><td>${Math.round(hv*100)}%</td>` + probs.map(pv=>{
+      const r = evalSelector(cands, {...cfg, minHit:hv, minProb:pv});
+      return `<td>${r.n?fmtPct(r.rate):'—'} <span class="hint">(${r.n})</span></td>`;
+    }).join('') + '</tr>';
+  });
+  html += '</tbody></table></div><p class="hint">Fíjate en las celdas con al menos 50-100 picks: con menos muestra el porcentaje no significa nada.</p>';
+  box.innerHTML = html;
+}
+
 function renderJornada(){
   const liga = document.getElementById('jr_liga').value;
   const jornada = document.getElementById('jr_jornada').value;
@@ -3201,6 +3469,7 @@ function renderJornada(){
   const crossLiga = liga === '__ALL__';
   const matches = FIXTURES.filter(f=> f.jornada===jornada && (crossLiga || f.liga===liga));
   container.innerHTML = '';
+  const AUTO_PICK_FX = renderAutoPicksBox(matches);
 
   let enriched = matches.map(fx=>{
     const matchLiga = fx.liga;
@@ -3314,7 +3583,7 @@ function renderJornada(){
     div.innerHTML = `
       <div style="flex:1; min-width:0;">
         <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; ${tc} overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${fx.local} vs ${fx.visitante}</p>
-        <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${meta && meta.fecha ? meta.fecha.split('-').reverse().join('/') : (fx.fecha||'')}${meta && meta.hora ? ' · 🕐 '+meta.hora : ''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado' : (autoHighCorners ? '🚩 córners altos (>'+AUTO_HIGHLIGHT_CORNERS_THRESHOLD+')' : '')}</p>
+        <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${meta && meta.fecha ? meta.fecha.split('-').reverse().join('/') : (fx.fecha||'')}${meta && meta.hora ? ' · 🕐 '+meta.hora : ''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${AUTO_PICK_FX.has(fx.id) ? '🎯 PICK AUTO · ' : ''}${isPicked ? '★ marcado' : (autoHighCorners ? '🚩 córners altos (>'+AUTO_HIGHLIGHT_CORNERS_THRESHOLD+')' : '')}</p>
         ${meta && meta.nota ? `<p class="hint" style="margin:2px 0 0; font-style:italic; ${tc}">📝 ${escapeHtml(meta.nota)}</p>` : ''}
         ${statsLine}
         ${resultForm}
