@@ -3214,6 +3214,7 @@ function findOddsForFixture(fx){
   }) || null;
 }
 // ---------- binomial negativa para corners (sobredispersion) ----------
+const CORNERS_NB_MIN_MATCHES = 40;
 let CORNERS_USE_NB = true;
 try{ if(localStorage.getItem('tipster_corners_nb')==='0') CORNERS_USE_NB = false; }catch(e){}
 function setCornersNB(on){
@@ -3264,7 +3265,7 @@ function getCornersAlpha(liga){
   if(c && c.key===key) return c.alpha;
   const preds = walkCornersPredictions(liga);
   let alpha = 0;
-  if(preds.length>=60){
+  if(preds.length>=CORNERS_NB_MIN_MATCHES){
     const num = preds.reduce((s,p)=> s + (p.y-p.mu)*(p.y-p.mu) - p.mu, 0);
     const den = preds.reduce((s,p)=> s + p.mu*p.mu, 0);
     alpha = Math.max(0, Math.min(0.5, num/den));
@@ -3287,7 +3288,7 @@ function cornersPushP(line, mu, liga){
 function compareCornersModels(liga){
   const preds = walkCornersPredictions(liga);
   const alpha = getCornersAlpha(liga);
-  if(preds.length<60) return null;
+  if(preds.length<CORNERS_NB_MIN_MATCHES) return null;
   let llP=0, llN=0, brP=0, brN=0, n=0;
   const eps = 1e-6;
   preds.forEach(p=>{
@@ -3305,16 +3306,26 @@ function renderNBComparison(){
   const box = document.getElementById('nbCompareResult');
   if(!box) return;
   box.style.display = 'block';
-  const ligas = Object.keys(buildCombinedMatchLogs());
-  const rows = ligas.map(l=>({l, r:compareCornersModels(l)})).filter(x=>x.r);
-  if(!rows.length){ box.innerHTML = '<p class="hint">Aún no hay histórico suficiente (mínimo 60 partidos con córners por liga).</p>'; return; }
-  box.innerHTML = `<p class="hint">Compara el modelo Poisson con la binomial negativa sobre partidos ya jugados (predicción hecha solo con datos anteriores a cada partido). Error más bajo = mejor. α es la sobredispersión de cada liga (0 = Poisson puro).</p>
-  <div style="overflow-x:auto;"><table><thead><tr><th>Liga</th><th>Partidos</th><th>α</th><th>Error Poisson</th><th>Error Bin. Neg.</th><th>Mejor</th></tr></thead><tbody>` +
-  rows.map(({l,r})=>{
-    const better = r.alpha<0.01 ? '= (igual)' : (r.llN < r.llP ? '✅ Bin. Neg.' : 'Poisson');
-    return `<tr><td>${l}</td><td>${r.n}</td><td>${r.alpha.toFixed(3)}</td><td>${r.llP.toFixed(4)}</td><td>${r.llN.toFixed(4)}</td><td>${better}</td></tr>`;
-  }).join('') + `</tbody></table></div>
-  <label style="display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer;"><input type="checkbox" ${CORNERS_USE_NB?'checked':''} onchange="setCornersNB(this.checked)" style="width:auto; margin:0;"> Usar binomial negativa en las predicciones de córners</label>`;
+  try{
+    const all = buildCombinedMatchLogs();
+    const ligas = Object.keys(all);
+    if(!ligas.length){ box.innerHTML = '<p class="hint">No hay ninguna liga con partidos fechados importados (los CSV de temporadas deben traer fecha). Sin eso no se puede medir la sobredispersión.</p>'; return; }
+    const rows = ligas.map(l=>{
+      const withCorners = all[l].filter(m=>m.d && m.hc!=null && m.ac!=null && m.hg!=null && m.ag!=null).length;
+      let r = null, err = null;
+      try{ r = compareCornersModels(l); }catch(e){ err = e.message; }
+      return {l, total:all[l].length, withCorners, r, err};
+    });
+    box.innerHTML = `<p class="hint">Compara Poisson con binomial negativa sobre partidos ya jugados (cada predicción usa solo datos anteriores a su partido). Error más bajo = mejor. α es la sobredispersión de la liga (0 = Poisson puro). Hacen falta ${CORNERS_NB_MIN_MATCHES}+ partidos con fecha y córners por liga.</p>
+    <div style="overflow-x:auto;"><table><thead><tr><th>Liga</th><th>Partidos con córners</th><th>α</th><th>Error Poisson</th><th>Error Bin. Neg.</th><th>Resultado</th></tr></thead><tbody>` +
+    rows.map(({l,withCorners,r,err})=>{
+      if(err) return `<tr><td>${l}</td><td>${withCorners}</td><td colspan="4">Error: ${err}</td></tr>`;
+      if(!r) return `<tr><td>${l}</td><td>${withCorners}</td><td colspan="4">Faltan partidos (mínimo ${CORNERS_NB_MIN_MATCHES} con historial previo de ${BACKTEST_MIN_MATCHES} partidos por equipo)</td></tr>`;
+      const res = r.alpha<0.01 ? 'α≈0: los córners de esta liga siguen una Poisson, se usa Poisson' : (r.llN < r.llP ? '✅ Bin. Neg. mejor, activa' : 'Poisson mejor');
+      return `<tr><td>${l}</td><td>${r.n}</td><td>${r.alpha.toFixed(3)}</td><td>${r.llP.toFixed(4)}</td><td>${r.llN.toFixed(4)}</td><td>${res}</td></tr>`;
+    }).join('') + `</tbody></table></div>
+    <label style="display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer;"><input type="checkbox" ${CORNERS_USE_NB?'checked':''} onchange="setCornersNB(this.checked)" style="width:auto; margin:0;"> Usar binomial negativa en las predicciones de córners</label>`;
+  }catch(e){ box.innerHTML = '<p class="hint">Error al calcular: '+e.message+'</p>'; }
 }
 function devigTwoWay(oddA, oddB){
   if(!oddA || !oddB) return null;
