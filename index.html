@@ -600,10 +600,13 @@ create policy "public update" on tipster_data for update using (true);</pre>
         </div>
         <div class="grid2">
           <div><label>Cuota mínima</label><input id="sel_minOdd" type="number" step="0.01" onchange="applySelectorCfg()"></div>
+          <div><label>EV mínimo (%) con la cuota real (0 = sin filtro)</label><input id="sel_minEV" type="number" step="1" onchange="applySelectorCfg()"></div>
           <div><label>Máx. picks por liga y jornada</label><input id="sel_maxPicks" type="number" onchange="applySelectorCfg()"></div>
         </div>
         <button class="btn" onclick="resetSelectorCfg()">Valores por defecto</button>
         <button class="btn amber" onclick="renderSelectorBacktest()">Probar el selector con el histórico</button>
+        <button class="btn" onclick="renderNBComparison()">Comparar Poisson vs binomial negativa</button>
+        <div class="result-box" id="nbCompareResult" style="display:none; margin-top:10px;"></div>
         <div class="result-box" id="selectorBacktestResult" style="display:none; margin-top:10px;"></div>
       </details>
       <div id="autoPicksBox" style="margin-top:12px;"></div>
@@ -2393,8 +2396,8 @@ function calcCorners(){
   }
 
   const line = parseFloat(document.getElementById('c_line').value);
-  const pOver = poissonOver(line,total);
-  const pPush = poissonPush(line,total);
+  const pOver = cornersOverP(line,total,liga);
+  const pPush = cornersPushP(line,total,liga);
   const pUnder = Math.max(0, 1-pOver-pPush);
   const oddOver = parseFloat(document.getElementById('c_oddOver').value);
   const oddUnder = parseFloat(document.getElementById('c_oddUnder').value);
@@ -2416,6 +2419,8 @@ function calcCorners(){
     const ev = evFromProbPush(pUnder,pPush,oddUnder);
     html += `<p>Under @ ${oddUnder}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span> <button class="btn amber" onclick="addBetFromCorners('under')" style="margin-left:8px; padding:4px 10px; font-size:11px;">➕ Añadir apuesta</button></p>`;
   }
+  const dv = devigTwoWay(oddOver, oddUnder);
+  if(dv){ html += `<p class="hint">Margen de la casa: ${(dv.margin*100).toFixed(1)}% · Probabilidad real del mercado (sin margen): Over ${fmtPct(dv.pA)} / Under ${fmtPct(dv.pB)} · tu modelo: Over ${fmtPct(pOver)} / Under ${fmtPct(pUnder)} → ventaja sobre el mercado en Over: <strong>${((pOver-dv.pA)*100).toFixed(1)} pts</strong>.</p>`; }
   html += `<p class="hint">EV positivo no garantiza acierto en un solo partido — es una ventaja estadística que solo se demuestra en volumen. Registra la apuesta en 04 Apuestas para hacer seguimiento real.</p>`;
   if(h && a){
     const renderMatchList = (teamName, label) => {
@@ -2932,8 +2937,8 @@ function predictCorners(homeTeam, awayTeam, liga, line){
     shotAdjustedTotal = Math.max(baseTotal*0.6, Math.min(baseTotal*1.6, shotAdjustedTotal));
     total = shotAdjustedTotal;
   }
-  const pOver = poissonOver(line, total);
-  const pPush = poissonPush(line, total);
+  const pOver = cornersOverP(line, total, liga);
+  const pPush = cornersPushP(line, total, liga);
   return { baseTotal, total, pOver, pPush, pUnder: Math.max(0,1-pOver-pPush), expectedGoals, expectedShots };
 }
 const FOUL_BLEND_WEIGHT = 0.3; // cuanto pesa la estimacion via faltas cometidas frente a las tarjetas reales
@@ -3208,8 +3213,117 @@ function findOddsForFixture(fx){
     return (mh.includes(h)||h.includes(mh)) && (ma.includes(a)||a.includes(ma));
   }) || null;
 }
+// ---------- binomial negativa para corners (sobredispersion) ----------
+let CORNERS_USE_NB = true;
+try{ if(localStorage.getItem('tipster_corners_nb')==='0') CORNERS_USE_NB = false; }catch(e){}
+function setCornersNB(on){
+  CORNERS_USE_NB = !!on;
+  try{ localStorage.setItem('tipster_corners_nb', on?'1':'0'); }catch(e){}
+  if(typeof renderJornada==='function') renderJornada();
+}
+function nbCDF(k, mu, alpha){
+  // NB2: media mu, varianza mu + alpha*mu^2 ; r = 1/alpha
+  const r = 1/alpha;
+  let p = Math.pow(r/(r+mu), r), s = p;
+  for(let i=0;i<k;i++){ p = p*(i+r)/(i+1)*(mu/(r+mu)); s += p; }
+  return Math.min(1, s);
+}
+function nbPMF(k, mu, alpha){
+  const r = 1/alpha;
+  let p = Math.pow(r/(r+mu), r);
+  for(let i=0;i<k;i++) p = p*(i+r)/(i+1)*(mu/(r+mu));
+  return p;
+}
+// predicciones walk-forward (solo con datos anteriores a cada partido) -> sirven para medir dispersion y calibracion
+function walkCornersPredictions(liga){
+  const logs = (buildCombinedMatchLogs()[liga] || []).filter(m=>m.d && m.hc!=null && m.ac!=null && m.hg!=null && m.ag!=null);
+  const sorted = [...logs].sort((a,b)=> a.d.localeCompare(b.d));
+  const stats = LEAGUE_STATS[liga];
+  const tally = {};
+  const ens = n => tally[n] || (tally[n] = {home:{mp:0,gf:0,ga:0,cf:0,ca:0}, away:{mp:0,gf:0,ga:0,cf:0,ca:0}});
+  const out = [];
+  sorted.forEach(m=>{
+    const h = ens(m.h), a = ens(m.a);
+    if(h.home.mp>=BACKTEST_MIN_MATCHES && a.away.mp>=BACKTEST_MIN_MATCHES){
+      const baseTotal = (h.home.cf/h.home.mp + a.away.ca/a.away.mp)/2 + (a.away.cf/a.away.mp + h.home.ca/h.home.mp)/2;
+      const eg = (h.home.gf/h.home.mp + a.away.ga/a.away.mp)/2 + (a.away.gf/a.away.mp + h.home.ga/h.home.mp)/2;
+      let mu = baseTotal;
+      if(stats && typeof stats.slope==='number') mu = Math.max(baseTotal*0.6, Math.min(baseTotal*1.6, baseTotal + stats.slope*(eg - stats.meanGoals)));
+      out.push({mu, y:m.hc+m.ac, d:m.d});
+    }
+    h.home.mp++; h.home.gf+=m.hg; h.home.ga+=m.ag; h.home.cf+=m.hc; h.home.ca+=m.ac;
+    a.away.mp++; a.away.gf+=m.ag; a.away.ga+=m.hg; a.away.cf+=m.ac; a.away.ca+=m.hc;
+  });
+  return out;
+}
+const CORNERS_ALPHA_CACHE = {};
+function getCornersAlpha(liga){
+  const logs = buildCombinedMatchLogs()[liga] || [];
+  const key = logs.length;
+  const c = CORNERS_ALPHA_CACHE[liga];
+  if(c && c.key===key) return c.alpha;
+  const preds = walkCornersPredictions(liga);
+  let alpha = 0;
+  if(preds.length>=60){
+    const num = preds.reduce((s,p)=> s + (p.y-p.mu)*(p.y-p.mu) - p.mu, 0);
+    const den = preds.reduce((s,p)=> s + p.mu*p.mu, 0);
+    alpha = Math.max(0, Math.min(0.5, num/den));
+  }
+  CORNERS_ALPHA_CACHE[liga] = {key, alpha, n:preds.length};
+  return alpha;
+}
+function cornersOverP(line, mu, liga){
+  const alpha = (CORNERS_USE_NB && liga) ? getCornersAlpha(liga) : 0;
+  if(alpha < 0.01) return poissonOver(line, mu);
+  return 1 - nbCDF(Math.floor(line), mu, alpha);
+}
+function cornersPushP(line, mu, liga){
+  if(!Number.isInteger(line)) return 0;
+  const alpha = (CORNERS_USE_NB && liga) ? getCornersAlpha(liga) : 0;
+  if(alpha < 0.01) return poissonPush(line, mu);
+  return nbPMF(line, mu, alpha);
+}
+// comparacion Poisson vs binomial negativa sobre el historico (log-loss y Brier; menor = mejor)
+function compareCornersModels(liga){
+  const preds = walkCornersPredictions(liga);
+  const alpha = getCornersAlpha(liga);
+  if(preds.length<60) return null;
+  let llP=0, llN=0, brP=0, brN=0, n=0;
+  const eps = 1e-6;
+  preds.forEach(p=>{
+    SELECTOR_LINES.forEach(line=>{
+      const pp = Math.min(1-eps, Math.max(eps, poissonOver(line, p.mu)));
+      const pn = alpha>=0.01 ? Math.min(1-eps, Math.max(eps, 1-nbCDF(Math.floor(line), p.mu, alpha))) : pp;
+      const o = p.y>line ? 1 : 0;
+      llP += -(o*Math.log(pp)+(1-o)*Math.log(1-pp)); llN += -(o*Math.log(pn)+(1-o)*Math.log(1-pn));
+      brP += (pp-o)*(pp-o); brN += (pn-o)*(pn-o); n++;
+    });
+  });
+  return {alpha, n:preds.length, llP:llP/n, llN:llN/n, brP:brP/n, brN:brN/n};
+}
+function renderNBComparison(){
+  const box = document.getElementById('nbCompareResult');
+  if(!box) return;
+  box.style.display = 'block';
+  const ligas = Object.keys(buildCombinedMatchLogs());
+  const rows = ligas.map(l=>({l, r:compareCornersModels(l)})).filter(x=>x.r);
+  if(!rows.length){ box.innerHTML = '<p class="hint">Aún no hay histórico suficiente (mínimo 60 partidos con córners por liga).</p>'; return; }
+  box.innerHTML = `<p class="hint">Compara el modelo Poisson con la binomial negativa sobre partidos ya jugados (predicción hecha solo con datos anteriores a cada partido). Error más bajo = mejor. α es la sobredispersión de cada liga (0 = Poisson puro).</p>
+  <div style="overflow-x:auto;"><table><thead><tr><th>Liga</th><th>Partidos</th><th>α</th><th>Error Poisson</th><th>Error Bin. Neg.</th><th>Mejor</th></tr></thead><tbody>` +
+  rows.map(({l,r})=>{
+    const better = r.alpha<0.01 ? '= (igual)' : (r.llN < r.llP ? '✅ Bin. Neg.' : 'Poisson');
+    return `<tr><td>${l}</td><td>${r.n}</td><td>${r.alpha.toFixed(3)}</td><td>${r.llP.toFixed(4)}</td><td>${r.llN.toFixed(4)}</td><td>${better}</td></tr>`;
+  }).join('') + `</tbody></table></div>
+  <label style="display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer;"><input type="checkbox" ${CORNERS_USE_NB?'checked':''} onchange="setCornersNB(this.checked)" style="width:auto; margin:0;"> Usar binomial negativa en las predicciones de córners</label>`;
+}
+function devigTwoWay(oddA, oddB){
+  if(!oddA || !oddB) return null;
+  const ia = 1/oddA, ib = 1/oddB, s = ia+ib;
+  return {pA: ia/s, pB: ib/s, margin: s-1};
+}
+
 // ---------- selector automatico de picks (corners + ambos marcan) ----------
-const SELECTOR_DEFAULT = {minHit:0.7, minProb:0.6, minSample:12, minSideSample:5, minOdd:1.6, maxPicks:5};
+const SELECTOR_DEFAULT = {minHit:0.7, minProb:0.6, minSample:12, minSideSample:5, minOdd:1.6, minEV:0, maxPicks:5};
 let SELECTOR_CFG = {...SELECTOR_DEFAULT};
 try{ const s = localStorage.getItem('tipster_selector_cfg2'); if(s) SELECTOR_CFG = {...SELECTOR_DEFAULT, ...JSON.parse(s)}; }catch(e){}
 const SELECTOR_LINES = [8.5, 9.5, 10.5];
@@ -3221,6 +3335,7 @@ function readSelectorCfgFromUI(){
     minSample: Math.round(num('sel_minSample', SELECTOR_CFG.minSample)),
     minSideSample: SELECTOR_CFG.minSideSample,
     minOdd: num('sel_minOdd', SELECTOR_CFG.minOdd),
+    minEV: num('sel_minEV', SELECTOR_CFG.minEV*100)/100,
     maxPicks: Math.max(1, Math.round(num('sel_maxPicks', SELECTOR_CFG.maxPicks))),
   };
   try{ localStorage.setItem('tipster_selector_cfg2', JSON.stringify(SELECTOR_CFG)); }catch(e){}
@@ -3237,6 +3352,7 @@ function fillSelectorInputs(){
   set('sel_minProb', Math.round(SELECTOR_CFG.minProb*100));
   set('sel_minSample', SELECTOR_CFG.minSample);
   set('sel_minOdd', SELECTOR_CFG.minOdd);
+  set('sel_minEV', Math.round(SELECTOR_CFG.minEV*100));
   set('sel_maxPicks', SELECTOR_CFG.maxPicks);
 }
 function computeBttsHitRate(home, away, liga, n){
@@ -3312,6 +3428,7 @@ function renderAutoPicksBox(fixtures){
       <span class="hint">Entra solo si la casa paga ≥ <strong>@${cfg.minOdd.toFixed(2)}</strong> (cuota justa del modelo @${fair.toFixed(2)}; con menos de esa no hay valor)</span>
       <div style="display:flex; gap:8px; margin-top:6px; align-items:center;">
         <input id="autopick_odd_${i}" type="number" step="0.01" placeholder="cuota real" oninput="updateAutoPickOdd(${i})" style="max-width:110px; margin:0;">
+        <input id="autopick_opp_${i}" type="number" step="0.01" placeholder="cuota contraria" oninput="updateAutoPickOdd(${i})" style="max-width:130px; margin:0;">
         <span id="autopick_status_${i}" class="hint"></span>
         <button class="btn amber" style="padding:8px 12px; font-size:12px;" onclick="addBetFromAutoPick(${i})">Añadir apuesta</button>
       </div></div>`;
@@ -3324,10 +3441,15 @@ function updateAutoPickOdd(i){
   const el = document.getElementById('autopick_status_'+i);
   if(!c || !el) return;
   const odd = parseFloat(document.getElementById('autopick_odd_'+i).value);
+  const opp = parseFloat((document.getElementById('autopick_opp_'+i)||{}).value);
   if(!odd){ el.textContent = ''; return; }
   const ev = c.prob*odd - 1;
+  const dv = opp ? devigTwoWay(odd, opp) : null;
+  const dvTxt = dv ? ` · mercado sin margen ${fmtPct(dv.pA)} vs modelo ${fmtPct(c.prob)} (${((c.prob-dv.pA)*100).toFixed(1)} pts)` : '';
+  const minEV = SELECTOR_CFG.minEV||0;
   if(odd < SELECTOR_CFG.minOdd){ el.innerHTML = `<span style="color:#FB7185;">❌ descartar (cuota < ${SELECTOR_CFG.minOdd})</span>`; return; }
-  el.innerHTML = `<span style="color:${ev>=0?'#22C55E':'#FBBF24'};">✅ cuota OK · EV ${ev>=0?'+':''}${(ev*100).toFixed(1)}%${ev<0?' (el modelo no ve valor)':''}</span>`;
+  if(ev < minEV){ el.innerHTML = `<span style="color:#FB7185;">❌ descartar (EV ${(ev*100).toFixed(1)}% < ${(minEV*100).toFixed(0)}%)${dvTxt}</span>`; return; }
+  el.innerHTML = `<span style="color:${ev>=0?'#22C55E':'#FBBF24'};">✅ cuota OK · EV ${ev>=0?'+':''}${(ev*100).toFixed(1)}%${ev<0?' (el modelo no ve valor)':''}${dvTxt}</span>`;
 }
 function addBetFromAutoPick(i){
   const c = (window.__autoPicks||[])[i];
@@ -3407,7 +3529,7 @@ function buildSelectorBacktestCandidates(liga){
         if(cc.length){
           const tot = m.hc+m.ac;
           SELECTOR_LINES.forEach(line=>{
-            const po = poissonOver(line, total);
+            const po = cornersOverP(line, total, liga);
             const r = cc.filter(x=>(x.hc+x.ac)>line).length/cc.length;
             const base = {liga, group, matchKey:key, d:m.d, market:'Corners', n:cc.length, minSide:Math.min(hlc.length, alc.length)};
             cands.push({...base, pick:`Over ${line}`, prob:po, hit:r, win:tot>line});
