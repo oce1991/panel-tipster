@@ -823,8 +823,10 @@ async function endAccountSession(){
 }
 async function showAccountSession(){
   const status = document.getElementById('auth_status');
-  const {data,error}=await sbClient.auth.getSession();
-  status.textContent=error ? 'No se pudo comprobar la sesión.' : data.session ? 'Hay una sesión iniciada en este dispositivo.' : 'No hay una sesión iniciada en este dispositivo.';
+  try{
+    const {data,error}=await sbClient.auth.getSession();
+    status.textContent=error ? 'No se pudo comprobar la sesión.' : data.session ? 'Hay una sesión iniciada en este dispositivo.' : 'No hay una sesión iniciada en este dispositivo.';
+  }catch(e){ status.textContent='No se pudo comprobar la sesión.'; }
 }
 function getSupabaseConfig(){
   try{
