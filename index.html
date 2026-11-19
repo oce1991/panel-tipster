@@ -1369,49 +1369,44 @@ function renderBacktest(){
   box.innerHTML = html;
 }
 function runCornersBacktest(liga, line){
-  const logs = (buildCombinedMatchLogs()[liga] || []).filter(m=>m.d && m.hc!=null && m.ac!=null);
+  const logs = (buildCombinedMatchLogs()[liga] || []).filter(m=>m.d && Number.isFinite(m.hc) && Number.isFinite(m.ac) && Number.isFinite(m.hg) && Number.isFinite(m.ag));
   const sorted = [...logs].sort((a,b)=> a.d.localeCompare(b.d));
-  const stats = LEAGUE_STATS[liga]; // slope/meanGoals calculados con todos los datos importados (no walk-forward, aviso aparte)
-  const tally = {};
+  const tally = {}, regression = {n:0,sumX:0,sumY:0,sumXY:0,sumX2:0};
   function ensure(name){
-    if(!tally[name]) tally[name] = { home:{mp:0,gf:0,ga:0,cf:0,ca:0}, away:{mp:0,gf:0,ga:0,cf:0,ca:0} };
+    if(!tally[name]) tally[name] = {home:{mp:0,gf:0,ga:0,cf:0,ca:0},away:{mp:0,gf:0,ga:0,cf:0,ca:0}};
     return tally[name];
   }
-  const buckets = Array.from({length:10}, ()=>({n:0, wins:0, sumProb:0}));
-  let n=0, sumPredicted=0, sumActual=0, sumAbsError=0, skippedNoHistory=0;
-  sorted.forEach(m=>{
-    const h = ensure(m.h), a = ensure(m.a);
-    const hasHistory = h.home.mp>=BACKTEST_MIN_MATCHES && a.away.mp>=BACKTEST_MIN_MATCHES;
-    if(hasHistory){
-      const clh = (h.home.cf/h.home.mp + a.away.ca/a.away.mp)/2;
-      const cla = (a.away.cf/a.away.mp + h.home.ca/h.home.mp)/2;
-      const baseTotal = clh+cla;
-      const glh = (h.home.gf/h.home.mp + a.away.ga/a.away.mp)/2;
-      const gla = (a.away.gf/a.away.mp + h.home.ga/h.home.mp)/2;
-      const expectedGoals = glh+gla;
-      let total = baseTotal;
-      if(stats && typeof stats.slope==='number'){
-        let adj = baseTotal + stats.slope*(expectedGoals - stats.meanGoals);
-        adj = Math.max(baseTotal*0.6, Math.min(baseTotal*1.6, adj));
-        total = adj;
-      }
-      const pOver = poissonOver(line, total);
-      const actualTotal = m.hc+m.ac;
-      const actualOver = actualTotal > line;
-      n++;
-      sumPredicted += total; sumActual += actualTotal; sumAbsError += Math.abs(total-actualTotal);
-      const bIdx = Math.min(9, Math.max(0, Math.floor(pOver*10)));
-      buckets[bIdx].n++; buckets[bIdx].sumProb += pOver;
-      if(actualOver) buckets[bIdx].wins++;
-    } else { skippedNoHistory++; }
-    h.home.mp++; h.home.gf+=m.hg; h.home.ga+=m.ag; h.home.cf+=m.hc; h.home.ca+=m.ac;
-    a.away.mp++; a.away.gf+=m.ag; a.away.ga+=m.hg; a.away.cf+=m.ac; a.away.ca+=m.hc;
-  });
-  return {
-    totalMatches: sorted.length, n, skippedNoHistory,
-    avgPredicted: n?sumPredicted/n:null, avgActual: n?sumActual/n:null,
-    mae: n?sumAbsError/n:null, buckets: buckets.filter(b=>b.n>0),
-  };
+  const buckets = Array.from({length:10}, ()=>({n:0,wins:0,sumProb:0}));
+  let n=0,sumPredicted=0,sumActual=0,sumAbsError=0,skippedNoHistory=0;
+  for(let i=0;i<sorted.length;){
+    let j=i; while(j<sorted.length && sorted[j].d===sorted[i].d) j++;
+    const denom=regression.n*regression.sumX2-regression.sumX*regression.sumX;
+    const slope=regression.n>=20 && denom!==0 ? (regression.n*regression.sumXY-regression.sumX*regression.sumY)/denom : null;
+    const meanGoals=regression.n ? regression.sumX/regression.n : null;
+    for(let k=i;k<j;k++){
+      const m=sorted[k], h=ensure(m.h), away=ensure(m.a);
+      if(h.home.mp>=BACKTEST_MIN_MATCHES && away.away.mp>=BACKTEST_MIN_MATCHES){
+        const baseTotal=(h.home.cf/h.home.mp+away.away.ca/away.away.mp+away.away.cf/away.away.mp+h.home.ca/h.home.mp)/2;
+        const expectedGoals=(h.home.gf/h.home.mp+away.away.ga/away.away.mp+away.away.gf/away.away.mp+h.home.ga/h.home.mp)/2;
+        let total=baseTotal;
+        if(slope!==null) total=Math.max(baseTotal*0.6,Math.min(baseTotal*1.6,baseTotal+slope*(expectedGoals-meanGoals)));
+        const pOver=poissonOver(line,total), actual=m.hc+m.ac;
+        n++; sumPredicted+=total; sumActual+=actual; sumAbsError+=Math.abs(total-actual);
+        const bucket=buckets[Math.min(9,Math.max(0,Math.floor(pOver*10)))];
+        bucket.n++;bucket.sumProb+=pOver;if(actual>line) bucket.wins++;
+      }else skippedNoHistory++;
+    }
+    // Sin hora fiable, los partidos de un mismo día se incorporan juntos al terminar el día.
+    for(let k=i;k<j;k++){
+      const m=sorted[k], h=ensure(m.h), away=ensure(m.a);
+      h.home.mp++;h.home.gf+=m.hg;h.home.ga+=m.ag;h.home.cf+=m.hc;h.home.ca+=m.ac;
+      away.away.mp++;away.away.gf+=m.ag;away.away.ga+=m.hg;away.away.cf+=m.ac;away.away.ca+=m.hc;
+      const x=m.hg+m.ag,y=m.hc+m.ac;
+      regression.n++;regression.sumX+=x;regression.sumY+=y;regression.sumXY+=x*y;regression.sumX2+=x*x;
+    }
+    i=j;
+  }
+  return {totalMatches:sorted.length,n,skippedNoHistory,avgPredicted:n?sumPredicted/n:null,avgActual:n?sumActual/n:null,mae:n?sumAbsError/n:null,buckets:buckets.filter(b=>b.n>0)};
 }
 function renderCornersBacktest(){
   const liga = document.getElementById('btc_liga').value;
@@ -1444,33 +1439,30 @@ function renderCornersBacktest(){
   box.innerHTML = html;
 }
 function runBttsBacktest(liga){
-  const logs = (buildCombinedMatchLogs()[liga] || []).filter(m=>m.d);
-  const sorted = [...logs].sort((a,b)=> a.d.localeCompare(b.d));
-  const tally = {};
-  function ensure(name){
-    if(!tally[name]) tally[name] = { home:{mp:0,gf:0,ga:0}, away:{mp:0,gf:0,ga:0} };
-    return tally[name];
+  const logs=(buildCombinedMatchLogs()[liga]||[]).filter(m=>m.d && Number.isFinite(m.hg) && Number.isFinite(m.ag));
+  const sorted=[...logs].sort((a,b)=>a.d.localeCompare(b.d)), tally={};
+  function ensure(name){if(!tally[name]) tally[name]={home:{mp:0,gf:0,ga:0},away:{mp:0,gf:0,ga:0}};return tally[name];}
+  const buckets=Array.from({length:10},()=>({n:0,wins:0,sumProb:0}));
+  let n=0,skippedNoHistory=0;
+  for(let i=0;i<sorted.length;){
+    let j=i;while(j<sorted.length && sorted[j].d===sorted[i].d)j++;
+    for(let k=i;k<j;k++){
+      const m=sorted[k],h=ensure(m.h),away=ensure(m.a);
+      if(h.home.mp>=BACKTEST_MIN_MATCHES && away.away.mp>=BACKTEST_MIN_MATCHES){
+        const lh=(h.home.gf/h.home.mp+away.away.ga/away.away.mp)/2,la=(away.away.gf/away.away.mp+h.home.ga/h.home.mp)/2;
+        const pBTTS=(1-Math.exp(-lh))*(1-Math.exp(-la));
+        const bucket=buckets[Math.min(9,Math.max(0,Math.floor(pBTTS*10)))];
+        n++;bucket.n++;bucket.sumProb+=pBTTS;if(m.hg>0 && m.ag>0)bucket.wins++;
+      }else skippedNoHistory++;
+    }
+    for(let k=i;k<j;k++){
+      const m=sorted[k],h=ensure(m.h),away=ensure(m.a);
+      h.home.mp++;h.home.gf+=m.hg;h.home.ga+=m.ag;
+      away.away.mp++;away.away.gf+=m.ag;away.away.ga+=m.hg;
+    }
+    i=j;
   }
-  const buckets = Array.from({length:10}, ()=>({n:0, wins:0, sumProb:0}));
-  let n=0, skippedNoHistory=0;
-  sorted.forEach(m=>{
-    const h = ensure(m.h), a = ensure(m.a);
-    const hasHistory = h.home.mp>=BACKTEST_MIN_MATCHES && a.away.mp>=BACKTEST_MIN_MATCHES;
-    if(hasHistory){
-      const lh = (h.home.gf/h.home.mp + a.away.ga/a.away.mp)/2;
-      const la = (a.away.gf/a.away.mp + h.home.ga/h.home.mp)/2;
-      let pBTTS=0;
-      for(let i=1;i<=10;i++) for(let j=1;j<=10;j++) pBTTS += poissonPMF(i,lh)*poissonPMF(j,la);
-      const actualBTTS = m.hg>0 && m.ag>0;
-      n++;
-      const bIdx = Math.min(9, Math.max(0, Math.floor(pBTTS*10)));
-      buckets[bIdx].n++; buckets[bIdx].sumProb += pBTTS;
-      if(actualBTTS) buckets[bIdx].wins++;
-    } else { skippedNoHistory++; }
-    h.home.mp++; h.home.gf+=m.hg; h.home.ga+=m.ag;
-    a.away.mp++; a.away.gf+=m.ag; a.away.ga+=m.hg;
-  });
-  return { totalMatches: sorted.length, n, skippedNoHistory, buckets: buckets.filter(b=>b.n>0) };
+  return {totalMatches:sorted.length,n,skippedNoHistory,buckets:buckets.filter(b=>b.n>0)};
 }
 function renderBttsBacktest(){
   const liga = document.getElementById('btb_liga').value;
