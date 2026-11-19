@@ -298,7 +298,9 @@ function ligaSlug(liga){
 
 // ---------- programa principal ----------
 async function main(){
+  if(process.env.SUPABASE_AUTH_CHECK_ONLY === 'true' && (!SUPABASE_SYNC_EMAIL || !SUPABASE_SYNC_PASSWORD)) throw new Error('Faltan las credenciales de la cuenta de actualización.');
   await authenticateSync();
+  if(process.env.SUPABASE_AUTH_CHECK_ONLY === 'true') { console.log('Autenticación de actualización verificada.'); return; }
   const seasonCode = currentSeasonCode();
   const temporada = seasonCode.slice(0,2)+'/'+seasonCode.slice(2);
   const weight = parseFloat(process.env.WEIGHT || '3');
