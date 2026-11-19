@@ -5,9 +5,7 @@ on:
   push:
     paths:
       - '.github/workflows/actualizar-datos.yml'
-  schedule:
-    # Se ejecuta a las 06:00 UTC todos los dias (unas 2 horas antes de la manana en España).
-    - cron: '0 6 * * *'
+  # La descarga automática está pausada mientras se aclara el límite de Football-Data.
   workflow_dispatch:
     inputs:
       check_auth_only:
