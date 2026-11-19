@@ -41,3 +41,15 @@ console.log('CSV de navegador y tarea: comillas, comas y datos incompletos corre
  function client(size,fail=false){let data=Array.from({length:size},(_,i)=>({id:String(i),data:{n:i}}));return {from:()=>({select:()=>({order:()=>({range:async(start,end)=>fail?{error:{message:'sin acceso'}}:{data:data.slice(start,end+1),count:size,error:null}})})})}}
  let result=await ctx.readAllBackupRows(client(245));assert.equal(result.length,245);assert.equal((await ctx.readAllBackupRows(client(0))).length,0);let rejected=false;try{await ctx.readAllBackupRows(client(10,true))}catch{rejected=true}assert.ok(rejected,'No debe generar copias incompletas ante errores');console.log('Copia de seguridad: paginación completa y rechazo de errores correctos.');
 })().catch(e=>{console.error(e);process.exitCode=1});
+
+(async()=>{
+  const src=fs.readFileSync('index.html','utf8'),a=src.indexOf('async function archiveManualCSV('),b=src.indexOf('async function importCSV()',a);
+  const {webcrypto}=require('node:crypto');let writes=[];
+  const ctx={TextEncoder,Uint8Array,Date,String,Array,crypto:webcrypto,btoa:s=>Buffer.from(s,'binary').toString('base64'),sbClient:{from:()=>({upsert:async data=>(writes.push(data),{error:null})})}};
+  vm.createContext(ctx);vm.runInContext(src.slice(a,b),ctx);
+  const bytes=Buffer.from([0,44,255,10]),file={name:'x.csv',arrayBuffer:async()=>Uint8Array.from(bytes).buffer};
+  await ctx.archiveManualCSV(file,'Primera','26/27');await ctx.archiveManualCSV(file,'Primera','26/27');
+  assert.equal(writes[0].id,writes[1].id);assert.deepEqual(Buffer.from(writes[0].data.contentBase64,'base64'),bytes);
+  ctx.sbClient.from=()=>({upsert:async()=>({error:{message:'blocked'}})});await assert.rejects(ctx.archiveManualCSV(file,'Primera','26/27'));
+  console.log('Archivo original: bytes, idempotencia y errores verificados.');
+})().catch(e=>{console.error(e);process.exitCode=1});
