@@ -4,7 +4,12 @@ on:
   schedule:
     # Se ejecuta a las 06:00 UTC todos los dias (unas 2 horas antes de la manana en España).
     - cron: '0 6 * * *'
-  workflow_dispatch: {} # permite lanzarlo a mano desde la pestana "Actions" de GitHub
+  workflow_dispatch:
+    inputs:
+      check_auth_only:
+        description: 'Comprobar acceso sin descargar ni modificar datos'
+        type: boolean
+        default: false
 
 jobs:
   actualizar:
@@ -22,5 +27,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SYNC_EMAIL: ${{ secrets.SUPABASE_SYNC_EMAIL }}
+          SUPABASE_SYNC_PASSWORD: ${{ secrets.SUPABASE_SYNC_PASSWORD }}
+          SUPABASE_AUTH_CHECK_ONLY: ${{ inputs.check_auth_only }}
           WEIGHT: '3'
         run: node actualizar-datos.js
