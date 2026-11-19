@@ -1254,7 +1254,7 @@ function buildCombinedMatchLogs(){
 }
 // Incluye temporadas históricas legadas solo cuando no están presentes en las filas activas.
 function buildBacktestMatchLogs(){
-  const active=new Set(SEASON_IMPORTS.filter(i=>i && typeof i.liga==='string' && typeof i.temporada==='string').map(i=>i.liga.toLowerCase()+'||'+i.temporada.toLowerCase()));
+  const active=new Set(SEASON_IMPORTS.filter(i=>i && typeof i.liga==='string' && typeof i.temporada==='string' && Array.isArray(i.matchLog) && i.matchLog.length).map(i=>i.liga.toLowerCase()+'||'+i.temporada.toLowerCase()));
   const byLiga=buildCombinedMatchLogs(), included=new Set(active);
   for(const imp of LEGACY_BACKTEST_IMPORTS){
     if(!imp || typeof imp.liga!=='string' || typeof imp.temporada!=='string' || !/^[0-9]{2}[/][0-9]{2}$/.test(imp.temporada) || !Array.isArray(imp.matchLog) || !imp.matchLog.length) continue;
