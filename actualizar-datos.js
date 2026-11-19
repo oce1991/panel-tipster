@@ -7,6 +7,23 @@
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_SYNC_EMAIL = process.env.SUPABASE_SYNC_EMAIL;
+const SUPABASE_SYNC_PASSWORD = process.env.SUPABASE_SYNC_PASSWORD;
+let supabaseAccessToken = SUPABASE_ANON_KEY;
+
+async function authenticateSync(){
+  if(!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error('Falta la configuración de Supabase.');
+  if(!SUPABASE_SYNC_EMAIL && !SUPABASE_SYNC_PASSWORD) return;
+  if(!SUPABASE_SYNC_EMAIL || !SUPABASE_SYNC_PASSWORD) throw new Error('La cuenta de actualización está incompleta.');
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method:'POST', headers:{apikey:SUPABASE_ANON_KEY,'Content-Type':'application/json'},
+    body:JSON.stringify({email:SUPABASE_SYNC_EMAIL,password:SUPABASE_SYNC_PASSWORD})
+  });
+  if(!response.ok) throw new Error('No se ha podido autenticar la cuenta de actualización.');
+  const result = await response.json();
+  if(typeof result.access_token !== 'string' || !result.access_token) throw new Error('La autenticación no devolvió una sesión válida.');
+  supabaseAccessToken = result.access_token;
+}
 
 // ---------- parseo de CSV (portado literal de la app) ----------
 const CSV_ALIASES = {
@@ -258,7 +275,7 @@ function currentSeasonCode(){
 // ---------- Supabase (lectura y escritura directa via REST) ----------
 async function fetchSupabaseRow(id){
   const resp = await fetch(`${SUPABASE_URL}/rest/v1/tipster_data?id=eq.${id}&select=data`, {
-    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${supabaseAccessToken}` }
   });
   if(!resp.ok) throw new Error(`Supabase HTTP ${resp.status} leyendo fila '${id}'`);
   const rows = await resp.json();
@@ -268,7 +285,7 @@ async function upsertSupabaseRow(id, data){
   const resp = await fetch(`${SUPABASE_URL}/rest/v1/tipster_data`, {
     method: 'POST',
     headers: {
-      apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${supabaseAccessToken}`,
       'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates'
     },
     body: JSON.stringify({ id, data, updated_at: new Date().toISOString() })
@@ -281,6 +298,7 @@ function ligaSlug(liga){
 
 // ---------- programa principal ----------
 async function main(){
+  await authenticateSync();
   const seasonCode = currentSeasonCode();
   const temporada = seasonCode.slice(0,2)+'/'+seasonCode.slice(2);
   const weight = parseFloat(process.env.WEIGHT || '3');
