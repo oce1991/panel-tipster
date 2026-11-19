@@ -27,6 +27,15 @@ console.log('CSV de navegador y tarea: comillas, comas y datos incompletos corre
  fields.auth_email.validity.valid=false;requested=null;await ctx.requestAccountLink();assert.equal(requested,null);
  console.log('Acceso: no crea usuarios y limita la redirección a la ruta del panel.');
 })().catch(e=>{console.error(e);process.exitCode=1});
+
+(async()=>{
+ const src=fs.readFileSync('actualizar-datos.js','utf8');const start=src.indexOf('async function authenticateSync()'),end=src.indexOf('// ---------- parseo',start);
+ let calls=0;const ctx={SUPABASE_URL:'https://example.invalid',SUPABASE_ANON_KEY:'public',SUPABASE_SYNC_EMAIL:'updater@example.org',SUPABASE_SYNC_PASSWORD:'test-password',supabaseAccessToken:'public',fetch:async()=>{calls++;return {ok:true,json:async()=>({access_token:'session-token'})}}};
+ vm.createContext(ctx);vm.runInContext(src.slice(start,end),ctx);await ctx.authenticateSync();assert.equal(calls,1);assert.equal(ctx.supabaseAccessToken,'session-token');
+ ctx.fetch=async()=>({ok:false});await assert.rejects(ctx.authenticateSync(),/No se ha podido autenticar/);
+ ctx.SUPABASE_SYNC_PASSWORD='';await assert.rejects(ctx.authenticateSync(),/incompleta/);
+ console.log('Actualización: autenticación de servicio y errores verificados.');
+})().catch(e=>{console.error(e);process.exitCode=1});
 (async()=>{
  const src=fs.readFileSync('index.html','utf8'),a=src.indexOf('async function readAllBackupRows('),b=src.indexOf('async function exportDatabaseBackup(',a);const ctx={};vm.createContext(ctx);vm.runInContext(src.slice(a,b),ctx);
  function client(size,fail=false){let data=Array.from({length:size},(_,i)=>({id:String(i),data:{n:i}}));return {from:()=>({select:()=>({order:()=>({range:async(start,end)=>fail?{error:{message:'sin acceso'}}:{data:data.slice(start,end+1),count:size,error:null}})})})}}
