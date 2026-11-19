@@ -22,5 +22,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SYNC_EMAIL: ${{ secrets.SUPABASE_SYNC_EMAIL }}
+          SUPABASE_SYNC_PASSWORD: ${{ secrets.SUPABASE_SYNC_PASSWORD }}
           WEIGHT: '3'
         run: node actualizar-datos.js
