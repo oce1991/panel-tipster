@@ -271,6 +271,8 @@
       <div class="result-box" id="backtestResult" style="display:none;"></div>
       <button class="btn ghost" onclick="renderGoalModelComparison()" style="margin-top:10px;">Comparar probabilidades con el mercado</button>
       <div class="result-box" id="goalModelComparison" style="display:none;"></div>
+      <button class="btn ghost" onclick="renderGoalCandidates()" style="margin-top:10px;">Comparar forma reciente y fuerza de equipos (3 temporadas)</button>
+      <div class="result-box" id="goalCandidatesResult" style="display:none;"></div>
     </div>
     <div class="card collapsible collapsed">
       <h2 onclick="toggleCard(this)"><span class="tag">Backtest</span> Calibración del modelo de córners<span class="chevron">▾</span></h2>
@@ -282,6 +284,8 @@
         <div style="display:flex; align-items:flex-end;"><button class="btn amber" onclick="renderCornersBacktest()" style="width:100%;">Ejecutar</button></div>
       </div>
       <div class="result-box" id="backtestCornersResult" style="display:none;"></div>
+      <button class="btn ghost" onclick="renderCornersCandidates()" style="margin-top:10px;">Comparar dispersión de córners (3 temporadas)</button>
+      <div class="result-box" id="cornersCandidatesResult" style="display:none;"></div>
     </div>
     <div class="card collapsible collapsed">
       <h2 onclick="toggleCard(this)"><span class="tag">Backtest</span> Calibración del modelo de Ambos marcan<span class="chevron">▾</span></h2>
@@ -1352,6 +1356,88 @@ function renderGoalModelComparison(){
   html+='</tbody></table><p class="hint">Valores menores son mejores. El mercado se calcula normalizando proporcionalmente las cuotas registradas; no implica que fueran ejecutables. El Poisson base simplifica el modelo usado en directo. Los ajustes son fijos, no se eligen usando esta muestra. La comparación no demuestra rentabilidad.</p>';
   box.innerHTML=html;
 }
+function evaluateGoalCandidates(logs,start,end){
+ const sorted=(logs||[]).filter(m=>typeof m.d==='string' && /^\d{4}-\d{2}-\d{2}$/.test(m.d) && m.h && m.a && Number.isFinite(m.hg) && Number.isFinite(m.ag) && m.hg>=0 && m.ag>=0).slice().sort((a,b)=>a.d.localeCompare(b.d));
+ const teams={};const models=[{id:'base',label:'Poisson base'},{id:'recency',label:'Forma reciente (180 días)'},{id:'strength',label:'Ataque y defensa regularizados'},{id:'market',label:'Mercado normalizado'}];
+ const sums=Object.fromEntries(models.map(m=>[m.id,{brier:0,logloss:0,betCount:0,profit:0,sumP:0}]));let n=0,homeGoals=0,awayGoals=0,leagueN=0;
+ function side(name,place){const t=teams[name]||(teams[name]={home:[],away:[]});return t[place];}
+ function average(g,field){return g.reduce((s,x)=>s+x[field],0)/g.length;}
+ function weighted(g,field,date,prior,k){let w=0,z=0;for(const x of g){const age=Math.max(0,(date-x.ts)/86400000),v=Math.exp(-Math.LN2*age/180);w+=v;z+=v*x[field];}return (z+k*prior)/(w+k);}
+ function over(l){return 1-Math.exp(-l)*(1+l+l*l/2);}
+ for(let i=0;i<sorted.length;){let j=i;while(j<sorted.length&&sorted[j].d===sorted[i].d)j++;
+  const t=Date.parse(sorted[i].d+'T00:00:00Z');
+  for(let k=i;k<j;k++){
+   const m=sorted[k],h=side(m.h,'home'),a=side(m.a,'away'),oo=Number(m.oO25),ou=Number(m.oU25);
+   if(m.d<start||m.d>=end||h.length<6||a.length<6||leagueN<20||!Number.isFinite(oo)||!Number.isFinite(ou)||oo<=1||ou<=1)continue;
+   const H=homeGoals/leagueN,A=awayGoals/leagueN;if(H<=0||A<=0)continue;
+   const hg=average(h,'gf'),ha=average(h,'ga'),ag=average(a,'gf'),aa=average(a,'ga');
+   const base=over((hg+aa+ag+ha)/2);
+   const recent=over((weighted(h,'gf',t,H,3)+weighted(a,'ga',t,H,3)+weighted(a,'gf',t,A,3)+weighted(h,'ga',t,A,3))/2);
+   const adj=(v,count,prior)=>(v*count+6*prior)/(count+6);
+   const homeAttack=adj(hg,h.length,H),awayDefense=adj(aa,a.length,H),awayAttack=adj(ag,a.length,A),homeDefense=adj(ha,h.length,A);
+   const strength=over(Math.max(.05,Math.min(5,homeAttack*awayDefense/H))+Math.max(.05,Math.min(5,awayAttack*homeDefense/A)));
+   const qo=1/oo,qu=1/ou,prob={base,recency:recent,strength,market:qo/(qo+qu)},y=m.hg+m.ag>2?1:0;
+   for(const model of models){const p=Math.max(1e-12,Math.min(1-1e-12,prob[model.id])),v=sums[model.id];
+     v.brier+=(p-y)**2;v.logloss+=-y*Math.log(p)-(1-y)*Math.log(1-p);v.sumP+=p;
+     if(model.id!=='market'){const eo=p*oo-1,eu=(1-p)*ou-1;if(Math.max(eo,eu)>=.05){let takeOver=eo>=eu,won=takeOver?y===1:y===0,odd=takeOver?oo:ou;v.betCount++;v.profit+=won?odd-1:-1;}}
+   }n++;
+  }
+  for(let k=i;k<j;k++){const m=sorted[k],ts=Date.parse(m.d+'T00:00:00Z');side(m.h,'home').push({gf:m.hg,ga:m.ag,ts});side(m.a,'away').push({gf:m.ag,ga:m.hg,ts});leagueN++;homeGoals+=m.hg;awayGoals+=m.ag;}i=j;
+ }
+ return {n,models:models.map(m=>({...m,brier:n?sums[m.id].brier/n:null,logloss:n?sums[m.id].logloss/n:null,meanP:n?sums[m.id].sumP/n:null,betCount:sums[m.id].betCount,roi:sums[m.id].betCount?100*sums[m.id].profit/sums[m.id].betCount:null}))};
+}
+function evaluateCornersCandidates(logs,start,end,line){
+ const sorted=(logs||[]).filter(m=>typeof m.d==='string' && /^\d{4}-\d{2}-\d{2}$/.test(m.d) && m.h && m.a && Number.isFinite(m.hc) && Number.isFinite(m.ac) && m.hc>=0 && m.ac>=0).slice().sort((a,b)=>a.d.localeCompare(b.d));
+ const teams={};let n=0,allN=0,sum=0,sumSq=0,alphaSum=0;
+ const sums={poisson:{brier:0,logloss:0},negbin:{brier:0,logloss:0}};
+ function team(name,where){let t=teams[name]||(teams[name]={home:{n:0,cf:0,ca:0},away:{n:0,cf:0,ca:0}});return t[where];}
+ function under(k,mu,alpha){let p=alpha<1e-8?Math.exp(-mu):Math.pow(1+alpha*mu,-1/alpha),v=p;for(let x=1;x<=k;x++){p*=alpha<1e-8?mu/x:((x-1+1/alpha)/x)*(alpha*mu/(1+alpha*mu));v+=p;}return Math.min(1,Math.max(0,v));}
+ for(let i=0;i<sorted.length;){let j=i;while(j<sorted.length&&sorted[j].d===sorted[i].d)j++;
+  const mean=allN?sum/allN:0,variance=allN>1?(sumSq-sum*sum/allN)/(allN-1):0,alpha=allN>=40&&mean>0?Math.max(0,Math.min(.5,(variance-mean)/(mean*mean))):0;
+  for(let k=i;k<j;k++){const m=sorted[k],h=team(m.h,'home'),a=team(m.a,'away');if(m.d<start||m.d>=end||h.n<6||a.n<6)continue;
+   const mu=(h.cf/h.n+a.ca/a.n+a.cf/a.n+h.ca/h.n)/2,y=m.hc+m.ac>line?1:0;
+   for(const [id,spread] of [['poisson',0],['negbin',alpha]]){let p=Math.max(1e-12,Math.min(1-1e-12,1-under(Math.floor(line),mu,spread)));sums[id].brier+=(p-y)**2;sums[id].logloss+=-y*Math.log(p)-(1-y)*Math.log(1-p);}
+   n++;alphaSum+=alpha;
+  }
+  for(let k=i;k<j;k++){const m=sorted[k],h=team(m.h,'home'),a=team(m.a,'away'),v=m.hc+m.ac;h.n++;h.cf+=m.hc;h.ca+=m.ac;a.n++;a.cf+=m.ac;a.ca+=m.hc;allN++;sum+=v;sumSq+=v*v;}i=j;
+ }
+ return {n,alpha:n?alphaSum/n:null,poisson:{brier:n?sums.poisson.brier/n:null,logloss:n?sums.poisson.logloss/n:null},negbin:{brier:n?sums.negbin.brier/n:null,logloss:n?sums.negbin.logloss/n:null}};
+}
+function lastCompletedSeasonStart(){
+  const now=new Date(),year=now.getUTCFullYear();
+  return now.getUTCMonth()>=6?year-1:year-2;
+}
+function renderGoalCandidates(){
+  const liga=document.getElementById('bt_liga').value,box=document.getElementById('goalCandidatesResult');
+  box.style.display='block';if(!liga){box.textContent='Selecciona una liga.';return;}
+  const logs=buildBacktestMatchLogs()[liga]||[],last=lastCompletedSeasonStart();
+  let html='<p class="hint">Over 2,5 goles · tres últimas temporadas completas · mismas condiciones para todos. Se calculan las probabilidades antes de cada día, con al menos seis partidos previos de local y visitante y cuotas de ambos lados. Menor Brier y log-loss es mejor.</p>';
+  html+='<table><thead><tr><th>Temporada</th><th>Modelo</th><th>Partidos</th><th>Brier ↓</th><th>Log-loss ↓</th><th>Apuestas</th><th>ROI simulado</th></tr></thead><tbody>';
+  let total=0;
+  for(let year=last-2;year<=last;year++){
+    const r=evaluateGoalCandidates(logs,year+'-07-01',(year+1)+'-07-01');total+=r.n;
+    for(const m of r.models){html+='<tr><td>'+year+'/'+String(year+1).slice(-2)+'</td><td>'+escapeHtml(m.label)+'</td><td>'+r.n+'</td><td>'+(r.n?m.brier.toFixed(4):'—')+'</td><td>'+(r.n?m.logloss.toFixed(4):'—')+'</td><td>'+(m.id==='market'?'—':m.betCount)+'</td><td>'+(m.roi===null?'—':m.roi.toFixed(1)+'%')+'</td></tr>';}
+  }
+  html+='</tbody></table><p class="hint">La simulación apuesta una unidad por partido cuando el valor estimado es al menos 5%, sin comisiones ni límites. Las cuotas históricas guardadas no garantizan un precio disponible antes de apostar. Las variantes usan parámetros fijos, pero se diseñaron tras revisar parte del histórico: esta comparación es exploratoria y necesita una temporada posterior reservada. No modifican las predicciones en directo. Una temporada positiva no demuestra ventaja.</p>';
+  if(total<30)html+='<p class="ev-neg">Muestra muy pequeña: no permite concluir qué modelo es mejor.</p>';
+  box.innerHTML=html;
+}
+function renderCornersCandidates(){
+  const liga=document.getElementById('btc_liga').value,box=document.getElementById('cornersCandidatesResult');
+  box.style.display='block';if(!liga){box.textContent='Selecciona una liga.';return;}
+  const logs=buildBacktestMatchLogs()[liga]||[],last=lastCompletedSeasonStart();
+  let html='<p class="hint">Over 9,5 córners · comparación exploratoria de Poisson simple frente a binomial negativa, con medias de equipos y dispersión calculadas solo con partidos de días anteriores. Menor es mejor.</p>';
+  html+='<table><thead><tr><th>Temporada</th><th>Partidos</th><th>Brier Poisson ↓</th><th>Brier binomial negativa ↓</th><th>Log-loss Poisson ↓</th><th>Log-loss binomial negativa ↓</th></tr></thead><tbody>';
+  let total=0;
+  for(let year=last-2;year<=last;year++){
+    const r=evaluateCornersCandidates(logs,year+'-07-01',(year+1)+'-07-01',9.5);total+=r.n;
+    html+='<tr><td>'+year+'/'+String(year+1).slice(-2)+'</td><td>'+r.n+'</td><td>'+(r.n?r.poisson.brier.toFixed(4):'—')+'</td><td>'+(r.n?r.negbin.brier.toFixed(4):'—')+'</td><td>'+(r.n?r.poisson.logloss.toFixed(4):'—')+'</td><td>'+(r.n?r.negbin.logloss.toFixed(4):'—')+'</td></tr>';
+  }
+  html+='</tbody></table><p class="hint">Esta comparación es exploratoria y requiere validación posterior independiente. No incluye el ajuste por goles del modelo en directo ni calcula ROI: no hay cuotas históricas de córners verificadas en estos registros. La dispersión se estima con un mínimo de 40 partidos anteriores.</p>';
+  if(total<30)html+='<p class="ev-neg">Muestra muy pequeña: no permite concluir qué modelo es mejor.</p>';
+  box.innerHTML=html;
+}
+
 function runBacktest(liga){
   const logs = (buildBacktestMatchLogs()[liga] || []).filter(m=>m.d);
   const sorted = [...logs].sort((a,b)=> a.d.localeCompare(b.d));
@@ -2468,9 +2554,12 @@ function loadMatchFromTeams(){
   }
   const confInfo = document.getElementById('confianzaInfo');
   if(confInfo){
-    const nivel = n => n>=25 ? 'buena' : (n>=10 ? 'media' : 'baja');
     const pctOwn = w => (w*100).toFixed(0);
-    confInfo.textContent = `Confianza por muestra — ${h.name} (${h.mh} partidos en casa, fiabilidad ${nivel(h.mh)}, ${pctOwn(h.shrinkWeightHome||0)}% datos propios / resto media de liga) · ${a.name} (${a.ma} partidos fuera, fiabilidad ${nivel(a.ma)}, ${pctOwn(a.shrinkWeightAway||0)}% datos propios / resto media de liga)`;
+    const logs=(buildCombinedMatchLogs()[liga]||[]).filter(m=>typeof m.d==='string' && typeof m.h==='string' && typeof m.a==='string');
+    const nh=logs.filter(m=>m.h.toLowerCase()===h.name.toLowerCase()).length;
+    const na=logs.filter(m=>m.a.toLowerCase()===a.name.toLowerCase()).length;
+    const warning=(nh<6 || na<6) ? ' Muestra pequeña: trata la predicción con especial cautela.' : '';
+    confInfo.textContent = `Muestra registrada con fecha — ${h.name}: ${nh} partidos en casa · ${a.name}: ${na} partidos fuera. Mezcla usada: ${pctOwn(h.shrinkWeightHome||0)}% y ${pctOwn(a.shrinkWeightAway||0)}% de datos propios, respectivamente; el resto procede de la media de liga. Los registros pueden estar incompletos y la cantidad no garantiza precisión.`+warning;
   }
   renderHeadToHead(h.name, a.name, h.liga);
 }
