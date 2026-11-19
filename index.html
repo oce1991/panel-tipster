@@ -2017,6 +2017,19 @@ function importParsedIntoSeason(liga, temporada, weight, parsed){
   if(existingIdx!==-1) SEASON_IMPORTS[existingIdx] = record; else SEASON_IMPORTS.push(record);
   return matchLog.length;
 }
+// Conserva los bytes originales, con todas las columnas y filas, para cada revisión importada.
+async function archiveManualCSV(file, liga, temporada){
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const meta = new TextEncoder().encode(JSON.stringify([liga,temporada]) + '\n');
+  const combined = new Uint8Array(meta.length + bytes.length);
+  combined.set(meta); combined.set(bytes,meta.length);
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',combined))).map(x=>x.toString(16).padStart(2,'0')).join('');
+  let binary='';
+  for(let i=0;i<bytes.length;i+=0x8000) binary += String.fromCharCode(...bytes.subarray(i,i+0x8000));
+  const data={format:'football-data-raw-csv-v1',liga,temporada,filename:file.name,byteLength:bytes.length,contentBase64:btoa(binary),archivedAt:new Date().toISOString()};
+  const {error}=await sbClient.from('tipster_data').upsert({id:'archive_csv_'+hash,data,updated_at:data.archivedAt});
+  if(error) throw new Error('No se pudo conservar el CSV original.');
+}
 async function importCSV(){
   const fileInput = document.getElementById('imp_file');
   const liga = document.getElementById('imp_liga').value;
@@ -2040,6 +2053,8 @@ async function importCSV(){
       resultLines.push(`<p class="ev-neg">${file.name}: ${parsed.error}</p>`);
       continue;
     }
+    try{ await archiveManualCSV(file,liga,temporada); }
+    catch(e){ resultLines.push('<p class="ev-neg">No se ha importado un archivo porque no pudo guardarse el original.</p>'); continue; }
     const groups = aggregateRows(parsed.rows);
     const regression = computeRegressionSums(parsed.rows);
     const scorelines = computeScorelineSums(parsed.rows);
