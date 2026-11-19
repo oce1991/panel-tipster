@@ -698,12 +698,14 @@ create policy "public update" on tipster_data for update using (true);</pre>
   <div class="view" id="view-bankroll">
     <div class="card">
       <h2><span class="tag">Tus datos</span> Copia de seguridad</h2>
-      <p class="hint">Todo lo que guarda este panel (equipos, temporadas importadas, apuestas, banca) se queda asociado a tu cuenta mientras uses este artefacto. Si quieres tener tus datos en un archivo propio — para guardarlos, moverlos a otro sitio, o no depender de esto — expórtalos aquí cuando quieras.</p>
-      <button class="btn amber" onclick="exportBackup()">Descargar copia de seguridad (.json)</button>
+      <p class="hint">Antes de exportar, deja de modificar datos en los demás dispositivos y espera a que terminen las actualizaciones. La copia completa incluye las filas accesibles de la tabla tipster_data, pero no las políticas, usuarios, configuración ni otras tablas de Supabase.</p>
+      <button class="btn amber" onclick="exportDatabaseBackup()">Descargar tabla completa (.json)</button>
+      <p class="hint">Este archivo es para recuperación asistida; todavía no puede restaurarse con el formulario inferior. La exportación se hace por páginas y no es una instantánea transaccional.</p>
+      <button class="btn ghost" onclick="exportBackup()">Descargar copia parcial anterior (.json)</button>
       <hr class="divider">
       <label>Restaurar desde un archivo .json</label>
       <input id="restore_file" type="file" accept=".json,application/json">
-      <button class="btn" onclick="importBackup()">Restaurar (sustituye todo lo actual)</button>
+      <button class="btn" onclick="importBackup()">Restaurar copia parcial anterior</button>
       <div class="result-box" id="restoreResult" style="display:none;"></div>
       <hr class="divider">
       <button class="btn ghost" style="color:var(--pitch); border-color:var(--pitch);" onclick="disconnectSupabase()">Cambiar de base de datos</button>
@@ -4401,6 +4403,32 @@ function renderCalibration(){
 }
 
 // ---------- backup / restore ----------
+// Exporta todas las filas accesibles, sin claves ni sesiones. No altera la base.
+async function readAllBackupRows(client){
+  const pageSize = 100;
+  const rows = []; let offset = 0, expected = null;
+  for(let page=0; page<10000; page++){
+    const response = await client.from('tipster_data').select('id,data,updated_at', {count:'exact'}).order('id', {ascending:true}).range(offset, offset+pageSize-1);
+    if(response.error) throw new Error('No se pudieron leer todas las filas.');
+    if(!Array.isArray(response.data) || !Number.isInteger(response.count)) throw new Error('La base no devolvió un recuento verificable.');
+    if(expected===null) expected=response.count;
+    if(response.count!==expected) throw new Error('La base cambió durante la copia. Detén las actualizaciones y vuelve a intentarlo.');
+    rows.push(...response.data); offset+=response.data.length;
+    if(rows.length===expected) return rows;
+    if(!response.data.length || rows.length>expected) throw new Error('La copia quedó incompleta.');
+  }
+  throw new Error('La copia supera el límite admitido.');
+}
+async function exportDatabaseBackup(){
+  try{
+    const rows=await readAllBackupRows(sbClient);
+    const payload={format:'panel-tipster-table-backup-v2', table:'tipster_data', exportedAt:new Date().toISOString(), rowCount:rows.length, rows};
+    const blob=new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+    const url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url; a.download='panel-tipster-tabla-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }catch(e){ alert('No se ha generado la copia: '+e.message); }
+}
 function exportBackup(){
   const data = {
     exportedAt: new Date().toISOString(),
@@ -4424,10 +4452,15 @@ async function importBackup(){
   const box = document.getElementById('restoreResult');
   box.style.display = 'block';
   if(!fileInput.files.length){ alert('Selecciona un archivo .json de copia de seguridad'); return; }
-  if(!confirm('Esto sustituirá todos los datos actuales del panel por los del archivo. ¿Continuar?')){ return; }
+  if(!confirm('Esto sustituirá equipos, temporadas, apuestas y banca por los valores del archivo; no restaura los demás datos. ¿Continuar?')){ return; }
   try{
     const text = await fileInput.files[0].text();
     const data = JSON.parse(text);
+    if(data && data.format==='panel-tipster-table-backup-v2'){
+      box.textContent = 'Esta es una copia de la tabla completa; su restauración debe hacerse con asistencia, no desde este formulario.';
+      fileInput.value = '';
+      return;
+    }
     MANUAL_TEAMS = data.manualTeams || [];
     SEASON_IMPORTS = data.seasonImports || [];
     BETS = data.bets || [];
