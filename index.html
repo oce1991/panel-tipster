@@ -2649,6 +2649,7 @@ function calcCorners(){
   }
 
   const line = parseFloat(document.getElementById('c_line').value);
+  if(!isSupportedCornerLine(line)){ alert('Introduce una línea entera o de medio córner, por ejemplo 9 o 9,5.'); return; }
   const pOver = cornersOverP(line,total,liga);
   const pPush = cornersPushP(line,total,liga);
   const pUnder = Math.max(0, 1-pOver-pPush);
@@ -2672,9 +2673,10 @@ function calcCorners(){
     const ev = evFromProbPush(pUnder,pPush,oddUnder);
     html += `<p>Under @ ${oddUnder}: <span class="${ev>0?'ev-pos':'ev-neg'}">EV ${ev>0?'+':''}${(ev*100).toFixed(1)}%</span> <button class="btn amber" onclick="addBetFromCorners('under')" style="margin-left:8px; padding:4px 10px; font-size:11px;">➕ Añadir apuesta</button></p>`;
   }
-  const dv = devigTwoWay(oddOver, oddUnder);
-  if(dv){ html += `<p class="hint">Margen de la casa: ${(dv.margin*100).toFixed(1)}% · Probabilidad real del mercado (sin margen): Over ${fmtPct(dv.pA)} / Under ${fmtPct(dv.pB)} · tu modelo: Over ${fmtPct(pOver)} / Under ${fmtPct(pUnder)} → ventaja sobre el mercado en Over: <strong>${((pOver-dv.pA)*100).toFixed(1)} pts</strong>.</p>`; }
-  html += `<p class="hint">EV positivo no garantiza acierto en un solo partido — es una ventaja estadística que solo se demuestra en volumen. Registra la apuesta en 04 Apuestas para hacer seguimiento real.</p>`;
+  const dv = Number.isInteger(line) ? null : devigTwoWay(oddOver, oddUnder);
+  if(dv){ html += `<p class="hint">Margen aparente de la casa: ${(dv.margin*100).toFixed(1)}% · Estimación de mercado mediante normalización proporcional: Over ${fmtPct(dv.pA)} / Under ${fmtPct(dv.pB)} · diferencia estimada entre modelo y mercado en Over: <strong>${((pOver-dv.pA)*100).toFixed(1)} puntos porcentuales</strong>. Esta aproximación no demuestra una ventaja real.</p>`; }
+  if(Number.isInteger(line) && oddOver>1 && oddUnder>1) html += '<p class="hint">En líneas enteras puede haber devolución: no se muestra la comparación directa con probabilidades de mercado.</p>';
+  html += `<p class="hint">El EV depende de la probabilidad estimada; un EV positivo no demuestra una ventaja real. Registra la cuota y la hora antes del partido para evaluar los resultados.</p>`;
   if(h && a){
     const renderMatchList = (teamName, label) => {
       const matches = getRecentMatchesList(teamName, liga, line, 10);
@@ -2690,7 +2692,7 @@ function calcCorners(){
   }
   const box = document.getElementById('cornersResult');
   box.style.display='block'; box.innerHTML = html;
-  LAST_CORNERS_CALC = { line, total, pOver, pPush, pUnder, oddOver, oddUnder };
+  LAST_CORNERS_CALC = { line, total, pOver, pPush, pUnder, oddOver, oddUnder, liga, homeId:h?.id||null, awayId:a?.id||null, homeName:h?.name||null, awayName:a?.name||null, calculatedAt:new Date().toISOString() };
 }
 async function addBetFromCorners(side){
   if(!LAST_CORNERS_CALC) return;
@@ -2702,6 +2704,7 @@ async function addBetFromCorners(side){
   const a = TEAMS.find(t=>t.id===document.getElementById('c_away').value);
   if(!h || !a){ alert('Selecciona local y visitante primero.'); return; }
   const liga = document.getElementById('m_liga').value;
+  if(LAST_CORNERS_CALC.homeId!==h.id || LAST_CORNERS_CALC.awayId!==a.id || LAST_CORNERS_CALC.liga!==liga){ alert('El partido ha cambiado. Calcula de nuevo los córners antes de añadir la apuesta.'); return; }
   const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
   const totalPL = settled.reduce((s,b)=>s+betPL(b),0);
   const bank = BANKCFG.initial + totalPL;
@@ -3539,28 +3542,18 @@ function cornersPushP(line, mu, liga){
 }
 // comparacion Poisson vs binomial negativa sobre el historico (log-loss y Brier; menor = mejor)
 function compareCornersModels(liga){
-  const preds = walkCornersPredictions(liga);
-  const alpha = getCornersAlpha(liga);
-  if(preds.length<CORNERS_NB_MIN_MATCHES) return null;
-  let llP=0, llN=0, brP=0, brN=0, n=0;
-  const eps = 1e-6;
-  preds.forEach(p=>{
-    SELECTOR_LINES.forEach(line=>{
-      const pp = Math.min(1-eps, Math.max(eps, poissonOver(line, p.mu)));
-      const pn = alpha>=0.01 ? Math.min(1-eps, Math.max(eps, 1-nbCDF(Math.floor(line), p.mu, alpha))) : pp;
-      const o = p.y>line ? 1 : 0;
-      llP += -(o*Math.log(pp)+(1-o)*Math.log(1-pp)); llN += -(o*Math.log(pn)+(1-o)*Math.log(1-pn));
-      brP += (pp-o)*(pp-o); brN += (pn-o)*(pn-o); n++;
-    });
-  });
-  return {alpha, n:preds.length, llP:llP/n, llN:llN/n, brP:brP/n, brN:brN/n};
+  const logs=buildBacktestMatchLogs()[liga]||[];
+  const rows=SELECTOR_LINES.map(line=>evaluateCornersCandidates(logs,'0000-01-01','9999-12-31',line));
+  if(!rows.length || rows.some(r=>r.n<CORNERS_NB_MIN_MATCHES)) return null;
+  const mean=fn=>rows.reduce((sum,r)=>sum+fn(r),0)/rows.length;
+  return {alpha:mean(r=>r.alpha),n:rows[0].n,llP:mean(r=>r.poisson.logloss),llN:mean(r=>r.negbin.logloss),brP:mean(r=>r.poisson.brier),brN:mean(r=>r.negbin.brier)};
 }
 function renderNBComparison(){
   const box = document.getElementById('nbCompareResult');
   if(!box) return;
   box.style.display = 'block';
   try{
-    const all = buildCombinedMatchLogs();
+    const all = buildBacktestMatchLogs();
     const ligas = Object.keys(all);
     if(!ligas.length){ box.innerHTML = '<p class="hint">No hay ninguna liga con partidos fechados importados (los CSV de temporadas deben traer fecha). Sin eso no se puede medir la sobredispersión.</p>'; return; }
     const rows = ligas.map(l=>{
@@ -3569,19 +3562,20 @@ function renderNBComparison(){
       try{ r = compareCornersModels(l); }catch(e){ err = e.message; }
       return {l, total:all[l].length, withCorners, r, err};
     });
-    box.innerHTML = `<p class="hint">Compara Poisson con binomial negativa sobre partidos ya jugados (cada predicción usa solo datos anteriores a su partido). Error más bajo = mejor. α es la sobredispersión de la liga (0 = Poisson puro). Hacen falta ${CORNERS_NB_MIN_MATCHES}+ partidos con fecha y córners por liga.</p>
+    box.innerHTML = `<p class="hint">Compara versiones simplificadas de Poisson y binomial negativa sobre partidos anteriores, estimando la dispersión con datos previos a cada día. Error más bajo = mejor. α es la media de dispersiones estimadas, no la del modelo en directo. Hacen falta ${CORNERS_NB_MIN_MATCHES}+ partidos con fecha y córners por liga.</p>
     <div style="overflow-x:auto;"><table><thead><tr><th>Liga</th><th>Partidos con córners</th><th>α</th><th>Error Poisson</th><th>Error Bin. Neg.</th><th>Resultado</th></tr></thead><tbody>` +
     rows.map(({l,withCorners,r,err})=>{
       if(err) return `<tr><td>${l}</td><td>${withCorners}</td><td colspan="4">Error: ${err}</td></tr>`;
       if(!r) return `<tr><td>${l}</td><td>${withCorners}</td><td colspan="4">Faltan partidos (mínimo ${CORNERS_NB_MIN_MATCHES} con historial previo de ${BACKTEST_MIN_MATCHES} partidos por equipo)</td></tr>`;
-      const res = r.alpha<0.01 ? 'α≈0: los córners de esta liga siguen una Poisson, se usa Poisson' : (r.llN < r.llP ? '✅ Bin. Neg. mejor, activa' : 'Poisson mejor');
+      const res = r.alpha<0.01 ? 'Dispersión estimada cercana a cero' : (r.llN < r.llP ? 'Bin. Neg. menor error en esta muestra' : 'Poisson menor error en esta muestra');
       return `<tr><td>${l}</td><td>${r.n}</td><td>${r.alpha.toFixed(3)}</td><td>${r.llP.toFixed(4)}</td><td>${r.llN.toFixed(4)}</td><td>${res}</td></tr>`;
     }).join('') + `</tbody></table></div>
     <label style="display:flex; align-items:center; gap:8px; margin-top:10px; cursor:pointer;"><input type="checkbox" ${CORNERS_USE_NB?'checked':''} onchange="setCornersNB(this.checked)" style="width:auto; margin:0;"> Usar binomial negativa en las predicciones de córners</label>`;
   }catch(e){ box.innerHTML = '<p class="hint">Error al calcular: '+e.message+'</p>'; }
 }
+function isSupportedCornerLine(line){ return Number.isFinite(line) && line>=0 && Math.abs(line*2-Math.round(line*2))<=1e-9; }
 function devigTwoWay(oddA, oddB){
-  if(!oddA || !oddB) return null;
+  if(!Number.isFinite(oddA) || !Number.isFinite(oddB) || oddA<=1 || oddB<=1) return null;
   const ia = 1/oddA, ib = 1/oddB, s = ia+ib;
   return {pA: ia/s, pB: ib/s, margin: s-1};
 }
@@ -4098,21 +4092,22 @@ function applyLineaToPick(){
   const sel = document.getElementById('b_linea');
   if(sel.value) document.getElementById('b_pick').value = sel.value;
 }
+// Solo conserva una probabilidad de córners si coincide con el cálculo y la apuesta registrados.
+function matchCornerSnapshot(snapshot,bet){
+  if(!snapshot || !bet || bet.market!=='Corners' || !snapshot.homeName || !snapshot.awayName || typeof bet.match!=='string' || typeof bet.pick!=='string') return null;
+  const selected=bet.pick.toLowerCase().match(/(over|under)[ ]*([0-9.]+)/);
+  if(!selected || Number(selected[2])!==snapshot.line || bet.liga!==snapshot.liga || bet.match.trim().toLowerCase()!==(snapshot.homeName+' - '+snapshot.awayName).toLowerCase()) return null;
+  const isOver=selected[1]==='over', expectedOdd=isOver?snapshot.oddOver:snapshot.oddUnder, probability=isOver?snapshot.pOver:snapshot.pUnder;
+  if(!Number.isFinite(expectedOdd) || expectedOdd<=1 || bet.odd!==expectedOdd || !Number.isFinite(probability) || probability<0 || probability>1) return null;
+  return {probability,calculatedAt:snapshot.calculatedAt,expectedCorners:snapshot.total,pushProbability:snapshot.pPush};
+}
 function computeModelProbForBet(){
   const market = document.getElementById('b_market').value;
   const pick = (document.getElementById('b_pick').value || '').toLowerCase();
   const liga = document.getElementById('b_liga').value;
   if(market === 'Corners'){
-    const lh = parseFloat(document.getElementById('c_lh').value);
-    const la = parseFloat(document.getElementById('c_la').value);
-    if(!lh || !la) return null;
-    const m = pick.match(/(over|under)\s*([\d.]+)/);
-    if(!m) return null;
-    const line = parseFloat(m[2]);
-    const total = lh+la;
-    const pOver = poissonOver(line, total);
-    const pPush = poissonPush(line, total);
-    return m[1]==='over' ? pOver : Math.max(0,1-pOver-pPush);
+    const snap=matchCornerSnapshot(LAST_CORNERS_CALC,{market,pick,liga,match:document.getElementById('b_match').value,odd:parseFloat(document.getElementById('b_odd').value)});
+    return snap ? snap.probability : null;
   }
   if(market === 'Tarjetas O/U'){
     const lh = parseFloat(document.getElementById('cr_lh').value);
@@ -4174,6 +4169,7 @@ async function addBet(){
   if(!odd || !stake){ alert('Cuota y stake son obligatorios'); return; }
   const bet = {
     id: Date.now().toString(),
+    recordedAt: new Date().toISOString(),
     date: document.getElementById('b_date').value || new Date().toISOString().slice(0,10),
     liga: document.getElementById('b_liga').value,
     market: document.getElementById('b_market').value,
@@ -4185,6 +4181,8 @@ async function addBet(){
     modelProb: computeModelProbForBet(),
     note: document.getElementById('b_note').value.trim()
   };
+  const cornerSnapshot=matchCornerSnapshot(LAST_CORNERS_CALC,bet);
+  if(cornerSnapshot) bet.cornerSnapshot=cornerSnapshot;
   BETS.unshift(bet);
   await saveBetsState();
   ['b_match','b_pick','b_odd','b_stake','b_close','b_note'].forEach(id=>document.getElementById(id).value='');
