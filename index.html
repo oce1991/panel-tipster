@@ -178,28 +178,26 @@
   <div class="card" style="max-width:480px; width:100%;">
     <h2><span class="tag">Paso 1</span> Conecta tu base de datos</h2>
     <p class="hint">Este panel guarda tus datos en tu propio proyecto de Supabase (gratuito) para que se sincronicen entre PC y móvil. Solo hace falta hacerlo una vez.</p>
-    <ol class="hint" style="padding-left:18px;">
-      <li>Crea una cuenta gratis en <strong>supabase.com</strong> y un proyecto nuevo.</li>
-      <li>En el proyecto, ve a <strong>SQL Editor</strong> y ejecuta esto una vez:
-        <pre style="background:rgba(0,0,0,0.4); color:#fff; padding:10px; border-radius:8px; font-size:11px; overflow-x:auto; margin:6px 0; border:1px solid var(--line);">create table tipster_data (
-  id text primary key,
-  data jsonb,
-  updated_at timestamptz default now()
-);
-alter table tipster_data enable row level security;
-create policy "public read" on tipster_data for select using (true);
-create policy "public write" on tipster_data for insert with check (true);
-create policy "public update" on tipster_data for update using (true);</pre>
-      </li>
-      <li>Ve a <strong>Project Settings → API</strong> y copia la "Project URL" y la clave "anon public" aquí abajo.</li>
-    </ol>
+    <p class="hint">Introduce la dirección y la clave pública del proyecto existente. El acceso a los datos debe estar protegido mediante usuarios y políticas adecuadas.</p>
     <label>Project URL</label>
     <input id="setup_url" placeholder="https://tuproyecto.supabase.co">
     <label>Anon public key</label>
     <input id="setup_key" placeholder="eyJhbGciOi...">
     <button class="btn amber" onclick="saveSupabaseConfig()">Conectar</button>
     <div class="result-box" id="setupResult" style="display:none;"></div>
-    <p class="hint" style="margin-top:10px;">Aviso: las políticas SQL de arriba permiten lectura y escritura públicas. Quien obtenga la URL y la clave anónima puede acceder a los datos y modificarlos. Una clave anónima no sustituye la autenticación; protege la base con usuarios y políticas de acceso antes de guardar datos privados.</p>
+
+  </div>
+</div>
+
+<div id="authGate" style="position:fixed; inset:0; background:var(--chalk); z-index:99; display:none; align-items:center; justify-content:center; padding:20px;">
+  <div class="card" style="max-width:480px; width:100%;">
+    <h2>Acceso al panel</h2>
+    <p class="hint">Introduce el correo de tu cuenta y abre el enlace que recibirás en este mismo dispositivo.</p>
+    <label for="gate_email">Correo electrónico</label>
+    <input id="gate_email" type="email" autocomplete="email">
+    <button class="btn amber" onclick="requestGateLink()">Enviar enlace de acceso</button>
+    <p id="gate_status" class="hint" role="status" aria-live="polite"></p>
+    <button class="btn ghost" onclick="disconnectSupabase()">Cambiar de base de datos</button>
   </div>
 </div>
 
@@ -804,6 +802,16 @@ function blankSide(){ return {mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0,crmp:0,crf:0,cra:0,
 
 // ---------- Supabase storage layer ----------
 let sbClient = null;
+async function requestGateLink(){
+  const status=document.getElementById('gate_status'), field=document.getElementById('gate_email'), email=field.value.trim();
+  if(!email || !field.validity.valid){status.textContent='Introduce un correo válido.';return;}
+  status.textContent='Solicitando el enlace…';
+  try{
+    const {error}=await sbClient.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:location.origin+location.pathname}});
+    if(error) throw error;
+    status.textContent='Si la cuenta está habilitada, recibirás un enlace. Ábrelo en este mismo dispositivo.';
+  }catch(e){status.textContent='No se pudo solicitar el enlace. Comprueba la configuración de acceso.';}
+}
 async function requestAccountLink(){
   const status = document.getElementById('auth_status');
   const email = document.getElementById('auth_email').value.trim();
@@ -819,7 +827,8 @@ async function requestAccountLink(){
 async function endAccountSession(){
   const status = document.getElementById('auth_status');
   const {error}=await sbClient.auth.signOut();
-  status.textContent=error ? 'No se pudo cerrar la sesión.' : 'Sesión cerrada.';
+  if(error){status.textContent='No se pudo cerrar la sesión.';return;}
+  location.reload();
 }
 async function showAccountSession(){
   const status = document.getElementById('auth_status');
@@ -4530,6 +4539,19 @@ async function boot(){
     return;
   }
   sbClient = supabase.createClient(cfg.url, cfg.key);
+  document.getElementById('setupOverlay').style.display = 'none';
+  try {
+    const {data,error} = await sbClient.auth.getSession();
+    if(error || !data.session){
+      document.getElementById('authGate').style.display = 'flex';
+      return;
+    }
+  } catch(e){
+    document.getElementById('authGate').style.display = 'flex';
+    document.getElementById('gate_status').textContent = 'No se pudo comprobar la sesión. Vuelve a solicitar un enlace.';
+    return;
+  }
+  document.getElementById('authGate').style.display = 'none';
   await showAccountSession();
   let teamsState = await loadTeamsState();
   if(teamsState){
