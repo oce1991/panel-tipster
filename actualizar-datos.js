@@ -300,7 +300,12 @@ function ligaSlug(liga){
 async function main(){
   if(process.env.SUPABASE_AUTH_CHECK_ONLY === 'true' && (!SUPABASE_SYNC_EMAIL || !SUPABASE_SYNC_PASSWORD)) throw new Error('Faltan las credenciales de la cuenta de actualización.');
   await authenticateSync();
-  if(process.env.SUPABASE_AUTH_CHECK_ONLY === 'true') { console.log('Autenticación de actualización verificada.'); return; }
+  if(process.env.SUPABASE_AUTH_CHECK_ONLY === 'true') {
+    if(!await fetchSupabaseRow('league_primera')) throw new Error('La cuenta automática no puede leer la liga de prueba.');
+    if(await fetchSupabaseRow('bets')) throw new Error('La cuenta automática puede leer datos privados.');
+    console.log('Autenticación y acceso limitado a ligas verificados.');
+    return;
+  }
   const seasonCode = currentSeasonCode();
   const temporada = seasonCode.slice(0,2)+'/'+seasonCode.slice(2);
   const weight = parseFloat(process.env.WEIGHT || '3');
