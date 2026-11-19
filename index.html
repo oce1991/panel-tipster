@@ -269,6 +269,8 @@
         <div style="display:flex; align-items:flex-end;"><button class="btn amber" onclick="renderBacktest()" style="width:100%;">Ejecutar backtest</button></div>
       </div>
       <div class="result-box" id="backtestResult" style="display:none;"></div>
+      <button class="btn ghost" onclick="renderGoalModelComparison()" style="margin-top:10px;">Comparar probabilidades con el mercado</button>
+      <div class="result-box" id="goalModelComparison" style="display:none;"></div>
     </div>
     <div class="card collapsible collapsed">
       <h2 onclick="toggleCard(this)"><span class="tag">Backtest</span> Calibración del modelo de córners<span class="chevron">▾</span></h2>
@@ -1301,6 +1303,55 @@ function getRecentMatchesList(teamName, liga, line, n){
   });
 }
 const BACKTEST_MIN_MATCHES = 6; // partidos previos minimos (en su lado) antes de fiarse de la media de un equipo
+// Comparación prospectiva: los parámetros son fijos y no se escogen con el periodo evaluado.
+function compareGoalModels(logs, windowStart, windowEnd){
+  const sorted=(logs||[]).filter(m=>m.d && m.h && m.a && Number.isFinite(m.hg) && Number.isFinite(m.ag) && m.hg>=0 && m.ag>=0).slice().sort((a,b)=>a.d.localeCompare(b.d));
+  const tally={};let leagueN=0,leagueHome=0,leagueAway=0,eligible=0;
+  const models=[{id:'simple',label:'Poisson base del backtest',strength:0},{id:'shrink6',label:'Poisson con ajuste suave',strength:6},{id:'shrink12',label:'Poisson con ajuste fuerte',strength:12},{id:'market',label:'Mercado (sin margen proporcional)'}];
+  const totals=Object.fromEntries(models.map(m=>[m.id,{brier:0,logloss:0,sumP:0}]));
+  let observed=0;
+  function team(name){return tally[name]||(tally[name]={home:{mp:0,gf:0,ga:0},away:{mp:0,gf:0,ga:0}});}
+  function addScore(id,p,y){p=Math.min(1-1e-12,Math.max(1e-12,p));totals[id].brier+=(p-y)**2;totals[id].logloss+=-(y*Math.log(p)+(1-y)*Math.log(1-p));totals[id].sumP+=p;}
+  function over25(l){return 1-Math.exp(-l)*(1+l+l*l/2);}
+  for(let i=0;i<sorted.length;){
+    let j=i;while(j<sorted.length && sorted[j].d===sorted[i].d)j++;
+    for(let k=i;k<j;k++){
+      const m=sorted[k],h=team(m.h).home,a=team(m.a).away,oo=Number(m.oO25),ou=Number(m.oU25);
+      if(m.d<windowStart||m.d>=windowEnd||h.mp<BACKTEST_MIN_MATCHES||a.mp<BACKTEST_MIN_MATCHES||leagueN<20||!Number.isFinite(oo)||!Number.isFinite(ou)||oo<=1||ou<=1)continue;
+      const y=m.hg+m.ag>2?1:0,avgH=leagueHome/leagueN,avgA=leagueAway/leagueN;
+      for(const model of models){
+        if(model.id==='market'){const qo=1/oo,qu=1/ou;addScore(model.id,qo/(qo+qu),y);continue;}
+        const w=model.strength;
+        const lh=((h.gf+w*avgH)/(h.mp+w)+(a.ga+w*avgH)/(a.mp+w))/2;
+        const la=((a.gf+w*avgA)/(a.mp+w)+(h.ga+w*avgA)/(h.mp+w))/2;
+        addScore(model.id,over25(lh+la),y);
+      }
+      eligible++;observed+=y;
+    }
+    // Ningún resultado del día se usa para predecir otro partido de ese día.
+    for(let k=i;k<j;k++){
+      const m=sorted[k],h=team(m.h).home,a=team(m.a).away;
+      h.mp++;h.gf+=m.hg;h.ga+=m.ag;a.mp++;a.gf+=m.ag;a.ga+=m.hg;
+      leagueN++;leagueHome+=m.hg;leagueAway+=m.ag;
+    }
+    i=j;
+  }
+  return {n:eligible,observed:eligible?observed/eligible:null,models:models.map(m=>({id:m.id,label:m.label,brier:eligible?totals[m.id].brier/eligible:null,logloss:eligible?totals[m.id].logloss/eligible:null,meanP:eligible?totals[m.id].sumP/eligible:null}))};
+}
+function renderGoalModelComparison(){
+  const liga=document.getElementById('bt_liga').value,box=document.getElementById('goalModelComparison');
+  box.style.display='block';
+  if(!liga){box.textContent='Selecciona una liga.';return;}
+  const now=new Date(),year=now.getUTCFullYear(),startYear=now.getUTCMonth()>=6?year-1:year-2;
+  const start=startYear+'-07-01',end=(startYear+1)+'-07-01';
+  const result=compareGoalModels(buildBacktestMatchLogs()[liga]||[],start,end);
+  if(!result.n){box.textContent='No hay suficientes partidos anteriores y cuotas de ambos lados para la última temporada completa.';return;}
+  let html='<p class="hint">Última temporada completa: '+startYear+'/'+String(startYear+1).slice(-2)+' · '+result.n+' partidos comparables · Over 2,5 observado: '+fmtPct(result.observed)+'. Predicciones con información anterior al día del partido.</p>';
+  html+='<table><thead><tr><th>Modelo</th><th>Brier ↓</th><th>Log-loss ↓</th><th>Prob. media</th></tr></thead><tbody>';
+  for(const row of result.models)html+='<tr><td>'+escapeHtml(row.label)+'</td><td>'+row.brier.toFixed(4)+'</td><td>'+row.logloss.toFixed(4)+'</td><td>'+fmtPct(row.meanP)+'</td></tr>';
+  html+='</tbody></table><p class="hint">Valores menores son mejores. El mercado se calcula normalizando proporcionalmente las cuotas registradas; no implica que fueran ejecutables. El Poisson base simplifica el modelo usado en directo. Los ajustes son fijos, no se eligen usando esta muestra. La comparación no demuestra rentabilidad.</p>';
+  box.innerHTML=html;
+}
 function runBacktest(liga){
   const logs = (buildBacktestMatchLogs()[liga] || []).filter(m=>m.d);
   const sorted = [...logs].sort((a,b)=> a.d.localeCompare(b.d));
