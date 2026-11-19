@@ -10,7 +10,7 @@ for(const file of ['index.html','actualizar-datos.js']){
  const source=fs.readFileSync('index.html','utf8'),a=source.indexOf('function runBacktest('),b=source.indexOf('function renderBacktest()',a);const matches=[];
  for(let n=1;n<=5;n++)matches.push({d:`2024-01-0${n}`,h:'A',a:'B',hg:2,ag:1,oO25:3,oU25:3});
  matches.push({d:'2024-01-06',h:'A',a:'B',hg:2,ag:1,oO25:3,oU25:3},{d:'2024-01-06',h:'A',a:'B',hg:2,ag:1,oO25:3,oU25:3});
- const context={BACKTEST_MIN_MATCHES:6,buildCombinedMatchLogs:()=>({L:matches}),poissonPMF:(k,m)=>Math.exp(-m)*m**k/[1,1,2,6,24,120,720,5040,40320][k]};vm.createContext(context);vm.runInContext(source.slice(a,b),context);const result=context.runBacktest('L');assert.equal(result.bets,0,'El segundo encuentro del día no debe usar el primero');
+ const context={BACKTEST_MIN_MATCHES:6,buildBacktestMatchLogs:()=>({L:matches}),poissonPMF:(k,m)=>Math.exp(-m)*m**k/[1,1,2,6,24,120,720,5040,40320][k]};vm.createContext(context);vm.runInContext(source.slice(a,b),context);const result=context.runBacktest('L');assert.equal(result.bets,0,'El segundo encuentro del día no debe usar el primero');
  matches.push({d:'2024-01-07',h:'A',a:'B',hg:2,ag:1,oO25:3,oU25:3});assert.equal(context.runBacktest('L').bets,1,'El día siguiente sí debe utilizar resultados anteriores');
 }
 console.log('CSV de navegador y tarea: comillas, comas y datos incompletos correctos; prueba histórica sin filtración en el mismo día.');
