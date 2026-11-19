@@ -786,6 +786,7 @@ function evFromProbPush(pOver,pPush,odd){
 let TEAMS = [];
 let MANUAL_TEAMS = [];
 let SEASON_IMPORTS = []; // {id, liga, temporada, weight, groups}
+let LEGACY_BACKTEST_IMPORTS = []; // histórico legado, usado solo en validaciones
 let BETS = [];
 let BANKCFG = {initial:1000, fraction:0.25, minEV:3};
 let FIXTURES = []; // {id, liga, jornada, fecha, local, visitante}
@@ -893,6 +894,7 @@ async function loadTeamsState(){
     // creo esa fila antes de que la app migrase y la dejo con fixtures vacio), recuperamos ese calendario
     // de la fila antigua 'main', que nunca se borra y sigue teniendo los datos originales intactos.
     const oldMain = await loadOldCombinedMainRow();
+    LEGACY_BACKTEST_IMPORTS = Array.isArray(oldMain?.seasonImports) ? oldMain.seasonImports : [];
     if(oldMain && oldMain.fixtures && oldMain.fixtures.length){
       const faltantes = oldMain.fixtures.filter(f=>!ligasConFixtures.has(f.liga));
       if(faltantes.length){ merged.fixtures.push(...faltantes); merged.recovered = true; }
@@ -1250,6 +1252,20 @@ function buildCombinedMatchLogs(){
   });
   return byLiga;
 }
+// Incluye temporadas históricas legadas solo cuando no están presentes en las filas activas.
+function buildBacktestMatchLogs(){
+  const active=new Set(SEASON_IMPORTS.filter(i=>i && typeof i.liga==='string' && typeof i.temporada==='string').map(i=>i.liga.toLowerCase()+'||'+i.temporada.toLowerCase()));
+  const byLiga=buildCombinedMatchLogs(), included=new Set(active);
+  for(const imp of LEGACY_BACKTEST_IMPORTS){
+    if(!imp || typeof imp.liga!=='string' || typeof imp.temporada!=='string' || !/^[0-9]{2}[/][0-9]{2}$/.test(imp.temporada) || !Array.isArray(imp.matchLog) || !imp.matchLog.length) continue;
+    const key=imp.liga.toLowerCase()+'||'+imp.temporada.toLowerCase();
+    if(included.has(key)) continue;
+    included.add(key);
+    if(!byLiga[imp.liga]) byLiga[imp.liga]=[];
+    byLiga[imp.liga].push(...imp.matchLog);
+  }
+  return byLiga;
+}
 const LINE_HIT_RATE_N = 8; // ultimos N partidos por equipo que cuentan para el % de acierto real de la linea
 function computeMatchLineHitRate(home, away, liga, line, n){
   const logs = buildCombinedMatchLogs()[liga] || [];
@@ -1286,7 +1302,7 @@ function getRecentMatchesList(teamName, liga, line, n){
 }
 const BACKTEST_MIN_MATCHES = 6; // partidos previos minimos (en su lado) antes de fiarse de la media de un equipo
 function runBacktest(liga){
-  const logs = (buildCombinedMatchLogs()[liga] || []).filter(m=>m.d);
+  const logs = (buildBacktestMatchLogs()[liga] || []).filter(m=>m.d);
   const sorted = [...logs].sort((a,b)=> a.d.localeCompare(b.d));
   const tally = {};
   function ensure(name){
@@ -1369,7 +1385,7 @@ function renderBacktest(){
   box.innerHTML = html;
 }
 function runCornersBacktest(liga, line){
-  const logs = (buildCombinedMatchLogs()[liga] || []).filter(m=>m.d && Number.isFinite(m.hc) && Number.isFinite(m.ac) && Number.isFinite(m.hg) && Number.isFinite(m.ag));
+  const logs = (buildBacktestMatchLogs()[liga] || []).filter(m=>m.d && Number.isFinite(m.hc) && Number.isFinite(m.ac) && Number.isFinite(m.hg) && Number.isFinite(m.ag));
   const sorted = [...logs].sort((a,b)=> a.d.localeCompare(b.d));
   const tally = {}, regression = {n:0,sumX:0,sumY:0,sumXY:0,sumX2:0};
   function ensure(name){
@@ -1439,7 +1455,7 @@ function renderCornersBacktest(){
   box.innerHTML = html;
 }
 function runBttsBacktest(liga){
-  const logs=(buildCombinedMatchLogs()[liga]||[]).filter(m=>m.d && Number.isFinite(m.hg) && Number.isFinite(m.ag));
+  const logs=(buildBacktestMatchLogs()[liga]||[]).filter(m=>m.d && Number.isFinite(m.hg) && Number.isFinite(m.ag));
   const sorted=[...logs].sort((a,b)=>a.d.localeCompare(b.d)), tally={};
   function ensure(name){if(!tally[name]) tally[name]={home:{mp:0,gf:0,ga:0},away:{mp:0,gf:0,ga:0}};return tally[name];}
   const buckets=Array.from({length:10},()=>({n:0,wins:0,sumProb:0}));
