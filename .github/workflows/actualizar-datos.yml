@@ -1,6 +1,7 @@
 name: Actualizar datos de ligas
 
 on:
+  # Al cambiar esta tarea, comprobar solo la autenticación y permisos.
   push:
     paths:
       - '.github/workflows/actualizar-datos.yml'
