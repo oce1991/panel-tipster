@@ -1,6 +1,9 @@
 name: Actualizar datos de ligas
 
 on:
+  push:
+    paths:
+      - '.github/workflows/actualizar-datos.yml'
   schedule:
     # Se ejecuta a las 06:00 UTC todos los dias (unas 2 horas antes de la manana en España).
     - cron: '0 6 * * *'
@@ -29,6 +32,6 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SYNC_EMAIL: ${{ secrets.SUPABASE_SYNC_EMAIL }}
           SUPABASE_SYNC_PASSWORD: ${{ secrets.SUPABASE_SYNC_PASSWORD }}
-          SUPABASE_AUTH_CHECK_ONLY: ${{ inputs.check_auth_only }}
+          SUPABASE_AUTH_CHECK_ONLY: ${{ github.event_name == 'push' || inputs.check_auth_only }}
           WEIGHT: '3'
         run: node actualizar-datos.js
