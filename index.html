@@ -1418,7 +1418,7 @@ function renderGoalCandidates(){
     const r=evaluateGoalCandidates(logs,year+'-07-01',(year+1)+'-07-01');total+=r.n;
     for(const m of r.models){html+='<tr><td>'+year+'/'+String(year+1).slice(-2)+'</td><td>'+escapeHtml(m.label)+'</td><td>'+r.n+'</td><td>'+(r.n?m.brier.toFixed(4):'—')+'</td><td>'+(r.n?m.logloss.toFixed(4):'—')+'</td><td>'+(m.id==='market'?'—':m.betCount)+'</td><td>'+(m.roi===null?'—':m.roi.toFixed(1)+'%')+'</td></tr>';}
   }
-  html+='</tbody></table><p class="hint">La simulación apuesta una unidad por partido cuando el valor estimado es al menos 5%, sin comisiones ni límites. Las cuotas históricas guardadas no garantizan un precio disponible antes de apostar. Las variantes usan parámetros fijos y no modifican las predicciones en directo. Una temporada positiva no demuestra ventaja.</p>';
+  html+='</tbody></table><p class="hint">La simulación apuesta una unidad por partido cuando el valor estimado es al menos 5%, sin comisiones ni límites. Las cuotas históricas guardadas no garantizan un precio disponible antes de apostar. Las variantes usan parámetros fijos, pero se diseñaron tras revisar parte del histórico: esta comparación es exploratoria y necesita una temporada posterior reservada. No modifican las predicciones en directo. Una temporada positiva no demuestra ventaja.</p>';
   if(total<30)html+='<p class="ev-neg">Muestra muy pequeña: no permite concluir qué modelo es mejor.</p>';
   box.innerHTML=html;
 }
@@ -1433,7 +1433,7 @@ function renderCornersCandidates(){
     const r=evaluateCornersCandidates(logs,year+'-07-01',(year+1)+'-07-01',9.5);total+=r.n;
     html+='<tr><td>'+year+'/'+String(year+1).slice(-2)+'</td><td>'+r.n+'</td><td>'+(r.n?r.poisson.brier.toFixed(4):'—')+'</td><td>'+(r.n?r.negbin.brier.toFixed(4):'—')+'</td><td>'+(r.n?r.poisson.logloss.toFixed(4):'—')+'</td><td>'+(r.n?r.negbin.logloss.toFixed(4):'—')+'</td></tr>';
   }
-  html+='</tbody></table><p class="hint">Esta comparación no incluye el ajuste por goles del modelo en directo ni calcula ROI: no hay cuotas históricas de córners verificadas en estos registros. La dispersión se estima con un mínimo de 40 partidos anteriores.</p>';
+  html+='</tbody></table><p class="hint">Esta comparación es exploratoria y requiere validación posterior independiente. No incluye el ajuste por goles del modelo en directo ni calcula ROI: no hay cuotas históricas de córners verificadas en estos registros. La dispersión se estima con un mínimo de 40 partidos anteriores.</p>';
   if(total<30)html+='<p class="ev-neg">Muestra muy pequeña: no permite concluir qué modelo es mejor.</p>';
   box.innerHTML=html;
 }
