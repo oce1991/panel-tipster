@@ -17,6 +17,16 @@ console.log('CSV de navegador y tarea: comillas, comas y datos incompletos corre
 (async()=>{
  const source=fs.readFileSync('index.html','utf8');const start=source.indexOf('async function saveTeamsState()'),end=source.indexOf('async function deleteLeagueRow(',start);let warnings=[];const ctx={MANUAL_TEAMS:[{liga:'Primera'}],SEASON_IMPORTS:[],FIXTURES:[],ligaSlug:()=> 'league_primera',alert:s=>warnings.push(s),console:{error:()=>{}},sbClient:{from:()=>({upsert:async()=>({error:{message:'Fallo de red'}})})}};vm.createContext(ctx);vm.runInContext(source.slice(start,end),ctx);let rejected=false;try{await ctx.saveTeamsState()}catch{rejected=true}assert.ok(rejected,'El error de Supabase debe llegar al código que llama');assert.equal(warnings.length,1,'El usuario debe recibir un aviso');console.log('Errores de guardado: aviso y propagación correctos.');
 })().catch(e=>{console.error(e);process.exitCode=1});
+
+(async()=>{
+ const src=fs.readFileSync('index.html','utf8'),a=src.indexOf('async function requestAccountLink()'),b=src.indexOf('function getSupabaseConfig()',a);
+ let requested; const fields={auth_status:{textContent:''},auth_email:{value:'user@example.org',validity:{valid:true}}};
+ const ctx={document:{getElementById:id=>fields[id]},location:{origin:'https://example.org',pathname:'/panel/'},sbClient:{auth:{signInWithOtp:async opts=>(requested=opts,{error:null})}}};
+ vm.createContext(ctx);vm.runInContext(src.slice(a,b),ctx);await ctx.requestAccountLink();
+ assert.equal(requested.options.shouldCreateUser,false);assert.equal(requested.options.emailRedirectTo,'https://example.org/panel/');
+ fields.auth_email.validity.valid=false;requested=null;await ctx.requestAccountLink();assert.equal(requested,null);
+ console.log('Acceso: no crea usuarios y limita la redirección a la ruta del panel.');
+})().catch(e=>{console.error(e);process.exitCode=1});
 (async()=>{
  const src=fs.readFileSync('index.html','utf8'),a=src.indexOf('async function readAllBackupRows('),b=src.indexOf('async function exportDatabaseBackup(',a);const ctx={};vm.createContext(ctx);vm.runInContext(src.slice(a,b),ctx);
  function client(size,fail=false){let data=Array.from({length:size},(_,i)=>({id:String(i),data:{n:i}}));return {from:()=>({select:()=>({order:()=>({range:async(start,end)=>fail?{error:{message:'sin acceso'}}:{data:data.slice(start,end+1),count:size,error:null}})})})}}
