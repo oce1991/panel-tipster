@@ -697,6 +697,15 @@ create policy "public update" on tipster_data for update using (true);</pre>
   <!-- BANKROLL -->
   <div class="view" id="view-bankroll">
     <div class="card">
+      <h2><span class="tag">Acceso</span> Cuenta personal</h2>
+      <p class="hint">Prepara tu acceso con un enlace enviado a tu correo. Mientras la protección de la base no esté activada, iniciar sesión no impide el acceso público.</p>
+      <label for="auth_email">Correo de tu cuenta invitada</label>
+      <input id="auth_email" type="email" autocomplete="email" placeholder="tu@correo.com">
+      <button class="btn" onclick="requestAccountLink()">Enviar enlace de acceso</button>
+      <button class="btn ghost" onclick="endAccountSession()">Cerrar sesión</button>
+      <p id="auth_status" class="hint" role="status" aria-live="polite"></p>
+    </div>
+    <div class="card">
       <h2><span class="tag">Tus datos</span> Copia de seguridad</h2>
       <p class="hint">Antes de exportar, deja de modificar datos en los demás dispositivos y espera a que terminen las actualizaciones. La copia completa incluye las filas accesibles de la tabla tipster_data, pero no las políticas, usuarios, configuración ni otras tablas de Supabase.</p>
       <button class="btn amber" onclick="exportDatabaseBackup()">Descargar tabla completa (.json)</button>
@@ -795,6 +804,30 @@ function blankSide(){ return {mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0,crmp:0,crf:0,cra:0,
 
 // ---------- Supabase storage layer ----------
 let sbClient = null;
+async function requestAccountLink(){
+  const status = document.getElementById('auth_status');
+  const email = document.getElementById('auth_email').value.trim();
+  if(!email || !document.getElementById('auth_email').validity.valid){ status.textContent='Introduce un correo válido.'; return; }
+  status.textContent='Solicitando el enlace…';
+  try{
+    const redirectTo = location.origin + location.pathname;
+    const {error} = await sbClient.auth.signInWithOtp({email, options:{shouldCreateUser:false, emailRedirectTo:redirectTo}});
+    if(error) throw error;
+    status.textContent='Si la cuenta está habilitada, recibirás un enlace de acceso. Ábrelo en este mismo dispositivo.';
+  }catch(e){ status.textContent='No se pudo solicitar el enlace. Revisa la configuración de acceso de Supabase.'; }
+}
+async function endAccountSession(){
+  const status = document.getElementById('auth_status');
+  const {error}=await sbClient.auth.signOut();
+  status.textContent=error ? 'No se pudo cerrar la sesión.' : 'Sesión cerrada.';
+}
+async function showAccountSession(){
+  const status = document.getElementById('auth_status');
+  try{
+    const {data,error}=await sbClient.auth.getSession();
+    status.textContent=error ? 'No se pudo comprobar la sesión.' : data.session ? 'Hay una sesión iniciada en este dispositivo.' : 'No hay una sesión iniciada en este dispositivo.';
+  }catch(e){ status.textContent='No se pudo comprobar la sesión.'; }
+}
 function getSupabaseConfig(){
   try{
     const url = localStorage.getItem('tipster_sb_url');
@@ -4497,6 +4530,7 @@ async function boot(){
     return;
   }
   sbClient = supabase.createClient(cfg.url, cfg.key);
+  await showAccountSession();
   let teamsState = await loadTeamsState();
   if(teamsState){
     MANUAL_TEAMS = teamsState.manualTeams || [];
