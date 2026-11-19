@@ -49,10 +49,34 @@ function parseDateToSortable(s){
   if(y.length===2) y = (parseInt(y)<50 ? '20':'19') + y;
   return `${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
 }
+// Lee CSV RFC 4180, incluidos campos entrecomillados, comillas dobles y saltos de línea.
+function parseCSVRecords(text){
+  const records = []; let row = [], field = '', quoted = false;
+  text = text.replace(/^\uFEFF/, '');
+  for(let i=0; i<text.length; i++){
+    const c = text[i];
+    if(quoted){
+      if(c==='"' && text[i+1]==='"'){ field+='"'; i++; }
+      else if(c==='"') quoted=false;
+      else field+=c;
+    }else if(c==='"' && field===''){ quoted=true; }
+    else if(c===','){ row.push(field); field=''; }
+    else if(c==='\n' || c==='\r'){
+      if(c==='\r' && text[i+1]==='\n') i++;
+      row.push(field); if(row.some(value=>value.trim()!=='')) records.push(row);
+      row=[]; field='';
+    }else field+=c;
+  }
+  if(quoted) throw new Error('El CSV tiene un campo entrecomillado sin cerrar.');
+  if(field || row.length){ row.push(field); if(row.some(value=>value.trim()!=='')) records.push(row); }
+  return records;
+}
 function parseCSVText(text){
-  const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
-  if(!lines.length) return {rows:[], missingCorners:false};
-  const headers = lines[0].split(',');
+  let records;
+  try{ records = parseCSVRecords(text); }
+  catch(e){ return {rows:null, error:e.message}; }
+  if(!records.length) return {rows:[], missingCorners:false};
+  const headers = records[0];
   const iHome = findCol(headers, CSV_ALIASES.home);
   const iAway = findCol(headers, CSV_ALIASES.away);
   const iFthg = findCol(headers, CSV_ALIASES.fthg);
@@ -80,8 +104,8 @@ function parseCSVText(text){
     return {rows:null, error:'No se han encontrado las columnas de equipos/goles esperadas (HomeTeam, AwayTeam, FTHG, FTAG).'};
   }
   const rows = [];
-  for(let i=1;i<lines.length;i++){
-    const cols = lines[i].split(',');
+  for(let i=1;i<records.length;i++){
+    const cols = records[i];
     const home = (cols[iHome]||'').trim();
     const away = (cols[iAway]||'').trim();
     const fthg = parseInt(cols[iFthg]);
