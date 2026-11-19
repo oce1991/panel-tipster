@@ -837,12 +837,14 @@ async function showAccountSession(){
     status.textContent=error ? 'No se pudo comprobar la sesión.' : data.session ? 'Hay una sesión iniciada en este dispositivo.' : 'No hay una sesión iniciada en este dispositivo.';
   }catch(e){ status.textContent='No se pudo comprobar la sesión.'; }
 }
+const DEFAULT_SB_CONFIG = {"url":"https://ftinbiiinjykxshahhqe.supabase.co","key":"sb_publishable_j3n29le3oC47omoDfqXBaQ_cPKXtzYs"};
 function getSupabaseConfig(){
   try{
+    if(localStorage.getItem('tipster_force_setup') === '1') return null;
     const url = localStorage.getItem('tipster_sb_url');
     const key = localStorage.getItem('tipster_sb_key');
-    return (url && key) ? {url,key} : null;
-  }catch(e){ return null; }
+    return (url && key) ? {url,key} : DEFAULT_SB_CONFIG;
+  }catch(e){ return DEFAULT_SB_CONFIG; }
 }
 function saveSupabaseConfig(){
   const url = document.getElementById('setup_url').value.trim();
@@ -853,6 +855,7 @@ function saveSupabaseConfig(){
   try{
     localStorage.setItem('tipster_sb_url', url);
     localStorage.setItem('tipster_sb_key', key);
+    localStorage.removeItem('tipster_force_setup');
   }catch(e){
     box.innerHTML = '<p class="ev-neg">Tu navegador no permite guardar la configuración (¿modo privado?).</p>';
     return;
@@ -4526,6 +4529,7 @@ function disconnectSupabase(){
   try{
     localStorage.removeItem('tipster_sb_url');
     localStorage.removeItem('tipster_sb_key');
+    localStorage.setItem('tipster_force_setup', '1');
   }catch(e){}
   location.reload();
 }
