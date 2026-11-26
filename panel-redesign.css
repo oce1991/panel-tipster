@@ -39,3 +39,17 @@ header.top .arc{background:#363c32;border-color:#c7f53b}
 button.btn.amber{background:#c7f53b;border-color:#c7f53b;color:#19200d}
 button.btn.amber:hover{background:#ddff78;color:#19200d}
 @media(max-width:720px){nav.tabs{padding:0 8px;border-radius:0}nav.tabs button{padding:13px 14px;min-height:48px;font-size:13px}nav.tabs button.active:after{left:14px;right:14px}}
+
+/* Contraste reforzado para superficies antracita. */
+:root{--pitch:#d7ff00;--pitch-dark:#b7e600;--amber:#d7ff00;--ink:#f5f7f6;--header-muted:#d0d8d3;--win:#d7ff00;--loss:#ffaba5}
+body{color:#f5f7f6}
+.hint,header.top p,.dashboard-intro p,.quick-link span,#dashHero>div:last-child{color:#d0d8d3!important}
+label,th,.stat .lbl{color:#d5ddd8}
+nav.tabs button{color:#d1d9d4}nav.tabs button.active{color:#d7ff00}nav.tabs button.active:after{background:#d7ff00;box-shadow:0 0 9px rgba(215,255,0,.55)}
+header.top .arc{border-color:#d7ff00}header.top .arc:after{color:#d7ff00}
+.dashboard-intro .eyebrow,#dashHero>div:first-child{color:#d7ff00!important}
+.card h2 .tag{color:#d7ff00;background:#343e2d}
+button.btn.amber{background:#d7ff00;border-color:#d7ff00;color:#141900}button.btn.amber:hover{background:#e5ff5c;color:#141900}
+button.btn.ghost,a.btn.ghost{color:#d9fa91;border-color:#7f9958}
+input:focus,select:focus,.custom-select-trigger:focus-visible,button.btn:focus-visible,a.btn:focus-visible,nav.tabs button:focus-visible,.quick-link:focus-visible{outline-color:#d7ff00}
+.quick-link:hover{border-color:#d7ff00}#st-results p[style*="color"]{color:#d7ff00!important}
