@@ -62,3 +62,19 @@ header.top .brand-logo{display:block;width:62px;height:62px;object-fit:contain;f
 .jornada-equipos{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0;font-family:Inter,sans-serif;font-weight:700;font-size:14px;line-height:1.4;min-width:0}
 .jornada-equipo{display:inline-flex;align-items:center;gap:7px;min-width:0;max-width:100%}.jornada-equipo>span{min-width:0;overflow-wrap:anywhere}.jornada-equipo .team-crest{flex:0 0 26px;margin-right:0}.jornada-vs{font-size:12px;font-weight:600;opacity:.75}.jornada-acciones{flex:0 0 auto}
 @media(max-width:700px){#jornadaMatches .jornada-partido{flex-direction:column;align-items:stretch!important;gap:12px!important}.jornada-equipos{display:grid;grid-template-columns:minmax(0,1fr);gap:5px}.jornada-vs{padding-left:33px}.jornada-acciones{flex-direction:row!important;flex-wrap:wrap}.jornada-acciones .btn{flex:1 1 auto;white-space:normal!important}}
+
+/* Jornada: enfrentamientos centrados y datos en recuadros. */
+#jornadaMatches .jornada-partido{display:block!important;background:#252a2d;border:1px solid #444d4b;border-radius:16px;margin:14px 0!important;padding:20px!important;box-shadow:0 8px 24px rgba(0,0,0,.15)}
+#jornadaMatches .jornada-contenido{min-width:0;width:100%}
+#jornadaMatches .jornada-equipos{display:grid;grid-template-columns:minmax(0,1fr) 42px minmax(0,1fr);align-items:center;gap:10px;text-align:center;margin:4px auto 12px;width:100%;max-width:730px}
+#jornadaMatches .jornada-equipo{display:flex;flex-direction:column;justify-content:center;gap:6px;min-width:0;max-width:none;font-size:15px;line-height:1.3;text-align:center}
+#jornadaMatches .jornada-equipo>span{overflow-wrap:anywhere}#jornadaMatches .jornada-equipo small{color:#c6d0ca;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.08em}
+#jornadaMatches .jornada-equipo .team-crest{width:46px;height:46px;flex:0 0 46px;margin:0;background:transparent}
+#jornadaMatches .jornada-vs{display:grid;place-items:center;width:38px;height:38px;padding:0;border:1px solid #4b5551;border-radius:50%;font-size:11px;color:#d7ff00;opacity:1}
+#jornadaMatches .jornada-meta{text-align:center!important;color:#cbd5ce!important;margin:0 0 14px!important;font-size:12px}
+#jornadaMatches .jornada-metricas{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:14px 0 0}
+#jornadaMatches .jornada-metrica{min-width:0;background:#1b2022;border:1px solid #3a4440;border-radius:10px;padding:11px;text-align:center}
+#jornadaMatches .jornada-metrica span,#jornadaMatches .jornada-metrica small{display:block;color:#cbd6cf;font-size:11px;line-height:1.35}
+#jornadaMatches .jornada-metrica strong{display:block;color:#e4ff69;font-size:18px;margin:4px 0;line-height:1.2}#jornadaMatches .jornada-metrica .jornada-probs{font-size:14px}
+#jornadaMatches .jornada-hit{text-align:center;color:#d4ded7;font-size:12px;margin:10px 0}#jornadaMatches .jornada-acciones{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;margin-top:14px}#jornadaMatches .jornada-acciones .btn{white-space:normal!important}
+@media(max-width:700px){#jornadaMatches .jornada-partido{padding:15px!important}#jornadaMatches .jornada-equipos{grid-template-columns:minmax(0,1fr) 32px minmax(0,1fr);gap:5px}#jornadaMatches .jornada-vs{width:30px;height:30px;font-size:10px}#jornadaMatches .jornada-equipo{font-size:13px}#jornadaMatches .jornada-equipo .team-crest{width:40px;height:40px;flex-basis:40px}#jornadaMatches .jornada-metricas{grid-template-columns:repeat(2,minmax(0,1fr))}#jornadaMatches .jornada-acciones .btn{flex:1 1 42%}}
