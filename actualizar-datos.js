@@ -248,7 +248,7 @@ function importParsedIntoSeason(SEASON_IMPORTS, liga, temporada, weight, parsed)
   const matchLog = parsed.rows.filter(r=>r.dateSort).map(r=>({
     d: r.dateSort, h: r.home, a: r.away, hg: r.fthg, ag: r.ftag, hc: r.hc, ac: r.ac,
     oH: r.oddH, oD: r.oddD, oA: r.oddA, oO25: r.oddO25, oU25: r.oddU25,
-    hf: r.hf, af: r.af, hCards: r.hCards, aCards: r.aCards, ref: r.referee
+    hf: r.hf, af: r.af, hs: r.hs, as: r.as, hst: r.hst, ast: r.ast, hCards: r.hCards, aCards: r.aCards, ref: r.referee
   }));
   const key = liga.toLowerCase()+'||'+temporada.toLowerCase();
   const existingIdx = SEASON_IMPORTS.findIndex(i => (i.liga.toLowerCase()+'||'+i.temporada.toLowerCase())===key);
