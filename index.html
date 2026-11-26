@@ -176,7 +176,7 @@
   }
   .oddbtn.value{background:linear-gradient(90deg,#22C55E,#4ADE80); border-color:transparent; color:#052e12;}
 </style>
-<link rel="stylesheet" href="panel-redesign.css?v=20261126g">
+<link rel="stylesheet" href="panel-redesign.css?v=20261126h">
 <style>.team-crest{width:26px;height:26px;object-fit:contain;vertical-align:middle;margin-right:7px;background:rgba(255,255,255,.08);border-radius:4px}</style>
 </head>
 <body>
@@ -3928,17 +3928,18 @@ function renderJornada(){
     const tc = '';
     const div = document.createElement('div');
     div.className = 'result-box jornada-partido';
-    div.style.cssText = 'margin-bottom:8px; display:flex; align-items:flex-start; justify-content:space-between; gap:10px; cursor:pointer;';
+    div.style.cssText = 'cursor:pointer;';
     div.title = 'Toca la fila para marcar/desmarcar como pick';
     if(isPicked){ div.style.borderColor = '#92aa48'; }
     div.onclick = (e) => { if(!e.target.closest('.detail-btn') && !e.target.closest('.result-form') && !e.target.closest('.result-toggle-btn')) toggleMatchPick(fx.id); };
     let statsLine = '';
     if(!sinDatos){
-      statsLine = `<p style="margin:5px 0 0; font-family:'JetBrains Mono'; font-size:11.5px; ${tc}">
-        🚩 ${corners.total.toFixed(1)} córners · Over ${cornersLine}: ${fmtPct(corners.pOver)} &nbsp;·&nbsp; ⚽ ${(goals.lh+goals.la).toFixed(1)} goles · 1X2: ${fmtPct(goals.p1)}/${fmtPct(goals.pX)}/${fmtPct(goals.p2)} · BTTS: ${fmtPct(goals.pBTTS)}
-        ${cards.pOver!==null ? `<br>🟨 ${cards.total.toFixed(1)} tarjetas · Over 4.5: ${fmtPct(cards.pOver)}` : ''}
-        ${hitRate ? `<br>📈 Línea ${cornersLine} cumplida en los últimos partidos: <strong>${fmtPct(hitRate.rate)}</strong> (${hitRate.total} partidos — local ${hitRate.homeN?fmtPct(hitRate.homeRate):'—'}, visitante ${hitRate.awayN?fmtPct(hitRate.awayRate):'—'})` : ''}
-      </p>`;
+      statsLine = `<div class="jornada-metricas">
+        <div class="jornada-metrica"><span>Córneres previstos</span><strong>${corners.total.toFixed(1)}</strong><small>Más de ${cornersLine}: ${fmtPct(corners.pOver)}</small></div>
+        <div class="jornada-metrica"><span>Goles previstos</span><strong>${(goals.lh+goals.la).toFixed(1)}</strong><small>Ambos marcan: ${fmtPct(goals.pBTTS)}</small></div>
+        <div class="jornada-metrica"><span>Resultado 1 · X · 2</span><strong class="jornada-probs">${fmtPct(goals.p1)} · ${fmtPct(goals.pX)} · ${fmtPct(goals.p2)}</strong><small>Probabilidades del modelo</small></div>
+        ${cards.pOver!==null ? `<div class="jornada-metrica"><span>Tarjetas previstas</span><strong>${cards.total.toFixed(1)}</strong><small>Más de 4,5: ${fmtPct(cards.pOver)}</small></div>` : ''}
+      </div>${hitRate ? `<p class="jornada-hit">Línea ${cornersLine} cumplida: <strong>${fmtPct(hitRate.rate)}</strong> · ${hitRate.total} partidos (local ${hitRate.homeN?fmtPct(hitRate.homeRate):'—'}; visitante ${hitRate.awayN?fmtPct(hitRate.awayRate):'—'})</p>` : ''}`;
       const oddsMatch = findOddsForFixture(fx);
       if(oddsMatch){
         const marketBets = [
@@ -3986,15 +3987,15 @@ function renderJornada(){
         <button class="btn amber" onclick="event.stopPropagation(); saveMatchMeta('${fx.id}')" style="width:100%;">Guardar hora/nota</button>
       </div>` : '';
     div.innerHTML = `
-      <div style="flex:1; min-width:0;">
-        <div class="jornada-equipos" style="${tc}"><span class="jornada-equipo">${crestForFixture(fx.local,matchLiga)}<span>${escapeHtml(window.displayTeamName?.(fx.local) || fx.local)}</span></span><span class="jornada-vs">vs</span><span class="jornada-equipo">${crestForFixture(fx.visitante,matchLiga)}<span>${escapeHtml(window.displayTeamName?.(fx.visitante) || fx.visitante)}</span></span></div>
-        <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${meta && meta.fecha ? meta.fecha.split('-').reverse().join('/') : (fx.fecha||'')}${meta && meta.hora ? ' · 🕐 '+meta.hora : ''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado por ti' : ''}</p>
+      <div class="jornada-contenido">
+        <div class="jornada-equipos" style="${tc}"><span class="jornada-equipo">${crestForFixture(fx.local,matchLiga)}<span>${escapeHtml(window.displayTeamName?.(fx.local) || fx.local)}</span><small>Local</small></span><span class="jornada-vs">VS</span><span class="jornada-equipo">${crestForFixture(fx.visitante,matchLiga)}<span>${escapeHtml(window.displayTeamName?.(fx.visitante) || fx.visitante)}</span><small>Visitante</small></span></div>
+        <p class="jornada-meta hint" style="${tc}">${crossLiga ? matchLiga+' · ' : ''}${meta && meta.fecha ? meta.fecha.split('-').reverse().join('/') : (fx.fecha||'')}${meta && meta.hora ? ' · 🕐 '+meta.hora : ''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado por ti' : ''}</p>
         ${meta && meta.nota ? `<p class="hint" style="margin:2px 0 0; font-style:italic; ${tc}">📝 ${escapeHtml(meta.nota)}</p>` : ''}
         ${statsLine}
         ${resultForm}
         ${metaForm}
       </div>
-      <div class="jornada-acciones" style="display:flex; flex-direction:column; gap:6px;">
+      <div class="jornada-acciones">
         <button class="btn detail-btn" onclick="event.stopPropagation(); openFixtureStats(&quot;${fx.id}&quot;)" style="flex-shrink:0; padding:8px 12px; font-size:11px;">Estadísticas</button>
         ${!sinDatos ? `<button class="btn detail-btn" onclick="event.stopPropagation(); openMatchDetail('${fx.id}')" style="flex-shrink:0; padding:8px 12px; font-size:11px; white-space:nowrap;">Ver →</button>` : ''}
         ${resultToggleBtn}
