@@ -762,6 +762,7 @@
 </main>
 </div>
 
+<script src="nombres-equipos.js?v=2"></script>
 <script src="escudos-equipos.js?v=3"></script>
 <script>
 // ---------- utilidades Poisson ----------
@@ -2450,7 +2451,7 @@ function renderTeams(){
   document.getElementById('teamsEmpty').style.display = visible.length? 'none':'block';
   [...visible].sort((a,b)=> a.liga===b.liga ? a.name.localeCompare(b.name) : a.liga.localeCompare(b.liga)).forEach(t=>{
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="mono" style="font-family:Inter;font-weight:600;">${teamCrest(t.name,t.liga)}${escapeHtml(t.name)}</td>
+    tr.innerHTML = `<td class="mono" style="font-family:Inter;font-weight:600;">${teamCrest(t.name,t.liga)}${escapeHtml(window.displayTeamName?.(t.name) || t.name)}</td>
       <td>${escapeHtml(t.liga)}</td>
       <td>${t.cfh.toFixed(1)}/${t.cah.toFixed(1)} · ${t.cfa.toFixed(1)}/${t.caa.toFixed(1)}</td>
       <td>${t.gfh.toFixed(1)}/${t.gah.toFixed(1)} · ${t.gfa.toFixed(1)}/${t.gaa.toFixed(1)}</td>
@@ -2510,7 +2511,7 @@ function refreshMatchTeamSelects(){
   ['c_home','c_away'].forEach(id=>{
     const sel = document.getElementById(id);
     const current = sel.value;
-    sel.innerHTML = '<option value="">— manual —</option>' + teamsInLiga.map(t=>`<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+    sel.innerHTML = '<option value="">— manual —</option>' + teamsInLiga.map(t=>`<option value="${t.id}">${escapeHtml(window.displayTeamName?.(t.name) || t.name)}</option>`).join('');
     if(teamsInLiga.find(t=>t.id===current)) sel.value = current;
   });
   const infoEl = document.getElementById('ligaStatsInfo');
@@ -3412,7 +3413,7 @@ function renderStandings(){
   });
   const tbody = document.querySelector('#standingsTable tbody');
   tbody.innerHTML = sorted.map(t=>`<tr>
-    <td style="font-family:'Space Grotesk'; font-weight:600;">${teamCrest(t.name,liga)}${escapeHtml(t.name)}</td>
+    <td style="font-family:'Space Grotesk'; font-weight:600;">${teamCrest(t.name,liga)}${escapeHtml(window.displayTeamName?.(t.name) || t.name)}</td>
     ${STANDINGS_COLS.slice(1).map(c=>`<td>${c.fmt(t[c.key])}</td>`).join('')}
   </tr>`).join('');
 }
@@ -3983,7 +3984,7 @@ function renderJornada(){
       </div>` : '';
     div.innerHTML = `
       <div style="flex:1; min-width:0;">
-        <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; ${tc} overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${teamCrest(fx.local,matchLiga)}${escapeHtml(fx.local)} &nbsp;vs&nbsp; ${teamCrest(fx.visitante,matchLiga)}${escapeHtml(fx.visitante)}</p>
+        <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; ${tc} overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${teamCrest(fx.local,matchLiga)}${escapeHtml(window.displayTeamName?.(fx.local) || fx.local)} &nbsp;vs&nbsp; ${teamCrest(fx.visitante,matchLiga)}${escapeHtml(window.displayTeamName?.(fx.visitante) || fx.visitante)}</p>
         <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${meta && meta.fecha ? meta.fecha.split('-').reverse().join('/') : (fx.fecha||'')}${meta && meta.hora ? ' · 🕐 '+meta.hora : ''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${AUTO_PICK_FX.has(fx.id) ? '🎯 PICK AUTO · ' : ''}${isPicked ? '★ marcado' : (autoHighCorners ? '🚩 córners altos (>'+AUTO_HIGHLIGHT_CORNERS_THRESHOLD+')' : '')}</p>
         ${meta && meta.nota ? `<p class="hint" style="margin:2px 0 0; font-style:italic; ${tc}">📝 ${escapeHtml(meta.nota)}</p>` : ''}
         ${statsLine}
@@ -4791,7 +4792,7 @@ boot();
 </script>
 <script src="corner-history.js?v=20261120"></script>
 <script src="match-odds-detail.js?v=20261120b"></script>
-<script src="centro-estadisticas.js?v=20261126b"></script>
-<script src="nombres-equipos.js?v=1"></script>
+<script src="centro-estadisticas.js?v=20261126c"></script>
+
 </body>
 </html>

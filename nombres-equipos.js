@@ -20,6 +20,7 @@ const aliases={
 const normalize=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es').replace(/[’]/g,"'").replace(/\s+/g,' ').trim();
 const table=new Map(Object.entries(aliases).map(([k,v])=>[normalize(k),v]));
 function display(value){return table.get(normalize(value))||value}
+root.displayTeamName=display;
 // Preserve the exact underlying option values used in selection, saving and matching.
 function optionLabel(option){let raw=option.dataset.teamOriginal;if(raw===undefined){raw=option.textContent;option.dataset.teamOriginal=raw;if(!option.hasAttribute('value'))option.value=raw}let shown=display(raw);if(option.textContent!==shown)option.textContent=shown}
 const keys=[...new Set([...Object.keys(aliases),...Object.values(aliases)])].filter(k=>k.length>=4).sort((a,b)=>b.length-a.length).map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
