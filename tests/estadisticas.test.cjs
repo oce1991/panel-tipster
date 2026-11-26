@@ -1,0 +1,6 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const {analyse}=require('../centro-estadisticas.js');
+const games=[{d:'2026-01-01',h:'A',a:'B',hc:4,ac:5,hg:1,ag:0,hs:10,as:8},{d:'2026-01-02',h:'B',a:'A',hc:6,ac:3,hg:0,ag:2,hs:null,as:null},{d:'2026-01-03',h:'A',a:'C',hc:0,ac:2,hg:0,ag:0,hs:4,as:7}];
+test('filtros, ceros y dirección del visitante',()=>{let x=analyse(games,'A','all','corners','for',2.5,5);assert.equal(x.count,3);assert.equal(x.hits,2);assert.equal(x.average,7/3);let y=analyse(games,'A','away','corners','against',5.5,5);assert.equal(y.count,1);assert.equal(y.hits,1)});
+test('los datos ausentes no cuentan como cero y se limitan antes de excluir',()=>{let x=analyse(games,'A','all','shots','for',3.5,5);assert.equal(x.count,2);assert.equal(x.missing,1);assert.equal(x.hits,2)});
+test('evita duplicados y no trata línea entera como superada cuando empata',()=>{let x=analyse([...games,games[0]],'A','all','goals','for',2,5);assert.equal(x.reviewed,3);assert.equal(x.hits,0)});
+test('datos manuales sin tiros no se inventan',()=>{let x=analyse([{d:'2026-01-01',h:'A',a:'B',hg:2,ag:1}], 'A','all','target','total',3.5,10);assert.equal(x.count,0);assert.equal(x.missing,1)});
