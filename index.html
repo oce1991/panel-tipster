@@ -177,6 +177,7 @@
   .oddbtn.value{background:linear-gradient(90deg,#22C55E,#4ADE80); border-color:transparent; color:#052e12;}
 </style>
 <link rel="stylesheet" href="panel-redesign.css?v=20261126f">
+<style>.team-crest{width:26px;height:26px;object-fit:contain;vertical-align:middle;margin-right:7px;background:rgba(255,255,255,.08);border-radius:4px}</style>
 </head>
 <body>
 
@@ -761,6 +762,7 @@
 </main>
 </div>
 
+<script src="escudos-equipos.js?v=1"></script>
 <script>
 // ---------- utilidades Poisson ----------
 function factorial(n){let r=1; for(let i=2;i<=n;i++) r*=i; return r;}
@@ -2448,8 +2450,8 @@ function renderTeams(){
   document.getElementById('teamsEmpty').style.display = visible.length? 'none':'block';
   [...visible].sort((a,b)=> a.liga===b.liga ? a.name.localeCompare(b.name) : a.liga.localeCompare(b.liga)).forEach(t=>{
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="mono" style="font-family:Inter;font-weight:600;">${t.name}</td>
-      <td>${t.liga}</td>
+    tr.innerHTML = `<td class="mono" style="font-family:Inter;font-weight:600;">${teamCrest(t.name,t.liga)}${escapeHtml(t.name)}</td>
+      <td>${escapeHtml(t.liga)}</td>
       <td>${t.cfh.toFixed(1)}/${t.cah.toFixed(1)} · ${t.cfa.toFixed(1)}/${t.caa.toFixed(1)}</td>
       <td>${t.gfh.toFixed(1)}/${t.gah.toFixed(1)} · ${t.gfa.toFixed(1)}/${t.gaa.toFixed(1)}</td>
       <td><button class="btn ghost" onclick="deleteTeam('${t.liga.replace(/'/g,"\\'")}','${t.name.replace(/'/g,"\\'")}')">Borrar</button></td>`;
@@ -3410,7 +3412,7 @@ function renderStandings(){
   });
   const tbody = document.querySelector('#standingsTable tbody');
   tbody.innerHTML = sorted.map(t=>`<tr>
-    <td style="font-family:'Space Grotesk'; font-weight:600;">${escapeHtml(t.name)}</td>
+    <td style="font-family:'Space Grotesk'; font-weight:600;">${teamCrest(t.name,liga)}${escapeHtml(t.name)}</td>
     ${STANDINGS_COLS.slice(1).map(c=>`<td>${c.fmt(t[c.key])}</td>`).join('')}
   </tr>`).join('');
 }
@@ -3981,7 +3983,7 @@ function renderJornada(){
       </div>` : '';
     div.innerHTML = `
       <div style="flex:1; min-width:0;">
-        <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; ${tc} overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${fx.local} vs ${fx.visitante}</p>
+        <p style="margin:0; font-family:'Space Grotesk'; font-weight:600; font-size:14px; ${tc} overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${teamCrest(fx.local,matchLiga)}${escapeHtml(fx.local)} &nbsp;vs&nbsp; ${teamCrest(fx.visitante,matchLiga)}${escapeHtml(fx.visitante)}</p>
         <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${meta && meta.fecha ? meta.fecha.split('-').reverse().join('/') : (fx.fecha||'')}${meta && meta.hora ? ' · 🕐 '+meta.hora : ''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${AUTO_PICK_FX.has(fx.id) ? '🎯 PICK AUTO · ' : ''}${isPicked ? '★ marcado' : (autoHighCorners ? '🚩 córners altos (>'+AUTO_HIGHLIGHT_CORNERS_THRESHOLD+')' : '')}</p>
         ${meta && meta.nota ? `<p class="hint" style="margin:2px 0 0; font-style:italic; ${tc}">📝 ${escapeHtml(meta.nota)}</p>` : ''}
         ${statsLine}
