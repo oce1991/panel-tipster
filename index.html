@@ -169,6 +169,7 @@
   }
   .oddbtn.value{background:linear-gradient(90deg,#22C55E,#4ADE80); border-color:transparent; color:#052e12;}
 </style>
+<link rel="stylesheet" href="panel-redesign.css?v=20261126">
 </head>
 <body>
 
@@ -205,7 +206,7 @@
 
 <header class="top">
   <div class="brand"><div class="arc"></div><h1>Panel del Tipster</h1></div>
-  <p>Primera · Segunda · 1ª RFEF (Grupo 1) — corners, goles y 1X2, siempre en pre-partido</p>
+  <p>Análisis de fútbol · estadísticas, partidos y seguimiento</p>
 </header>
 
 
@@ -222,6 +223,8 @@
 
   <!-- DASHBOARD -->
   <div class="view active" id="view-dashboard">
+    <div class="dashboard-intro"><div><span class="eyebrow">Tu centro de análisis</span><h2>El fútbol, con más contexto.</h2><p>Consulta partidos, compara estadísticas y revisa tus apuestas desde un solo lugar.</p></div></div>
+    <div class="quick-links" aria-label="Accesos rápidos"><button class="quick-link" type="button" onclick="switchToView('jornada')"><strong>Próximos partidos</strong><span>Consulta la jornada</span></button><button class="quick-link" type="button" onclick="document.querySelector('[data-view=stats]').click()"><strong>Estadísticas de equipos</strong><span>Compara mercados y tendencias</span></button><button class="quick-link" type="button" onclick="switchToView('bets')"><strong>Mis apuestas</strong><span>Revisa tu seguimiento</span></button></div>
     <div id="dashHero" style="text-align:center; padding:24px 10px 20px;">
       <div style="font-family:'Space Grotesk'; font-weight:700; font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:#D8B4FE; margin-bottom:6px;">Panel del Tipster</div>
       <div id="dashHeroNum" style="font-family:'Space Grotesk'; font-weight:800; font-size:44px; line-height:1; background:linear-gradient(90deg,#C4B5FD,#F9A8D4); -webkit-background-clip:text; background-clip:text; color:transparent;">—</div>
