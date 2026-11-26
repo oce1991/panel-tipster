@@ -606,26 +606,6 @@
         <input type="checkbox" id="jr_onlyHighHitRate" onchange="renderJornada()" style="width:auto; margin:0;">
         Mostrar solo con la línea elegida cumplida ≥80% en los últimos partidos
       </label>
-      <details class="card" style="margin-top:12px;" id="selectorCfgBox">
-        <summary style="cursor:pointer; font-weight:700;">🎯 Selector automático de picks (córners + Ambos marcan)</summary>
-        <p class="hint">Elige solos los picks más sólidos: solo sale un pick si cumple TODOS los filtros. Si ninguno los cumple, no hay pick.</p>
-        <div class="grid3">
-          <div><label>Acierto real mín. (%)</label><input id="sel_minHit" type="number" onchange="applySelectorCfg()"></div>
-          <div><label>Prob. modelo mín. (%)</label><input id="sel_minProb" type="number" onchange="applySelectorCfg()"></div>
-          <div><label>Muestra mín. (partidos)</label><input id="sel_minSample" type="number" onchange="applySelectorCfg()"></div>
-        </div>
-        <div class="grid2">
-          <div><label>Cuota mínima</label><input id="sel_minOdd" type="number" step="0.01" onchange="applySelectorCfg()"></div>
-          <div><label>EV mínimo (%) con la cuota real (0 = sin filtro)</label><input id="sel_minEV" type="number" step="1" onchange="applySelectorCfg()"></div>
-          <div><label>Máx. picks por liga y jornada</label><input id="sel_maxPicks" type="number" onchange="applySelectorCfg()"></div>
-        </div>
-        <button class="btn" onclick="resetSelectorCfg()">Valores por defecto</button>
-        <button class="btn amber" onclick="renderSelectorBacktest()">Probar el selector con el histórico</button>
-        <button class="btn" onclick="renderNBComparison()">Comparar Poisson vs binomial negativa</button>
-        <div class="result-box" id="nbCompareResult" style="display:none; margin-top:10px;"></div>
-        <div class="result-box" id="selectorBacktestResult" style="display:none; margin-top:10px;"></div>
-      </details>
-      <div id="autoPicksBox" style="margin-top:12px;"></div>
       <div id="jornadaMatches"></div>
       <div class="empty" id="jornadaEmpty" style="display:none;">No hay calendario importado todavía para esta liga.</div>
       <p class="hint">Escudos: catálogo de football-logos y <a href="https://www.footylogos.com/" target="_blank" rel="noopener noreferrer">FootyLogos.com</a>.</p>
@@ -3878,7 +3858,6 @@ function renderJornada(){
   const crossLiga = liga === '__ALL__';
   const matches = FIXTURES.filter(f=> f.jornada===jornada && (crossLiga || f.liga===liga));
   container.innerHTML = '';
-  const AUTO_PICK_FX = renderAutoPicksBox(matches);
 
   let enriched = matches.map(fx=>{
     const matchLiga = fx.liga;
