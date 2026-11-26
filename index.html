@@ -1645,7 +1645,7 @@ function computeRecentForm(logs, teamName){
       cf = withCorners.reduce((s,m)=> s + (side==='home'?m.hc:m.ac), 0) / withCorners.length;
       ca = withCorners.reduce((s,m)=> s + (side==='home'?m.ac:m.hc), 0) / withCorners.length;
     }
-    return {gf, ga, cf, ca, n: arr.length};
+    return {gf, ga, cf, ca, n: arr.length, cornerN: withCorners.length};
   }
   return { home: avgSide(asHome,'home'), away: avgSide(asAway,'away') };
 }
@@ -1654,11 +1654,12 @@ function recomputeTeams(){
   const map = {};
   function ensure(liga,name){
     const key = liga+'||'+name.toLowerCase();
-    if(!map[key]) map[key] = {name, liga, home:blankSide(), away:blankSide()};
+    if(!map[key]) map[key] = {name, liga, home:blankSide(), away:blankSide(), samples:{home:blankSide(), away:blankSide()}};
     return map[key];
   }
   function addSide(entry, side, sums, weight){
-    const s = entry[side];
+    const s = entry[side], sample = entry.samples[side];
+    for(const key of ['mp','cmp','crmp','shmp','fmp']) sample[key] += Number(sums[key])||0;
     s.mp += (sums.mp||0)*weight; s.gf += (sums.gf||0)*weight; s.ga += (sums.ga||0)*weight;
     s.cmp += (sums.cmp||0)*weight; s.cf += (sums.cf||0)*weight; s.ca += (sums.ca||0)*weight;
     s.crmp += (sums.crmp||0)*weight; s.crf += (sums.crf||0)*weight; s.cra += (sums.cra||0)*weight;
@@ -1720,12 +1721,12 @@ function recomputeTeams(){
       if(form.home && form.home.n>=3){
         out.gfh = blend('gfh', form.home.gf, seasonStats.gfh);
         out.gah = blend('gah', form.home.ga, seasonStats.gah);
-        if(form.home.cf!==null){ out.cfh = blend('cfh', form.home.cf, seasonStats.cfh); out.cah = blend('cah', form.home.ca, seasonStats.cah); }
+        if(form.home.cf!==null && form.home.cornerN>=3){ out.cfh = blend('cfh', form.home.cf, seasonStats.cfh); out.cah = blend('cah', form.home.ca, seasonStats.cah); }
       }
       if(form.away && form.away.n>=3){
         out.gfa = blend('gfa', form.away.gf, seasonStats.gfa);
         out.gaa = blend('gaa', form.away.ga, seasonStats.gaa);
-        if(form.away.cf!==null){ out.cfa = blend('cfa', form.away.cf, seasonStats.cfa); out.caa = blend('caa', form.away.ca, seasonStats.caa); }
+        if(form.away.cf!==null && form.away.cornerN>=3){ out.cfa = blend('cfa', form.away.cf, seasonStats.cfa); out.caa = blend('caa', form.away.ca, seasonStats.caa); }
       }
       recentInfo = form;
       Object.assign(seasonStats, out);
@@ -1736,36 +1737,39 @@ function recomputeTeams(){
       mh: e.home.mp, ma: e.away.mp,
       ...seasonStats,
       recentForm: recentInfo,
+      sampleCounts: e.samples,
+      weightedCounts: {home:e.home, away:e.away},
     };
   });
   applyShrinkage();
 }
 const SHRINKAGE_K = 15; // "partidos" de peso que le damos a la media de liga frente a los datos propios del equipo
 function applyShrinkage(){
-  const ligas = [...new Set(TEAMS.map(t=>t.liga))];
-  const FIELDS_HOME = ['cfh','cah','gfh','gah','crfh','crah','shfh','shah','sotfh','sotah','flh'];
-  const FIELDS_AWAY = ['cfa','caa','gfa','gaa','crfa','craa','shfa','shaa','sotfa','sotaa','fla'];
-  ligas.forEach(liga=>{
-    const inLiga = TEAMS.filter(t=>t.liga===liga);
-    const avg = {};
-    const totalH = inLiga.reduce((s,t)=>s+(t.mh||0),0);
-    const totalA = inLiga.reduce((s,t)=>s+(t.ma||0),0);
-    FIELDS_HOME.forEach(f=>{
-      avg[f] = totalH>0 ? inLiga.reduce((s,t)=>s+t[f]*(t.mh||0),0)/totalH : inLiga.reduce((s,t)=>s+t[f],0)/(inLiga.length||1);
-    });
-    FIELDS_AWAY.forEach(f=>{
-      avg[f] = totalA>0 ? inLiga.reduce((s,t)=>s+t[f]*(t.ma||0),0)/totalA : inLiga.reduce((s,t)=>s+t[f],0)/(inLiga.length||1);
-    });
-    inLiga.forEach(t=>{
-      t.rawStats = {cfh:t.cfh,cah:t.cah,cfa:t.cfa,caa:t.caa,gfh:t.gfh,gah:t.gah,gfa:t.gfa,gaa:t.gaa,crfh:t.crfh,crah:t.crah,crfa:t.crfa,craa:t.craa};
-      const nh = t.mh||0, na = t.ma||0;
-      const wH = nh/(nh+SHRINKAGE_K);
-      const wA = na/(na+SHRINKAGE_K);
-      FIELDS_HOME.forEach(f=>{ t[f] = wH*t[f] + (1-wH)*avg[f]; });
-      FIELDS_AWAY.forEach(f=>{ t[f] = wA*t[f] + (1-wA)*avg[f]; });
-      t.shrinkWeightHome = wH; t.shrinkWeightAway = wA;
-    });
-  });
+  // Cada mercado utiliza su propia cobertura; el peso de temporada no es
+  // un número adicional de partidos observados.
+  const groups = {
+    home: {cfh:'cmp',cah:'cmp',gfh:'mp',gah:'mp',crfh:'crmp',crah:'crmp',shfh:'shmp',shah:'shmp',sotfh:'shmp',sotah:'shmp',flh:'fmp'},
+    away: {cfa:'cmp',caa:'cmp',gfa:'mp',gaa:'mp',crfa:'crmp',craa:'crmp',shfa:'shmp',shaa:'shmp',sotfa:'shmp',sotaa:'shmp',fla:'fmp'}
+  };
+  for(const liga of new Set(TEAMS.map(t=>t.liga))){
+    const teams=TEAMS.filter(t=>t.liga===liga),averages={};
+    for(const side of ['home','away']) for(const [field,count] of Object.entries(groups[side])){
+      let sum=0,weight=0;
+      for(const t of teams){const n=t.weightedCounts?.[side]?.[count]||0;if(n>0&&Number.isFinite(t[field])){sum+=t[field]*n;weight+=n}}
+      averages[field]=weight?sum/weight:null;
+    }
+    for(const t of teams){
+      t.rawStats={cfh:t.cfh,cah:t.cah,cfa:t.cfa,caa:t.caa,gfh:t.gfh,gah:t.gah,gfa:t.gfa,gaa:t.gaa,crfh:t.crfh,crah:t.crah,crfa:t.crfa,craa:t.craa};
+      for(const side of ['home','away']) for(const [field,count] of Object.entries(groups[side])){
+        const n=t.sampleCounts?.[side]?.[count]||0,mean=averages[field];
+        if(mean===null){t[field]=0;continue}
+        const ownWeight=n/(n+SHRINKAGE_K);
+        t[field]=ownWeight*t[field]+(1-ownWeight)*mean;
+      }
+      const nh=t.sampleCounts.home.mp,na=t.sampleCounts.away.mp;
+      t.shrinkWeightHome=nh/(nh+SHRINKAGE_K);t.shrinkWeightAway=na/(na+SHRINKAGE_K);
+    }
+  }
 }
 
 // ---------- tabs ----------
@@ -2555,7 +2559,7 @@ function loadMatchFromTeams(){
     const nh=logs.filter(m=>m.h.toLowerCase()===h.name.toLowerCase()).length;
     const na=logs.filter(m=>m.a.toLowerCase()===a.name.toLowerCase()).length;
     const warning=(nh<6 || na<6) ? ' Muestra pequeña: trata la predicción con especial cautela.' : '';
-    confInfo.textContent = `Muestra registrada con fecha — ${h.name}: ${nh} partidos en casa · ${a.name}: ${na} partidos fuera. Mezcla usada: ${pctOwn(h.shrinkWeightHome||0)}% y ${pctOwn(a.shrinkWeightAway||0)}% de datos propios, respectivamente; el resto procede de la media de liga. Los registros pueden estar incompletos y la cantidad no garantiza precisión.`+warning;
+    confInfo.textContent = `Muestra registrada con fecha — ${h.name}: ${nh} partidos en casa · ${a.name}: ${na} partidos fuera. Mezcla usada: ${pctOwn(h.shrinkWeightHome||0)}% y ${pctOwn(a.shrinkWeightAway||0)}% de datos propios, respectivamente; el resto procede de la media de liga. El peso se calcula con partidos reales sin multiplicarlos por el peso de la temporada; cada estadística utiliza su cobertura disponible. Los registros pueden estar incompletos y la cantidad no garantiza precisión.`+warning;
   }
   renderHeadToHead(h.name, a.name, h.liga);
 }
@@ -4783,4 +4787,5 @@ boot();
 
 </body>
 </html>
+
 
