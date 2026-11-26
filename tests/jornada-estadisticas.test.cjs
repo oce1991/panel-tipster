@@ -1,0 +1,5 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const {calculate}=require('../jornada-estadisticas.js');
+const games=[{d:'2026-01-01',h:'A',a:'B',hc:4,ac:5,hg:1,ag:0},{d:'2026-01-02',h:'B',a:'A',hc:6,ac:3,hg:0,ag:2},{d:'2026-01-03',h:'A',a:'C',hc:0,ac:2,hg:0,ag:0},{d:'2026-01-05',h:'A',a:'D',hc:12,ac:0},{d:'2026-01-06',h:'B',a:'A',hc:7,ac:4}];
+test('local en casa, visitante fuera y sin datos del mismo día o futuros',()=>{let h=calculate(games,'A','home','corners',2.5,10,'2026-01-05');assert.equal(h.count,2);assert.equal(h.avg,2);assert.equal(h.hits,1);let a=calculate(games,'A','away','corners',2.5,10,'2026-01-05');assert.equal(a.count,1);assert.equal(a.avg,3);assert.equal(a.against,6)});
+test('ausentes no son ceros y duplicados no alteran muestra',()=>{let r=calculate([...games,games[0]],'A','home','shots',2.5,10,'2026-01-05');assert.equal(r.reviewed,2);assert.equal(r.missing,2);assert.equal(r.count,0);assert.equal(r.avg,null)});
+test('la línea entera es estrictamente más de',()=>{let r=calculate(games,'A','home','goals',1,10,'2026-01-05');assert.equal(r.hits,0)});
