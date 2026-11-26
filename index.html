@@ -588,10 +588,18 @@
       <label>Ordenar por</label>
       <select id="jr_sort" onchange="renderJornada()">
         <option value="default">Sin ordenar (por fecha)</option>
-        <option value="corners">Córners — probabilidad Over 9.5 (mayor a menor)</option>
-        <option value="goals">Goles — probabilidad Over 2.5 (mayor a menor)</option>
+        <option value="corners">Córneres — línea seleccionada (mayor probabilidad)</option>
+        <option value="btts">Ambos marcan — Sí (mayor probabilidad)</option>
+        <option value="over15">Goles — más de 1,5 (mayor probabilidad)</option>
+        <option value="goals">Goles — más de 2,5 (mayor probabilidad)</option>
+        <option value="over35">Goles — más de 3,5 (mayor probabilidad)</option>
         <option value="cards">Tarjetas — probabilidad Over 4.5 (mayor a menor)</option>
       </select>
+      <div class="grid2" style="margin-top:12px;">
+        <div><label for="jr_goalFilter">Filtrar por mercado de goles</label><select id="jr_goalFilter" onchange="renderJornada()"><option value="none">Todos los partidos</option><option value="btts">Ambos marcan — Sí</option><option value="over15">Más de 1,5 goles</option><option value="goals">Más de 2,5 goles</option><option value="over35">Más de 3,5 goles</option></select></div>
+        <div><label for="jr_goalMin">Probabilidad mínima (%)</label><input id="jr_goalMin" type="number" min="0" max="100" step="1" value="60" oninput="renderJornada()"></div>
+      </div>
+      <p class="hint">El filtro de goles solo se aplica al elegir un mercado. Se muestran probabilidades estimadas por el modelo; no garantizan el resultado.</p>
       <label>Línea de córners para el análisis</label>
       <select id="jr_cornersLine" onchange="renderJornada()">
         <option value="8.5">8.5</option>
@@ -3859,6 +3867,9 @@ function renderJornada(){
   const jornada = document.getElementById('jr_jornada').value;
   const sortMode = document.getElementById('jr_sort').value;
   const cornersLine = parseFloat(document.getElementById('jr_cornersLine').value);
+  const goalFilter = document.getElementById('jr_goalFilter').value;
+  const goalMinInput = document.getElementById('jr_goalMin').value;
+  const goalMin = goalMinInput === '' ? NaN : Number(goalMinInput);
   const container = document.getElementById('jornadaMatches');
   const emptyEl = document.getElementById('jornadaEmpty');
   const crossLiga = liga === '__ALL__';
@@ -3870,27 +3881,35 @@ function renderJornada(){
     const home = findTeamInLiga(fx.local, matchLiga);
     const away = findTeamInLiga(fx.visitante, matchLiga);
     const sinDatos = !home || !away;
-    let corners=null, goals=null, cards=null, hitRate=null;
+    let corners=null, goals=null, goals15=null, goals35=null, cards=null, hitRate=null;
     if(!sinDatos){
       corners = predictCorners(home, away, matchLiga, cornersLine);
       goals = predictGoals(home, away, matchLiga, 2.5);
+      goals15 = predictGoals(home, away, matchLiga, 1.5);
+      goals35 = predictGoals(home, away, matchLiga, 3.5);
       cards = predictCards(home, away, 4.5, matchLiga);
       hitRate = computeMatchLineHitRate(fx.local, fx.visitante, matchLiga, cornersLine, LINE_HIT_RATE_N);
     }
-    return {fx, matchLiga, home, away, sinDatos, corners, goals, cards, hitRate};
+    return {fx, matchLiga, home, away, sinDatos, corners, goals, goals15, goals35, cards, hitRate};
   });
 
+  function probability(m,market){
+    const value = market==='corners' ? m.corners?.pOver : market==='btts' ? m.goals?.pBTTS : market==='over15' ? m.goals15?.pOver : market==='goals' ? m.goals?.pOver : market==='over35' ? m.goals35?.pOver : market==='cards' ? m.cards?.pOver : null;
+    return typeof value==='number' && Number.isFinite(value) && value>=0 && value<=1 ? value : null;
+  }
   if(sortMode!=='default'){
-    const probKey = sortMode==='corners' ? m=>m.corners && m.corners.pOver
-      : sortMode==='goals' ? m=>m.goals && m.goals.pOver
-      : m=>m.cards && m.cards.pOver;
     enriched.sort((a,b)=>{
-      const pa = probKey(a), pb = probKey(b);
-      if(pa===null || pa===undefined) return 1; // sin datos, siempre al final
-      if(pb===null || pb===undefined) return -1;
-      return pb-pa; // mayor a menor
+      const pa=probability(a,sortMode),pb=probability(b,sortMode);
+      if(pa===null && pb===null) return 0;
+      if(pa===null) return 1;
+      if(pb===null) return -1;
+      return pb-pa;
     });
   }
+  const goalFilterInvalid = goalFilter!=='none' && (!Number.isFinite(goalMin) || goalMin<0 || goalMin>100);
+  if(goalFilter!=='none') enriched = goalFilterInvalid ? [] : enriched.filter(m=>{
+    const p=probability(m,goalFilter);return p!==null && p>=goalMin/100;
+  });
 
   const onlyInteresting = document.getElementById('jr_onlyInteresting').checked;
   if(onlyInteresting){
@@ -3901,13 +3920,15 @@ function renderJornada(){
     enriched = enriched.filter(m=> m.hitRate && m.hitRate.rate>=0.8);
   }
   emptyEl.style.display = enriched.length ? 'none' : 'block';
-  if((onlyInteresting || onlyHighHitRate) && !enriched.length && matches.length){
-    emptyEl.textContent = 'Ningún partido de esta jornada cumple el criterio elegido ahora mismo.';
+  if(goalFilterInvalid){
+    emptyEl.textContent = 'Introduce una probabilidad mínima entre 0 y 100.';
+  } else if((onlyInteresting || onlyHighHitRate || goalFilter!=='none') && !enriched.length && matches.length){
+    emptyEl.textContent = 'Ningún partido de esta jornada cumple los filtros seleccionados o dispone de los datos necesarios.';
   } else {
     emptyEl.textContent = 'No hay calendario importado todavía para esta liga.';
   }
 
-  enriched.forEach(({fx, matchLiga, home, away, sinDatos, corners, goals, cards, hitRate})=>{
+  enriched.forEach(({fx, matchLiga, home, away, sinDatos, corners, goals, goals15, goals35, cards, hitRate})=>{
     const isPicked = PICKED_MATCHES.has(fx.id);
     const autoHighCorners = !sinDatos && corners.total > AUTO_HIGHLIGHT_CORNERS_THRESHOLD;
     const tc = '';
@@ -3921,7 +3942,7 @@ function renderJornada(){
     if(!sinDatos){
       statsLine = `<div class="jornada-metricas">
         <div class="jornada-metrica"><span>Córneres previstos</span><strong>${corners.total.toFixed(1)}</strong><small>Más de ${cornersLine}: ${fmtPct(corners.pOver)}</small></div>
-        <div class="jornada-metrica"><span>Goles previstos</span><strong>${(goals.lh+goals.la).toFixed(1)}</strong><small>Ambos marcan: ${fmtPct(goals.pBTTS)}</small></div>
+        <div class="jornada-metrica"><span>Goles previstos</span><strong>${(goals.lh+goals.la).toFixed(1)}</strong><small>Más de 1,5: ${fmtPct(goals15.pOver)} · Más de 2,5: ${fmtPct(goals.pOver)}<br>Más de 3,5: ${fmtPct(goals35.pOver)} · Ambos marcan: ${fmtPct(goals.pBTTS)}</small></div>
         <div class="jornada-metrica"><span>Resultado 1 · X · 2</span><strong class="jornada-probs">${fmtPct(goals.p1)} · ${fmtPct(goals.pX)} · ${fmtPct(goals.p2)}</strong><small>Probabilidades del modelo</small></div>
         ${cards.pOver!==null ? `<div class="jornada-metrica"><span>Tarjetas previstas</span><strong>${cards.total.toFixed(1)}</strong><small>Más de 4,5: ${fmtPct(cards.pOver)}</small></div>` : ''}
       </div>${hitRate ? `<p class="jornada-hit">Línea ${cornersLine} cumplida: <strong>${fmtPct(hitRate.rate)}</strong> · ${hitRate.total} partidos (local ${hitRate.homeN?fmtPct(hitRate.homeRate):'—'}; visitante ${hitRate.awayN?fmtPct(hitRate.awayRate):'—'})</p>` : ''}`;
@@ -4787,5 +4808,6 @@ boot();
 
 </body>
 </html>
+
 
 
