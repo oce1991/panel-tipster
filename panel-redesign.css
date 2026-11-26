@@ -53,3 +53,7 @@ button.btn.amber{background:#d7ff00;border-color:#d7ff00;color:#141900}button.bt
 button.btn.ghost,a.btn.ghost{color:#d9fa91;border-color:#7f9958}
 input:focus,select:focus,.custom-select-trigger:focus-visible,button.btn:focus-visible,a.btn:focus-visible,nav.tabs button:focus-visible,.quick-link:focus-visible{outline-color:#d7ff00}
 .quick-link:hover{border-color:#d7ff00}#st-results p[style*="color"]{color:#d7ff00!important}
+
+/* Logotipo en el encabezado */
+header.top .brand-logo{display:block;width:62px;height:62px;object-fit:contain;flex:none}
+@media(max-width:720px){header.top .brand-logo{width:50px;height:50px}}
