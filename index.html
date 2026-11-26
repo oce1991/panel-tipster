@@ -1922,17 +1922,19 @@ function parseCSVText(text){
   return {rows, missingCorners: iHc===-1 || iAc===-1, missingCards: iHy===-1 && iHr===-1, missingShots: iHs===-1 && iHst===-1, missingOdds: iOddH===-1 && iOddO25===-1, missingFouls: iHf===-1 && iAf===-1};
 }
 function rebuildManualSeasonImport(liga){
-  const rows = MANUAL_RESULTS[liga];
+  const rows = (MANUAL_RESULTS[liga] || []).map(r=>({...r, hc:r.hc??null, ac:r.ac??null, hs:r.hs??null, as:r.as??null, hst:r.hst??null, ast:r.ast??null, hf:r.hf??null, af:r.af??null, hCards:r.hCards??null, aCards:r.aCards??null}));
   if(!rows || !rows.length) return;
   const groups = aggregateRows(rows);
   const regression = computeRegressionSums(rows);
   const scorelines = computeScorelineSums(rows);
-  const matchLog = rows.filter(r=>r.dateSort).map(r=>({d:r.dateSort, h:r.home, a:r.away, hg:r.fthg, ag:r.ftag, hc:r.hc, ac:r.ac}));
+  const shotStats = computeShotSums(rows);
+  const foulStats = computeFoulSums(rows);
+  const matchLog = rows.filter(r=>r.dateSort).map(r=>({d:r.dateSort, h:r.home, a:r.away, hg:r.fthg, ag:r.ftag, hc:r.hc, ac:r.ac, hs:r.hs, as:r.as, hst:r.hst, ast:r.ast, hf:r.hf, af:r.af, hCards:r.hCards, aCards:r.aCards}));
   const key = liga.toLowerCase()+'||manual';
   const existingSeasonIdx = SEASON_IMPORTS.findIndex(i=>(i.liga.toLowerCase()+'||'+i.temporada.toLowerCase())===key);
   const record = {
     id: existingSeasonIdx!==-1 ? SEASON_IMPORTS[existingSeasonIdx].id : Date.now().toString()+Math.random().toString(36).slice(2,6),
-    liga, temporada:'Manual', weight: MANUAL_RESULT_WEIGHT, groups, regression, scorelines, matchLog
+    liga, temporada:'Manual', weight: MANUAL_RESULT_WEIGHT, groups, regression, scorelines, shotStats, foulStats, matchLog
   };
   if(existingSeasonIdx!==-1) SEASON_IMPORTS[existingSeasonIdx] = record; else SEASON_IMPORTS.push(record);
 }
@@ -4777,7 +4779,8 @@ boot();
 <script src="corner-history.js?v=20261120"></script>
 <script src="match-odds-detail.js?v=20261120b"></script>
 <script src="centro-estadisticas.js?v=20261126c"></script>
-<script src="jornada-estadisticas.js?v=1"></script>
+<script src="jornada-estadisticas.js?v=20261126d"></script>
 
 </body>
 </html>
+
