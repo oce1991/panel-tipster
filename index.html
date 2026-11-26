@@ -3683,6 +3683,12 @@ function getAutoPicksForFixtures(fixtures){
   fixtures.forEach(fx=> buildPickCandidates(fx).forEach(c=>{ c.matchKey = fx.id; c.liga = fx.liga; cands.push(c); }));
   return selectBest(cands, SELECTOR_CFG, c=>c.liga).sort((a,b)=>candScore(b)-candScore(a));
 }
+function crestForFixture(name, liga){
+  const direct = teamCrest(name, liga);
+  if(direct) return direct;
+  const matched = findTeamInLiga(name, liga);
+  return matched ? teamCrest(matched.name, liga) : '';
+}
 function renderAutoPicksBox(fixtures){
   const box = document.getElementById('autoPicksBox');
   if(!box) return new Set();
@@ -3695,7 +3701,7 @@ function renderAutoPicksBox(fixtures){
   box.innerHTML = `<p style="font-family:'Space Grotesk'; font-weight:700; font-size:13px; margin:0 0 6px;">🎯 Picks automáticos (${picks.length})</p>` + picks.map((c,i)=>{
     const fair = 1/c.prob;
         return `<div class="result-box" style="margin-bottom:6px;">
-      <strong>${c.fx.local} - ${c.fx.visitante}</strong> <span class="hint">· ${c.fx.liga}</span><br>
+      <strong>${crestForFixture(c.fx.local,c.fx.liga)}${escapeHtml(window.displayTeamName?.(c.fx.local) || c.fx.local)} &nbsp;–&nbsp; ${crestForFixture(c.fx.visitante,c.fx.liga)}${escapeHtml(window.displayTeamName?.(c.fx.visitante) || c.fx.visitante)}</strong> <span class="hint">· ${escapeHtml(c.fx.liga)}</span><br>
       <span style="font-family:'JetBrains Mono'; font-size:12px;">${c.market==='Corners'?'🚩':'⚽'} ${c.pick}${c.market==='Ambos marcan'?' (Ambos marcan)':''} · modelo ${fmtPct(c.prob)} · acierto real reciente ${fmtPct(c.hit)} (${c.n} partidos)</span><br>
       <span class="hint">Entra solo si la casa paga ≥ <strong>@${cfg.minOdd.toFixed(2)}</strong> (cuota justa del modelo @${fair.toFixed(2)}; con menos de esa no hay valor)</span>
       <div style="display:flex; gap:8px; margin-top:6px; align-items:center;">
@@ -3981,7 +3987,7 @@ function renderJornada(){
       </div>` : '';
     div.innerHTML = `
       <div style="flex:1; min-width:0;">
-        <div class="jornada-equipos" style="${tc}"><span class="jornada-equipo">${teamCrest(fx.local,matchLiga)}<span>${escapeHtml(window.displayTeamName?.(fx.local) || fx.local)}</span></span><span class="jornada-vs">vs</span><span class="jornada-equipo">${teamCrest(fx.visitante,matchLiga)}<span>${escapeHtml(window.displayTeamName?.(fx.visitante) || fx.visitante)}</span></span></div>
+        <div class="jornada-equipos" style="${tc}"><span class="jornada-equipo">${crestForFixture(fx.local,matchLiga)}<span>${escapeHtml(window.displayTeamName?.(fx.local) || fx.local)}</span></span><span class="jornada-vs">vs</span><span class="jornada-equipo">${crestForFixture(fx.visitante,matchLiga)}<span>${escapeHtml(window.displayTeamName?.(fx.visitante) || fx.visitante)}</span></span></div>
         <p class="hint" style="margin:2px 0 0; ${tc}">${crossLiga ? matchLiga+' · ' : ''}${meta && meta.fecha ? meta.fecha.split('-').reverse().join('/') : (fx.fecha||'')}${meta && meta.hora ? ' · 🕐 '+meta.hora : ''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado por ti' : ''}</p>
         ${meta && meta.nota ? `<p class="hint" style="margin:2px 0 0; font-style:italic; ${tc}">📝 ${escapeHtml(meta.nota)}</p>` : ''}
         ${statsLine}
