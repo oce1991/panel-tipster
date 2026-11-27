@@ -17,7 +17,7 @@ const show=n=>root.displayTeamName?.(n)||n;function add(sel,value,text){let o=d.
 function fixtureId(f){return String(f.id)}
 function selectLeague(value){const s=$('sj-league'),old=value||s.value;s.replaceChildren();let ligas=[...new Set(FIXTURES.map(f=>f.liga).filter(Boolean))].sort((a,b)=>a.localeCompare(b));ligas.forEach(l=>add(s,l,l));if(ligas.includes(old))s.value=old;selectRound()}
 function selectRound(value){const league=$('sj-league').value,s=$('sj-round'),old=value||s.value;s.replaceChildren();let rounds=[...new Set(FIXTURES.filter(f=>f.liga===league).map(f=>String(f.jornada)))].sort((a,b)=>(Number(a)||0)-(Number(b)||0)||a.localeCompare(b));rounds.forEach(j=>add(s,j,'Jornada '+j));if(rounds.includes(old))s.value=old;else{const recent=typeof suggestCurrentJornada==='function'?suggestCurrentJornada(FIXTURES.filter(f=>f.liga===league),rounds):null;if(recent&&rounds.includes(String(recent)))s.value=String(recent)}selectMatch()}
-function selectMatch(value){const l=$('sj-league').value,j=$('sj-round').value,s=$('sj-match'),old=value||s.value;s.replaceChildren();let list=FIXTURES.filter(f=>f.liga===l&&String(f.jornada)===j);list.forEach(f=>add(s,fixtureId(f),show(f.local)+' — '+show(f.visitante)+(f.fecha?' · '+f.fecha:'')));if(list.some(f=>fixtureId(f)===String(old)))s.value=String(old);render()}
+function selectMatch(value){const l=$('sj-league').value,j=$('sj-round').value,s=$('sj-match'),old=value||s.value;s.replaceChildren();let list=FIXTURES.filter(f=>f.liga===l&&String(f.jornada)===j);list.forEach(f=>{const sc=fixtureSchedule(f);add(s,fixtureId(f),show(f.local)+' — '+show(f.visitante)+(sc.date?' · '+sc.date.split('-').reverse().join('/'): '')+' · '+(sc.time?sc.time+' h':'Hora pendiente'))});if(list.some(f=>fixtureId(f)===String(old)))s.value=String(old);render()}
 function resolve(name,league){let found=findTeamInLiga(name,league);return found&&typeof found.name==='string'?found.name:null}
 function makeNode(tag,text,cls){let x=d.createElement(tag);if(text!==undefined)x.textContent=text;if(cls)x.className=cls;return x}
 function render(){
@@ -28,11 +28,11 @@ function render(){
  if(!isBtts&&(raw===''||!Number.isFinite(line)||line<0||line>100)){status.textContent='Introduce una línea entre 0 y 100.';return}
  let home=resolve(fixture.local,fixture.liga),away=resolve(fixture.visitante,fixture.liga);
  if(!home||!away||home===away){status.textContent='No se han podido relacionar ambos equipos con sus estadísticas. Revisa sus equivalencias y los datos cargados.';return}
- let date=typeof parseFechaToISO==='function'?parseFechaToISO(fixture.fecha||''):null;
+ let schedule=fixtureSchedule(fixture),date=schedule.date;
  let today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Madrid',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  let cutoff=date&&date<today?date:today,rows=buildCombinedMatchLogs()[fixture.liga]||[];
  let label=isBtts?'Ambos marcan':markets[market].title+' · '+({total:'total del partido',for:'a favor',against:'en contra'})[side]+' · más de '+line;
- status.textContent='Histórico anterior al '+cutoff+' · '+label+'. La fecha procede del calendario.';
+ status.textContent=(date?'Partido: '+date.split('-').reverse().join('/')+' · '+(schedule.time?schedule.time+' h':'hora pendiente')+' · ':'')+'Histórico anterior al '+cutoff+' · '+label+'.';
  out.append(makeNode('h3',show(fixture.local)+' vs '+show(fixture.visitante),'sj-match-title'));
  let overview=makeNode('div',undefined,'sj-grid');
  let grid=makeNode('div',undefined,'sj-grid');
@@ -60,5 +60,6 @@ function render(){
 $('sj-league').addEventListener('change',()=>selectRound());$('sj-round').addEventListener('change',()=>selectMatch());$('sj-match').addEventListener('change',render);$('sj-window').addEventListener('change',render);$('sj-venue').addEventListener('change',render);$('sj-market').addEventListener('change',()=>{let market=$('sj-market').value;if(market!=='btts')$('sj-line').value=$('sj-side').value==='total'?({corners:9.5,goals:2.5,shots:19.5,target:7.5,fouls:24.5,cards:4.5})[market]:markets[market].line;render()});$('sj-side').addEventListener('change',()=>{let market=$('sj-market').value;if(market!=='btts')$('sj-line').value=$('sj-side').value==='total'?({corners:9.5,goals:2.5,shots:19.5,target:7.5,fouls:24.5,cards:4.5})[market]:markets[market].line;render()});$('sj-line').addEventListener('input',render);d.querySelector('nav.tabs').addEventListener('click',e=>{if(e.target.closest('button')?.dataset.view==='stats')selectLeague()});
 root.openFixtureStats=function(id){const f=FIXTURES.find(x=>fixtureId(x)===String(id));if(!f)return;switchToView('stats');selectLeague(f.liga);selectRound(String(f.jornada));selectMatch(fixtureId(f));area.scrollIntoView({behavior:'smooth',block:'start'})};
 })(typeof window!=='undefined'?window:globalThis);
+
 
 
