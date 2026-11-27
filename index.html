@@ -178,6 +178,7 @@
 [hidden]{display:none !important;}
 .dashboard-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 15px}.dashboard-kpis>div{background:#2a3030;border:1px solid #445047;border-radius:12px;padding:16px}.dashboard-kpis strong,.dashboard-kpis span{display:block}.dashboard-kpis strong{color:#c8ff37;font-size:26px}.dashboard-kpis span{color:#d2d9d3;font-size:12px}.dashboard-fixture{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:#2a3030;border:1px solid #414c45;border-radius:10px;color:#f4f7f1;padding:12px;margin:8px 0;cursor:pointer}.dashboard-fixture span{color:#c0ccc2;font-size:12px;flex:1}.dashboard-fixture strong{flex:2;display:flex;align-items:center;gap:6px;justify-content:center}.dashboard-fixture small{color:#bdc7bd}.dashboard-fixture em{color:#c8ff37;font-size:12px;font-style:normal}@media(max-width:700px){.dashboard-kpis>div{padding:10px}.dashboard-kpis strong{font-size:21px}.dashboard-fixture{flex-wrap:wrap}.dashboard-fixture span{flex-basis:100%}.dashboard-fixture strong{justify-content:flex-start;flex:1 1 auto}}
 .dashboard-day-nav{display:flex;align-items:center;justify-content:center;gap:14px;margin:14px 0}.dashboard-day-nav #dash-day-label{min-width:175px;text-align:center;color:#f2f6f0;font-weight:700}.dashboard-day-nav button{min-width:44px;padding:8px 12px}.dashboard-day-nav button:disabled{opacity:.4;cursor:not-allowed}
+html[data-access-role='guest'] nav [data-view='bankroll'], html[data-access-role='guest'] .result-toggle-btn, html[data-access-role='guest'] .result-form { display:none !important; }
 </style>
 <link rel="stylesheet" href="panel-redesign.css?v=20261126h">
 <style>.team-crest{width:26px;height:26px;object-fit:contain;vertical-align:middle;margin-right:7px;background:rgba(255,255,255,.08);border-radius:4px}</style>
@@ -835,12 +836,14 @@ function blankSide(){ return {mp:0,gf:0,ga:0,cmp:0,cf:0,ca:0,crmp:0,crf:0,cra:0,
 
 // ---------- Supabase storage layer ----------
 let sbClient = null;
+const GUEST_EMAIL = 'jordipuigbo@gmail.com';
+let guestUserId = null;
 async function requestGateLink(){
   const status=document.getElementById('gate_status'), field=document.getElementById('gate_email'), email=field.value.trim();
   if(!email || !field.validity.valid){status.textContent='Introduce un correo válido.';return;}
   status.textContent='Solicitando el enlace…';
   try{
-    const {error}=await sbClient.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:location.origin+location.pathname}});
+    const {error}=await sbClient.auth.signInWithOtp({email,options:{shouldCreateUser:email.toLowerCase()===GUEST_EMAIL,emailRedirectTo:location.origin+location.pathname}});
     if(error) throw error;
     status.textContent='Si la cuenta está habilitada, recibirás un enlace. Ábrelo en este mismo dispositivo.';
   }catch(e){status.textContent='No se pudo solicitar el enlace. Comprueba la configuración de acceso.';}
@@ -1022,7 +1025,7 @@ async function loadOddsState(){
 }
 async function loadBetsState(){
   try{
-    const { data, error } = await sbClient.from('tipster_data').select('data').eq('id','bets').maybeSingle();
+    const { data, error } = guestUserId ? await sbClient.from('tipster_guest_state').select('data').eq('user_id',guestUserId).eq('kind','bets').maybeSingle() : await sbClient.from('tipster_data').select('data').eq('id','bets').maybeSingle();
     if(error) throw error;
     return data ? data.data : null;
   }catch(e){
@@ -1034,7 +1037,7 @@ async function saveBetsState(){
   // apuestas + config de banca: ligero, cambia con cada apuesta -> fila propia para que guardar sea rapido y fiable
   try{
     const payload = { bets: BETS, bankroll: BANKCFG };
-    const { error } = await sbClient.from('tipster_data').upsert({ id:'bets', data: payload, updated_at: new Date().toISOString() });
+    const { error } = guestUserId ? await sbClient.from('tipster_guest_state').upsert({user_id:guestUserId,kind:'bets',data:payload,updated_at:new Date().toISOString()}) : await sbClient.from('tipster_data').upsert({ id:'bets', data: payload, updated_at: new Date().toISOString() });
     if(error) throw error;
   }catch(e){
     console.error('Supabase save error (bets)', e);
@@ -1046,7 +1049,7 @@ async function saveBetsState(){
 // y no obligue a resubir equipos/temporadas/calendario completos cada vez.
 async function loadPicks(){
   try{
-    const { data, error } = await sbClient.from('tipster_data').select('data').eq('id','picks').maybeSingle();
+    const { data, error } = guestUserId ? await sbClient.from('tipster_guest_state').select('data').eq('user_id',guestUserId).eq('kind','picks').maybeSingle() : await sbClient.from('tipster_data').select('data').eq('id','picks').maybeSingle();
     if(error) throw error;
     return data ? (data.data.pickedMatches || []) : [];
   }catch(e){
@@ -1056,7 +1059,7 @@ async function loadPicks(){
 }
 async function savePicks(){
   try{
-    const { error } = await sbClient.from('tipster_data').upsert({ id:'picks', data:{ pickedMatches:[...PICKED_MATCHES] }, updated_at: new Date().toISOString() });
+    const { error } = guestUserId ? await sbClient.from('tipster_guest_state').upsert({user_id:guestUserId,kind:'picks',data:{pickedMatches:[...PICKED_MATCHES]},updated_at:new Date().toISOString()}) : await sbClient.from('tipster_data').upsert({ id:'picks', data:{ pickedMatches:[...PICKED_MATCHES] }, updated_at: new Date().toISOString() });
     if(error) throw error;
   }catch(e){
     console.error('Supabase save picks error', e);
@@ -4858,6 +4861,14 @@ async function boot(){
       document.getElementById('authGate').style.display = 'flex';
       return;
     }
+    if((data.session.user.email||'').toLowerCase()===GUEST_EMAIL){
+      guestUserId=data.session.user.id;
+      document.documentElement.dataset.accessRole='guest';
+      const view=document.getElementById('view-bets'); view.hidden=false;
+      const btn=document.createElement('button'); btn.dataset.view='bets'; btn.textContent='Mis apuestas';
+      btn.addEventListener('click',()=>switchToView('bets'));
+      document.getElementById('tabs').appendChild(btn);
+    }
   } catch(e){
     document.getElementById('authGate').style.display = 'flex';
     document.getElementById('gate_status').textContent = 'No se pudo comprobar la sesión. Vuelve a solicitar un enlace.';
@@ -4871,7 +4882,7 @@ async function boot(){
     SEASON_IMPORTS = teamsState.seasonImports || [];
     FIXTURES = teamsState.fixtures || [];
     LAST_DATA_UPDATE = teamsState.lastUpdate || null;
-    if(teamsState.recovered) await saveTeamsState(); // consolida el calendario recuperado en las filas por liga
+    if(teamsState.recovered && !guestUserId) await saveTeamsState(); // consolida el calendario recuperado en las filas por liga
   } else {
     // no hay filas por liga todavia -> migrar desde la fila antigua 'main' (todo junto), si existe
     const oldMain = await loadOldCombinedMainRow();
@@ -4879,7 +4890,7 @@ async function boot(){
       MANUAL_TEAMS = oldMain.manualTeams || [];
       SEASON_IMPORTS = oldMain.seasonImports || [];
       FIXTURES = oldMain.fixtures || [];
-      await saveTeamsState(); // reparte ya en filas por liga
+      if(!guestUserId) await saveTeamsState(); // reparte ya en filas por liga
       teamsState = oldMain;
     }
   }
@@ -4889,7 +4900,7 @@ async function boot(){
   } else if(teamsState && teamsState.manualResults && Object.keys(teamsState.manualResults).length){
     // migracion automatica: version antigua que guardaba los resultados manuales dentro de la fila pesada 'main'.
     MANUAL_RESULTS = teamsState.manualResults;
-    await saveManualResultsState();
+    if(!guestUserId) await saveManualResultsState();
   }
   rebuildAllManualSeasonImports(); // reconstruye en memoria las entradas 'Manual' de SEASON_IMPORTS, sin volver a subir nada pesado
   ODDS_DATA = await loadOddsState();
@@ -4898,7 +4909,7 @@ async function boot(){
   if(betsState){
     BETS = betsState.bets || [];
     BANKCFG = betsState.bankroll || {initial:1000, fraction:0.25, minEV:3};
-  } else if(teamsState && (teamsState.bets || teamsState.bankroll)){
+  } else if(!guestUserId && teamsState && (teamsState.bets || teamsState.bankroll)){
     // migracion automatica: version antigua que guardaba todo junto en la fila 'main'.
     // recuperamos apuestas/banca de ahi y las movemos a su fila propia, mas ligera.
     BETS = teamsState.bets || [];
