@@ -313,6 +313,14 @@
   <!-- TEAMS -->
   <div class="view" id="view-teams">
     <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Primera RFEF</span> Actualizar partidos desde CSV<span class="chevron">▾</span></h2>
+      <p class="hint">Sube el CSV original de FutPythonTrader del grupo y temporada actuales. Comprueba las diferencias antes de guardar. Los resultados sin coincidencia clara se omiten.</p>
+      <div class="grid2"><div><label for="rfef-group">Grupo</label><select id="rfef-group"><option value="1">Primera RFEF · Grupo I</option><option value="2">Primera RFEF · Grupo II</option></select></div><div><label for="rfef-file">Archivo CSV</label><input id="rfef-file" type="file" accept=".csv,text/csv"></div></div>
+      <button id="rfef-preview" class="btn">Analizar archivo</button> <button id="rfef-apply" class="btn amber" disabled>Guardar actualización</button>
+      <div id="rfef-review" class="result-box" style="display:block" aria-live="polite"></div>
+    </div>
+
+    <div class="card collapsible collapsed">
       <h2 onclick="toggleCard(this)"><span class="tag">Todo en 1</span> Subir el Excel combinado de football-data.co.uk<span class="chevron">▾</span></h2>
       <p class="hint">Football-data.co.uk publica un Excel con todas las ligas juntas, cada una en su propia hoja (identificada por su código, ej. "SP1" para Primera). Súbelo aquí y la app reparte cada hoja a la liga correspondiente automáticamente — sin depender de ningún servicio externo que pueda fallar.</p>
       <div class="grid2">
@@ -1984,6 +1992,7 @@ function addManualResult(fx, fthg, ftag, hc, ac){
   const liga = fx.liga;
   if(!MANUAL_RESULTS[liga]) MANUAL_RESULTS[liga] = [];
   const dateSort = fx.fecha ? parseDateToSortable(fx.fecha) : null;
+  const previous = (MANUAL_RESULTS[liga]||[]).find(r=>r.fxId===fx.id);
   const row = {
     home: fx.local, away: fx.visitante, fthg, ftag,
     hc: isNaN(hc)?null:hc, ac: isNaN(ac)?null:ac,
@@ -1994,7 +2003,7 @@ function addManualResult(fx, fthg, ftag, hc, ac){
   };
   const rows = MANUAL_RESULTS[liga];
   const existingIdx = rows.findIndex(r=>r.fxId===fx.id);
-  if(existingIdx!==-1) rows[existingIdx] = row; else rows.push(row);
+  if(existingIdx!==-1) rows[existingIdx] = {...previous, home:row.home, away:row.away, fthg:row.fthg, ftag:row.ftag, hc:row.hc, ac:row.ac, dateSort:previous.dateSort||row.dateSort}; else rows.push(row);
   rebuildManualSeasonImport(liga); // solo en memoria, rapido -- no se vuelve a subir todo el bloque pesado
 }
 function toggleResultForm(fxId){
@@ -4865,9 +4874,11 @@ boot();
 <script src="match-odds-detail.js?v=20261120b"></script>
 <script src="centro-estadisticas.js?v=20261126c"></script>
 <script src="jornada-estadisticas.js?v=20261127a"></script>
+<script src="rfef-import.js?v=20261127a"></script>
 
 </body>
 </html>
+
 
 
 
