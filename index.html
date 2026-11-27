@@ -4083,7 +4083,7 @@ function renderJornada(){
     div.innerHTML = `
       <div class="jornada-contenido">
         <div class="jornada-equipos" style="${tc}"><span class="jornada-equipo">${crestForFixture(fx.local,matchLiga)}<span>${escapeHtml(window.displayTeamName?.(fx.local) || fx.local)}</span><small>Local</small></span><span class="jornada-vs">VS</span><span class="jornada-equipo">${crestForFixture(fx.visitante,matchLiga)}<span>${escapeHtml(window.displayTeamName?.(fx.visitante) || fx.visitante)}</span><small>Visitante</small></span></div>
-        <p class="jornada-meta hint" style="${tc}">${crossLiga ? matchLiga+' · ' : ''}${meta && meta.fecha ? meta.fecha.split('-').reverse().join('/') : (fx.fecha||'')}${meta && meta.hora ? ' · 🕐 '+meta.hora : ''}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado por ti' : ''}</p>
+        <p class="jornada-meta hint" style="${tc}">${crossLiga ? matchLiga+' · ' : ''}${fixtureSchedule(fx).date ? escapeHtml(fixtureSchedule(fx).date.split('-').reverse().join('/')) : escapeHtml(fx.fecha||'Fecha pendiente')}${fixtureSchedule(fx).time ? ' · 🕐 '+escapeHtml(fixtureSchedule(fx).time)+' h' : ' · Hora pendiente'}${sinDatos ? ' · sin datos de equipo cargados' : ''} ${isPicked ? '★ marcado por ti' : ''}</p>
         ${meta && meta.nota ? `<p class="hint" style="margin:2px 0 0; font-style:italic; ${tc}">📝 ${escapeHtml(meta.nota)}</p>` : ''}
         ${statsLine}
         ${resultForm}
@@ -4567,15 +4567,23 @@ function renderLastUpdateInfo(){
   const stale = diffMin > 60*36; // mas de 36h sin actualizar ninguna liga -> probable fallo del Action diario
   el.innerHTML = `Datos actualizados ${rel} (${then.toLocaleDateString('es-ES')} ${then.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})})${stale ? ' <span style="color:#FB7185;">⚠ revisa el Action de GitHub</span>' : ''}`;
 }
+function fixtureSchedule(f){
+  const meta=MATCH_META[matchMetaKey(f)]||{},raw=String(f.fecha||'').trim();let date=null;
+  if(typeof meta.fecha==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(meta.fecha))date=meta.fecha;
+  else if(/^\d{4}-\d{2}-\d{2}/.test(raw))date=raw.slice(0,10);
+  else {const m=raw.match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/);if(m)date=m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');}
+  const stored=typeof meta.hora==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(meta.hora)?meta.hora:null;
+  const match=raw.match(/(?:^|\s)([01]?\d|2[0-3]):([0-5]\d)(?:\s|$)/),fromCalendar=match?match[1].padStart(2,'0')+':'+match[2]:null;
+  return {date,time:stored||fromCalendar};
+}
 function renderMatchOverview(){
   const summary=document.getElementById('dashboardOverview'),upcoming=document.getElementById('dashboardUpcoming');if(!summary||!upcoming)return;
   const ligas=new Set(FIXTURES.map(f=>f.liga).filter(Boolean)),teamCount=TEAMS.length,logs=buildCombinedMatchLogs(),matchCount=Object.values(logs).reduce((n,a)=>n+a.length,0);
   summary.innerHTML=`<div class="dashboard-kpis"><div><strong>${ligas.size}</strong><span>Ligas con calendario</span></div><div><strong>${teamCount}</strong><span>Fichas de equipo</span></div><div><strong>${matchCount}</strong><span>Registros de partidos</span></div></div>`;
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Madrid',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-  const readDate=f=>{const meta=MATCH_META[matchMetaKey(f)]?.fecha;if(meta)return meta;const raw=String(f.fecha||'').trim();if(/^\d{4}-\d{2}-\d{2}/.test(raw))return raw.slice(0,10);const m=raw.match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/);return m?m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'):null};
-  const games=FIXTURES.map(f=>({f,date:readDate(f)})).filter(x=>x.date&&x.date>=today).sort((a,b)=>a.date.localeCompare(b.date)||String(a.f.liga).localeCompare(String(b.f.liga))).slice(0,8);
+  const games=FIXTURES.map(f=>({f,...fixtureSchedule(f)})).filter(x=>x.date&&x.date>=today).sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'99:99').localeCompare(b.time||'99:99')||String(a.f.liga).localeCompare(String(b.f.liga))).slice(0,8);
   upcoming.replaceChildren();if(!games.length){upcoming.textContent='No hay próximos partidos con fecha reconocible en los calendarios cargados.';return}
-  for(const {f,date} of games){const row=document.createElement('button');row.type='button';row.className='dashboard-fixture';const h=window.displayTeamName?.(f.local)||f.local,a=window.displayTeamName?.(f.visitante)||f.visitante;row.innerHTML=`<span>${escapeHtml(date.split('-').reverse().join('/'))} · ${escapeHtml(f.liga)} · Jornada ${escapeHtml(f.jornada)}</span><strong>${teamCrest(f.local,f.liga)} ${escapeHtml(h)} <small>vs</small> ${teamCrest(f.visitante,f.liga)} ${escapeHtml(a)}</strong><em>Ver estadísticas →</em>`;row.addEventListener('click',()=>{if(typeof window.openFixtureStats==='function')window.openFixtureStats(f.id);else switchToView('jornada')});upcoming.appendChild(row)}
+  for(const {f,date,time} of games){const row=document.createElement('button');row.type='button';row.className='dashboard-fixture';const h=window.displayTeamName?.(f.local)||f.local,a=window.displayTeamName?.(f.visitante)||f.visitante;row.innerHTML=`<span>${escapeHtml(date.split('-').reverse().join('/'))} · ${time?escapeHtml(time)+' h':'Hora pendiente'} · ${escapeHtml(f.liga)} · Jornada ${escapeHtml(f.jornada)}</span><strong>${teamCrest(f.local,f.liga)} ${escapeHtml(h)} <small>vs</small> ${teamCrest(f.visitante,f.liga)} ${escapeHtml(a)}</strong><em>Ver estadísticas →</em>`;row.addEventListener('click',()=>{if(typeof window.openFixtureStats==='function')window.openFixtureStats(f.id);else switchToView('jornada')});upcoming.appendChild(row)}
 }
 function renderDashboard(){
   renderLastUpdateInfo();
@@ -4905,12 +4913,13 @@ boot();
 <script src="corner-history.js?v=20261120"></script>
 <script src="match-odds-detail.js?v=20261120b"></script>
 <script src="centro-estadisticas.js?v=20261126c"></script>
-<script src="jornada-estadisticas.js?v=20261127a"></script>
+<script src="jornada-estadisticas.js?v=20261127b"></script>
 <script src="rfef-import.js?v=20261127a"></script>
 <script src="validacion-mercados.js?v=20261127a"></script>
 
 </body>
 </html>
+
 
 
 
