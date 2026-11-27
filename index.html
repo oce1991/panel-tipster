@@ -280,6 +280,7 @@
         <div style="display:flex; align-items:flex-end;"><button class="btn amber" onclick="renderBacktest()" style="width:100%;">Ejecutar backtest</button></div>
       </div>
       <div class="result-box" id="backtestResult" style="display:none;"></div>
+      <button class="btn ghost" onclick="renderSimpleGoalValidation()" style="margin-top:10px;">Validar goles y ambos marcan sin cuotas</button><div class="result-box" id="simpleGoalValidation" style="display:none;"></div>
       <button class="btn ghost" onclick="renderGoalModelComparison()" style="margin-top:10px;">Comparar probabilidades con el mercado</button>
       <div class="result-box" id="goalModelComparison" style="display:none;"></div>
       <button class="btn ghost" onclick="renderGoalCandidates()" style="margin-top:10px;">Comparar forma reciente y fuerza de equipos (3 temporadas)</button>
@@ -599,6 +600,10 @@
         <div><label for="jr_goalFilter">Filtrar por mercado de goles</label><select id="jr_goalFilter" onchange="renderJornada()"><option value="none">Todos los partidos</option><option value="btts">Ambos marcan — Sí</option><option value="over15">Más de 1,5 goles</option><option value="goals">Más de 2,5 goles</option><option value="over35">Más de 3,5 goles</option></select></div>
         <div><label for="jr_goalMin">Probabilidad mínima (%)</label><input id="jr_goalMin" type="number" min="0" max="100" step="1" value="60" oninput="renderJornada()"></div>
       </div>
+      <div class="grid2" style="margin-top:8px;">
+        <div><label for="jr_minMatches">Mínimo de partidos con datos por equipo</label><input id="jr_minMatches" type="number" min="0" max="10" step="1" value="0" oninput="renderJornada()"></div>
+        <div><label for="jr_minHistory">Frecuencia histórica mínima por equipo (%)</label><input id="jr_minHistory" type="number" min="0" max="100" step="1" value="0" oninput="renderJornada()"></div>
+      </div><p class="hint">Histórico: hasta 10 partidos anteriores al encuentro, local en casa y visitante fuera, para el mercado de goles seleccionado. Con 0 no se aplica ese filtro.</p>
       <p class="hint">El filtro de goles solo se aplica al elegir un mercado. Se muestran probabilidades estimadas por el modelo; no garantizan el resultado.</p>
       <label>Línea de córners para el análisis</label>
       <select id="jr_cornersLine" onchange="renderJornada()">
@@ -665,6 +670,7 @@
       <input id="b_note" placeholder="Ej. buen ritmo de córners últimos partidos, rival sin su lateral titular...">
       <label>Resultado</label>
       <select id="b_status"><option value="pending">Pendiente</option><option value="win">Ganada</option><option value="loss">Perdida</option><option value="void">Anulada</option></select>
+      <p class="hint" id="betSnapshotInfo">Puedes preparar una selección desde Jornada. La cuota y el stake se introducen manualmente.</p>
       <button class="btn amber" onclick="addBet()">Añadir apuesta</button>
     </div>
     <div class="card">
@@ -1344,6 +1350,27 @@ function compareGoalModels(logs, windowStart, windowEnd){
   }
   return {n:eligible,observed:eligible?observed/eligible:null,models:models.map(m=>({id:m.id,label:m.label,brier:eligible?totals[m.id].brier/eligible:null,logloss:eligible?totals[m.id].logloss/eligible:null,meanP:eligible?totals[m.id].sumP/eligible:null}))};
 }
+function validateSimpleGoalMarkets(logs){
+  const sorted=(logs||[]).filter(m=>m&&typeof m.d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(m.d)&&typeof m.h==='string'&&typeof m.a==='string'&&Number.isFinite(m.hg)&&Number.isFinite(m.ag)&&m.hg>=0&&m.ag>=0).slice().sort((a,b)=>a.d.localeCompare(b.d));
+  const teams={},results={over15:{n:0,brier:0,sum:0,hits:0},over25:{n:0,brier:0,sum:0,hits:0},btts:{n:0,brier:0,sum:0,hits:0}};
+  const team=(name)=>teams[name]||(teams[name]={home:{n:0,gf:0,ga:0},away:{n:0,gf:0,ga:0}});
+  for(let i=0;i<sorted.length;){let j=i;while(j<sorted.length&&sorted[j].d===sorted[i].d)j++;
+    for(let k=i;k<j;k++){let m=sorted[k],h=team(m.h).home,a=team(m.a).away;if(h.n<BACKTEST_MIN_MATCHES||a.n<BACKTEST_MIN_MATCHES)continue;
+      let lh=(h.gf/h.n+a.ga/a.n)/2,la=(a.gf/a.n+h.ga/h.n)/2,total=lh+la;
+      let probabilities={over15:poissonOver(1.5,total),over25:poissonOver(2.5,total),btts:(1-Math.exp(-lh))*(1-Math.exp(-la))};
+      let outcomes={over15:m.hg+m.ag>1,over25:m.hg+m.ag>2,btts:m.hg>0&&m.ag>0};
+      for(const key of Object.keys(results)){let v=results[key],prob=probabilities[key],actual=outcomes[key]?1:0;v.n++;v.brier+=(prob-actual)**2;v.sum+=prob;v.hits+=actual;}
+    }
+    for(let k=i;k<j;k++){let m=sorted[k],h=team(m.h).home,a=team(m.a).away;h.n++;h.gf+=m.hg;h.ga+=m.ag;a.n++;a.gf+=m.ag;a.ga+=m.hg}i=j;
+  }
+  return results;
+}
+function renderSimpleGoalValidation(){
+  const liga=document.getElementById('bt_liga').value,box=document.getElementById('simpleGoalValidation'),r=validateSimpleGoalMarkets(buildBacktestMatchLogs()[liga]||[]);
+  box.style.display='block';let html='<p class="hint">Modelo Poisson simplificado: no incluye todos los ajustes usados en directo. Cada día se evalúa solo con datos anteriores y un mínimo de seis partidos por condición. No requiere cuotas y no calcula rentabilidad.</p><table><thead><tr><th>Mercado</th><th>Partidos</th><th>Prob. media</th><th>Frecuencia real</th><th>Error Brier ↓</th></tr></thead><tbody>';
+  for(const [key,label] of [['over15','Más de 1,5'],['over25','Más de 2,5'],['btts','Ambos marcan']]){const x=r[key];html+='<tr><td>'+label+'</td><td>'+x.n+'</td><td>'+(x.n?fmtPct(x.sum/x.n):'—')+'</td><td>'+(x.n?fmtPct(x.hits/x.n):'—')+'</td><td>'+(x.n?(x.brier/x.n).toFixed(3):'—')+'</td></tr>'}
+  box.innerHTML=html+'</tbody></table><p class="hint">Muestras pequeñas pueden variar mucho. Una buena calibración no demuestra ventaja ni beneficios.</p>';
+}
 function renderGoalModelComparison(){
   const liga=document.getElementById('bt_liga').value,box=document.getElementById('goalModelComparison');
   box.style.display='block';
@@ -1532,7 +1559,7 @@ function runCornersBacktest(liga, line){
     return tally[name];
   }
   const buckets = Array.from({length:10}, ()=>({n:0,wins:0,sumProb:0}));
-  let n=0,sumPredicted=0,sumActual=0,sumAbsError=0,skippedNoHistory=0;
+  let n=0,sumPredicted=0,sumActual=0,sumAbsError=0,sumBrier=0,skippedNoHistory=0;
   for(let i=0;i<sorted.length;){
     let j=i; while(j<sorted.length && sorted[j].d===sorted[i].d) j++;
     const denom=regression.n*regression.sumX2-regression.sumX*regression.sumX;
@@ -1546,7 +1573,7 @@ function runCornersBacktest(liga, line){
         let total=baseTotal;
         if(slope!==null) total=Math.max(baseTotal*0.6,Math.min(baseTotal*1.6,baseTotal+slope*(expectedGoals-meanGoals)));
         const pOver=poissonOver(line,total), actual=m.hc+m.ac;
-        n++; sumPredicted+=total; sumActual+=actual; sumAbsError+=Math.abs(total-actual);
+        n++; sumPredicted+=total; sumActual+=actual; sumAbsError+=Math.abs(total-actual); sumBrier+=(pOver-(actual>line?1:0))**2;
         const bucket=buckets[Math.min(9,Math.max(0,Math.floor(pOver*10)))];
         bucket.n++;bucket.sumProb+=pOver;if(actual>line) bucket.wins++;
       }else skippedNoHistory++;
@@ -1561,7 +1588,7 @@ function runCornersBacktest(liga, line){
     }
     i=j;
   }
-  return {totalMatches:sorted.length,n,skippedNoHistory,avgPredicted:n?sumPredicted/n:null,avgActual:n?sumActual/n:null,mae:n?sumAbsError/n:null,buckets:buckets.filter(b=>b.n>0)};
+  return {totalMatches:sorted.length,n,skippedNoHistory,avgPredicted:n?sumPredicted/n:null,avgActual:n?sumActual/n:null,mae:n?sumAbsError/n:null,brier:n?sumBrier/n:null,buckets:buckets.filter(b=>b.n>0)};
 }
 function renderCornersBacktest(){
   const liga = document.getElementById('btc_liga').value;
@@ -1581,7 +1608,7 @@ function renderCornersBacktest(){
     <div><div class="hint">Córners predichos (media)</div><div class="display" style="font-size:22px;">${r.avgPredicted.toFixed(2)}</div></div>
     <div><div class="hint">Córners reales (media)</div><div class="display" style="font-size:22px;">${r.avgActual.toFixed(2)}</div></div>
   </div>
-  <p class="hint" style="margin-top:8px;">Sesgo del modelo: <span style="color:${biasColor}; font-weight:700;">${bias>=0?'+':''}${bias.toFixed(2)} córners</span> (predicho − real; cerca de 0 es bueno) · Error medio absoluto por partido: ${r.mae.toFixed(2)} córners.</p>
+  <p class="hint" style="margin-top:8px;">Sesgo del modelo: <span style="color:${biasColor}; font-weight:700;">${bias>=0?'+':''}${bias.toFixed(2)} córners</span> (predicho − real; cerca de 0 es bueno) · Error medio absoluto por partido: ${r.mae.toFixed(2)} córners · Brier de Over ${line}: ${r.brier.toFixed(3)} (menor es mejor).</p><p class="hint">Prueba con una versión simplificada: no reproduce todos los ajustes del modelo en directo.</p>
   <hr class="divider">
   <p style="font-family:'Space Grotesk'; font-weight:700; font-size:13px;">Calibración de Over ${line} córners</p>
   <table><thead><tr><th>Tramo</th><th>Partidos</th><th>Media predicha</th><th>Acierto real</th></tr></thead><tbody>`;
@@ -1598,7 +1625,7 @@ function runBttsBacktest(liga){
   const sorted=[...logs].sort((a,b)=>a.d.localeCompare(b.d)), tally={};
   function ensure(name){if(!tally[name]) tally[name]={home:{mp:0,gf:0,ga:0},away:{mp:0,gf:0,ga:0}};return tally[name];}
   const buckets=Array.from({length:10},()=>({n:0,wins:0,sumProb:0}));
-  let n=0,skippedNoHistory=0;
+  let n=0,skippedNoHistory=0,sumBrier=0;
   for(let i=0;i<sorted.length;){
     let j=i;while(j<sorted.length && sorted[j].d===sorted[i].d)j++;
     for(let k=i;k<j;k++){
@@ -1607,7 +1634,7 @@ function runBttsBacktest(liga){
         const lh=(h.home.gf/h.home.mp+away.away.ga/away.away.mp)/2,la=(away.away.gf/away.away.mp+h.home.ga/h.home.mp)/2;
         const pBTTS=(1-Math.exp(-lh))*(1-Math.exp(-la));
         const bucket=buckets[Math.min(9,Math.max(0,Math.floor(pBTTS*10)))];
-        n++;bucket.n++;bucket.sumProb+=pBTTS;if(m.hg>0 && m.ag>0)bucket.wins++;
+        n++;bucket.n++;bucket.sumProb+=pBTTS;sumBrier+=(pBTTS-(m.hg>0 && m.ag>0?1:0))**2;if(m.hg>0 && m.ag>0)bucket.wins++;
       }else skippedNoHistory++;
     }
     for(let k=i;k<j;k++){
@@ -1617,7 +1644,7 @@ function runBttsBacktest(liga){
     }
     i=j;
   }
-  return {totalMatches:sorted.length,n,skippedNoHistory,buckets:buckets.filter(b=>b.n>0)};
+  return {totalMatches:sorted.length,n,skippedNoHistory,brier:n?sumBrier/n:null,buckets:buckets.filter(b=>b.n>0)};
 }
 function renderBttsBacktest(){
   const liga = document.getElementById('btb_liga').value;
@@ -1629,7 +1656,7 @@ function renderBttsBacktest(){
     box.innerHTML = `<p class="hint">No se ha podido analizar ningún partido en ${liga}. Partidos con fecha: ${r.totalMatches} · sin historial previo suficiente: ${r.skippedNoHistory}.</p>`;
     return;
   }
-  let html2 = `<p class="hint">Partidos analizados: <strong>${r.n}</strong> (se han saltado ${r.skippedNoHistory} por no tener aún ${BACKTEST_MIN_MATCHES} partidos previos de cada equipo).</p>
+  let html2 = `<p class="hint">Partidos analizados: <strong>${r.n}</strong> · Brier: <strong>${r.brier.toFixed(3)}</strong> (menor es mejor) (se han saltado ${r.skippedNoHistory} por no tener aún ${BACKTEST_MIN_MATCHES} partidos previos de cada equipo).</p>
   <table><thead><tr><th>Tramo</th><th>Partidos</th><th>Media predicha</th><th>Acierto real</th></tr></thead><tbody>`;
   r.buckets.forEach(b=>{
     const avgPred = b.sumProb/b.n, actual = b.wins/b.n;
@@ -3862,6 +3889,25 @@ function renderSelectorBacktest(){
   box.innerHTML = html;
 }
 
+function jornadaGoalHistory(logs,team,venue,market,cutoff,limit=10){
+  const seen=new Set(),selected=(logs||[]).filter(x=>x&&x.d&&x.d<cutoff&&typeof x.h==='string'&&typeof x.a==='string'&&(venue==='home'?x.h===team:x.a===team)).slice().sort((a,b)=>b.d.localeCompare(a.d)).filter(x=>{const key=[x.d,x.h,x.a].join('|');if(seen.has(key))return false;seen.add(key);return true}).slice(0,limit);
+  const games=selected.filter(x=>x.hg!==null&&x.hg!==undefined&&x.ag!==null&&x.ag!==undefined&&Number.isFinite(x.hg)&&Number.isFinite(x.ag)&&x.hg>=0&&x.ag>=0);
+  const line=market==='over15'?1.5:market==='goals'?2.5:market==='over35'?3.5:null;
+  const hits=games.filter(x=>market==='btts'?x.hg>0&&x.ag>0:line!==null&&x.hg+x.ag>line).length;
+  return {reviewed:selected.length,n:games.length,missing:selected.length-games.length,hits,rate:games.length?hits/games.length:null};
+}
+let pendingJornadaBetSnapshot=null;
+function prepareJornadaSelection(id,market){
+  const fx=FIXTURES.find(f=>String(f.id)===String(id));if(!fx)return;
+  const h=findTeamInLiga(fx.local,fx.liga),a=findTeamInLiga(fx.visitante,fx.liga);if(!h||!a){alert('No hay datos suficientes del partido.');return}
+  const cfg={btts:{label:'Ambos marcan',pick:'Sí',line:2.5},over15:{label:'Goles O/U',pick:'Over 1.5',line:1.5},goals:{label:'Goles O/U',pick:'Over 2.5',line:2.5},over35:{label:'Goles O/U',pick:'Over 3.5',line:3.5}}[market];if(!cfg)return;
+  const result=predictGoals(h,a,fx.liga,cfg.line),prob=market==='btts'?result.pBTTS:result.pOver;
+  if(!Number.isFinite(prob)||prob<0||prob>1){alert('No hay probabilidad disponible para este mercado.');return}
+  const match=h.name+' - '+a.name;pendingJornadaBetSnapshot={match,liga:fx.liga,market:cfg.label,pick:cfg.pick,prob,recordedAt:new Date().toISOString(),fixtureId:String(fx.id)};
+  switchToView('bets');const leagueSelect=document.getElementById('b_liga');if(![...leagueSelect.options].some(o=>o.value===fx.liga)){const opt=document.createElement('option');opt.value=fx.liga;opt.textContent=fx.liga;leagueSelect.appendChild(opt)}leagueSelect.value=fx.liga;syncCustomLigaDropdown('b_liga');document.getElementById('b_market').value=cfg.label;refreshLineaOptions();
+  document.getElementById('b_match').value=match;document.getElementById('b_pick').value=cfg.pick;document.getElementById('b_odd').value='';document.getElementById('b_stake').value='';
+  document.getElementById('betSnapshotInfo').textContent='Probabilidad preparada: '+fmtPct(prob)+'. Introduce cuota y stake y guarda la apuesta. Si modificas partido, liga, mercado o selección, no se asignará esta probabilidad.';
+}
 function renderJornada(){
   const liga = document.getElementById('jr_liga').value;
   const jornada = document.getElementById('jr_jornada').value;
@@ -3870,6 +3916,7 @@ function renderJornada(){
   const goalFilter = document.getElementById('jr_goalFilter').value;
   const goalMinInput = document.getElementById('jr_goalMin').value;
   const goalMin = goalMinInput === '' ? NaN : Number(goalMinInput);
+  const minMatches = Number(document.getElementById('jr_minMatches').value), minHistory = Number(document.getElementById('jr_minHistory').value);
   const container = document.getElementById('jornadaMatches');
   const emptyEl = document.getElementById('jornadaEmpty');
   const crossLiga = liga === '__ALL__';
@@ -3890,7 +3937,12 @@ function renderJornada(){
       cards = predictCards(home, away, 4.5, matchLiga);
       hitRate = computeMatchLineHitRate(fx.local, fx.visitante, matchLiga, cornersLine, LINE_HIT_RATE_N);
     }
-    return {fx, matchLiga, home, away, sinDatos, corners, goals, goals15, goals35, cards, hitRate};
+    let history=null;
+    if(!sinDatos && goalFilter!=='none'){
+      const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Madrid',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),date=parseFechaToISO(fx.fecha||''),cutoff=date&&date<today?date:today,logs=buildCombinedMatchLogs()[matchLiga]||[];
+      history={home:jornadaGoalHistory(logs,home.name,'home',goalFilter,cutoff),away:jornadaGoalHistory(logs,away.name,'away',goalFilter,cutoff)};
+    }
+    return {fx, matchLiga, home, away, sinDatos, corners, goals, goals15, goals35, cards, hitRate, history};
   });
 
   function probability(m,market){
@@ -3907,8 +3959,9 @@ function renderJornada(){
     });
   }
   const goalFilterInvalid = goalFilter!=='none' && (!Number.isFinite(goalMin) || goalMin<0 || goalMin>100);
-  if(goalFilter!=='none') enriched = goalFilterInvalid ? [] : enriched.filter(m=>{
-    const p=probability(m,goalFilter);return p!==null && p>=goalMin/100;
+  const historyInvalid=!Number.isInteger(minMatches)||minMatches<0||minMatches>10||!Number.isFinite(minHistory)||minHistory<0||minHistory>100;
+  if(goalFilter!=='none') enriched = goalFilterInvalid||historyInvalid ? [] : enriched.filter(m=>{
+    const p=probability(m,goalFilter),h=m.history?.home,a=m.history?.away;return p!==null && p>=goalMin/100 && h&&a && h.n>=minMatches && a.n>=minMatches && (minHistory===0||(h.rate!==null&&a.rate!==null&&h.rate>=minHistory/100&&a.rate>=minHistory/100));
   });
 
   const onlyInteresting = document.getElementById('jr_onlyInteresting').checked;
@@ -3920,7 +3973,9 @@ function renderJornada(){
     enriched = enriched.filter(m=> m.hitRate && m.hitRate.rate>=0.8);
   }
   emptyEl.style.display = enriched.length ? 'none' : 'block';
-  if(goalFilterInvalid){
+  if(goalFilter!=='none' && historyInvalid){
+    emptyEl.textContent='Introduce una muestra mínima de 0 a 10 y una frecuencia de 0 a 100.';
+  } else if(goalFilterInvalid){
     emptyEl.textContent = 'Introduce una probabilidad mínima entre 0 y 100.';
   } else if((onlyInteresting || onlyHighHitRate || goalFilter!=='none') && !enriched.length && matches.length){
     emptyEl.textContent = 'Ningún partido de esta jornada cumple los filtros seleccionados o dispone de los datos necesarios.';
@@ -3928,7 +3983,7 @@ function renderJornada(){
     emptyEl.textContent = 'No hay calendario importado todavía para esta liga.';
   }
 
-  enriched.forEach(({fx, matchLiga, home, away, sinDatos, corners, goals, goals15, goals35, cards, hitRate})=>{
+  enriched.forEach(({fx, matchLiga, home, away, sinDatos, corners, goals, goals15, goals35, cards, hitRate, history})=>{
     const isPicked = PICKED_MATCHES.has(fx.id);
     const autoHighCorners = !sinDatos && corners.total > AUTO_HIGHLIGHT_CORNERS_THRESHOLD;
     const tc = '';
@@ -3946,6 +4001,7 @@ function renderJornada(){
         <div class="jornada-metrica"><span>Resultado 1 · X · 2</span><strong class="jornada-probs">${fmtPct(goals.p1)} · ${fmtPct(goals.pX)} · ${fmtPct(goals.p2)}</strong><small>Probabilidades del modelo</small></div>
         ${cards.pOver!==null ? `<div class="jornada-metrica"><span>Tarjetas previstas</span><strong>${cards.total.toFixed(1)}</strong><small>Más de 4,5: ${fmtPct(cards.pOver)}</small></div>` : ''}
       </div>${hitRate ? `<p class="jornada-hit">Línea ${cornersLine} cumplida: <strong>${fmtPct(hitRate.rate)}</strong> · ${hitRate.total} partidos (local ${hitRate.homeN?fmtPct(hitRate.homeRate):'—'}; visitante ${hitRate.awayN?fmtPct(hitRate.awayRate):'—'})</p>` : ''}`;
+      if(history) statsLine += `<p class="hint">Histórico del mercado elegido: local ${history.home.n?history.home.hits+'/'+history.home.n+' ('+fmtPct(history.home.rate)+')':'sin datos'} · visitante ${history.away.n?history.away.hits+'/'+history.away.n+' ('+fmtPct(history.away.rate)+')':'sin datos'} · ausentes ${history.home.missing+history.away.missing}</p>`;
       const oddsMatch = findOddsForFixture(fx);
       if(oddsMatch){
         const marketBets = [
@@ -4004,6 +4060,7 @@ function renderJornada(){
       <div class="jornada-acciones">
         <button class="btn detail-btn" onclick="event.stopPropagation(); openFixtureStats(&quot;${fx.id}&quot;)" style="flex-shrink:0; padding:8px 12px; font-size:11px;">Estadísticas</button>
         ${!sinDatos ? `<button class="btn detail-btn" onclick="event.stopPropagation(); openMatchDetail('${fx.id}')" style="flex-shrink:0; padding:8px 12px; font-size:11px; white-space:nowrap;">Ver →</button>` : ''}
+        ${!sinDatos ? `<button class="btn detail-btn" onclick="event.stopPropagation(); prepareJornadaSelection('${fx.id}', '${goalFilter==='none'?'btts':goalFilter}')">Preparar selección</button>` : ''}
         ${resultToggleBtn}
         ${metaToggleBtn}
       </div>
@@ -4190,7 +4247,7 @@ function computeModelProbForBet(){
 async function addBet(){
   const odd = parseFloat(document.getElementById('b_odd').value);
   const stake = parseFloat(document.getElementById('b_stake').value);
-  if(!odd || !stake){ alert('Cuota y stake son obligatorios'); return; }
+  if(!Number.isFinite(odd)||odd<=1||!Number.isFinite(stake)||stake<=0){ alert('Introduce una cuota mayor que 1 y un stake mayor que 0.'); return; }
   const bet = {
     id: Date.now().toString(),
     recordedAt: new Date().toISOString(),
@@ -4205,6 +4262,9 @@ async function addBet(){
     modelProb: computeModelProbForBet(),
     note: document.getElementById('b_note').value.trim()
   };
+  const snap=pendingJornadaBetSnapshot;
+  if(snap){bet.modelProb=null;if(snap.match===bet.match && snap.liga===bet.liga && snap.market===bet.market && snap.pick===bet.pick){bet.modelProb=snap.prob;bet.probabilitySnapshot={capturedAt:snap.recordedAt,fixtureId:snap.fixtureId,probability:snap.prob};}}
+  pendingJornadaBetSnapshot=null;document.getElementById('betSnapshotInfo').textContent='Puedes preparar una selección desde Jornada. La cuota y el stake se introducen manualmente.';
   const cornerSnapshot=matchCornerSnapshot(LAST_CORNERS_CALC,bet);
   if(cornerSnapshot) bet.cornerSnapshot=cornerSnapshot;
   BETS.unshift(bet);
@@ -4260,7 +4320,7 @@ function renderBets(){
         <input type="date" value="${b.date||''}" style="margin:0; padding:3px 4px; font-size:11px; width:110px;" onchange="updateBetDate('${b.id}',this.value)">
         <input type="time" value="${b.hora||''}" style="margin:2px 0 0; padding:3px 4px; font-size:11px; width:110px;" onchange="updateBetTime('${b.id}',this.value)">
       </td>
-      <td style="font-family:Inter;">${b.match}<br><span class="hint">${b.pick}</span></td>
+      <td style="font-family:Inter;">${escapeHtml(b.match||'')}<br><span class="hint">${escapeHtml(b.pick||'')}</span>${b.probabilitySnapshot && Number.isFinite(b.modelProb)?`<br><span class="hint">Modelo al preparar: ${fmtPct(b.modelProb)}</span>`:''}</td>
       <td>${b.market}</td>
       <td>${b.odd}</td>
       <td><input type="number" step="0.5" min="0" value="${b.stake}" style="margin:0; padding:3px 4px; font-size:11px; width:70px;" onchange="updateBetStake('${b.id}',this.value)"></td>
@@ -4804,10 +4864,11 @@ boot();
 <script src="corner-history.js?v=20261120"></script>
 <script src="match-odds-detail.js?v=20261120b"></script>
 <script src="centro-estadisticas.js?v=20261126c"></script>
-<script src="jornada-estadisticas.js?v=20261126d"></script>
+<script src="jornada-estadisticas.js?v=20261127a"></script>
 
 </body>
 </html>
+
 
 
 
