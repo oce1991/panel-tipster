@@ -281,6 +281,10 @@
       </div>
       <div class="result-box" id="backtestResult" style="display:none;"></div>
       <button class="btn ghost" onclick="renderSimpleGoalValidation()" style="margin-top:10px;">Validar goles y ambos marcan sin cuotas</button><div class="result-box" id="simpleGoalValidation" style="display:none;"></div>
+      <hr class="divider"><h3>Validación por mercado</h3>
+      <p class="hint">Utiliza la liga seleccionada arriba. Las fechas limitan los partidos evaluados; el historial previo sigue utilizándose para calcular las predicciones.</p>
+      <div class="grid2"><div><label for="vm-from">Evaluar desde (opcional)</label><input type="date" id="vm-from"></div><div><label for="vm-until">Evaluar hasta (opcional)</label><input type="date" id="vm-until"></div></div>
+      <button class="btn amber" id="vm-run">Comparar mercados</button><div class="result-box" id="vm-result" style="display:none" aria-live="polite"></div>
       <button class="btn ghost" onclick="renderGoalModelComparison()" style="margin-top:10px;">Comparar probabilidades con el mercado</button>
       <div class="result-box" id="goalModelComparison" style="display:none;"></div>
       <button class="btn ghost" onclick="renderGoalCandidates()" style="margin-top:10px;">Comparar forma reciente y fuerza de equipos (3 temporadas)</button>
@@ -4875,9 +4879,11 @@ boot();
 <script src="centro-estadisticas.js?v=20261126c"></script>
 <script src="jornada-estadisticas.js?v=20261127a"></script>
 <script src="rfef-import.js?v=20261127a"></script>
+<script src="validacion-mercados.js?v=20261127a"></script>
 
 </body>
 </html>
+
 
 
 
