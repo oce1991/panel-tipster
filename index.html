@@ -177,6 +177,7 @@
   .oddbtn.value{background:linear-gradient(90deg,#22C55E,#4ADE80); border-color:transparent; color:#052e12;}
 [hidden]{display:none !important;}
 .dashboard-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 15px}.dashboard-kpis>div{background:#2a3030;border:1px solid #445047;border-radius:12px;padding:16px}.dashboard-kpis strong,.dashboard-kpis span{display:block}.dashboard-kpis strong{color:#c8ff37;font-size:26px}.dashboard-kpis span{color:#d2d9d3;font-size:12px}.dashboard-fixture{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:#2a3030;border:1px solid #414c45;border-radius:10px;color:#f4f7f1;padding:12px;margin:8px 0;cursor:pointer}.dashboard-fixture span{color:#c0ccc2;font-size:12px;flex:1}.dashboard-fixture strong{flex:2;display:flex;align-items:center;gap:6px;justify-content:center}.dashboard-fixture small{color:#bdc7bd}.dashboard-fixture em{color:#c8ff37;font-size:12px;font-style:normal}@media(max-width:700px){.dashboard-kpis>div{padding:10px}.dashboard-kpis strong{font-size:21px}.dashboard-fixture{flex-wrap:wrap}.dashboard-fixture span{flex-basis:100%}.dashboard-fixture strong{justify-content:flex-start;flex:1 1 auto}}
+.dashboard-day-nav{display:flex;align-items:center;justify-content:center;gap:14px;margin:14px 0}.dashboard-day-nav #dash-day-label{min-width:175px;text-align:center;color:#f2f6f0;font-weight:700}.dashboard-day-nav button{min-width:44px;padding:8px 12px}.dashboard-day-nav button:disabled{opacity:.4;cursor:not-allowed}
 </style>
 <link rel="stylesheet" href="panel-redesign.css?v=20261126h">
 <style>.team-crest{width:26px;height:26px;object-fit:contain;vertical-align:middle;margin-right:7px;background:rgba(255,255,255,.08);border-radius:4px}</style>
@@ -235,7 +236,7 @@
     <div class="dashboard-intro"><div><span class="eyebrow">Tu centro de análisis</span><h2>El fútbol, con más contexto.</h2><p>Consulta partidos y compara estadísticas de forma rápida.</p></div></div>
     <div class="dashboard-overview" id="dashboardOverview" aria-live="polite"></div>
     <div class="quick-links" aria-label="Accesos rápidos"><button class="quick-link" type="button" onclick="switchToView('jornada')"><strong>Próximos partidos</strong><span>Consulta la jornada</span></button><button class="quick-link" type="button" onclick="document.querySelector('[data-view=stats]').click()"><strong>Estadísticas de equipos</strong><span>Compara mercados y tendencias</span></button></div>
-    <div class="card"><h2><span class="tag">Calendario</span> Próximos partidos</h2><p class="hint">Fechas del calendario cargado; pueden cambiar si el encuentro se reprograma.</p><div id="dashboardUpcoming"></div></div>
+    <div class="card"><h2><span class="tag">Calendario</span> Partidos por día</h2><div class="dashboard-day-nav" aria-label="Seleccionar día"><button id="dash-prev-day" class="btn ghost" type="button" onclick="changeDashboardDay(-1)" aria-label="Día anterior">&#8592;</button><div id="dash-day-label" aria-live="polite"></div><button id="dash-next-day" class="btn ghost" type="button" onclick="changeDashboardDay(1)" aria-label="Día siguiente">&#8594;</button></div><p class="hint">Fechas del calendario cargado; pueden cambiar si el encuentro se reprograma.</p><div id="dashboardUpcoming"></div></div>
     <div id="dashHero" hidden style="text-align:center; padding:24px 10px 20px;">
       <div style="font-family:'Space Grotesk'; font-weight:700; font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:#D8B4FE; margin-bottom:6px;">Panel del Tipster</div>
       <div id="dashHeroNum" style="font-family:'Space Grotesk'; font-weight:800; font-size:44px; line-height:1; background:linear-gradient(90deg,#C4B5FD,#F9A8D4); -webkit-background-clip:text; background-clip:text; color:transparent;">—</div>
@@ -4576,13 +4577,25 @@ function fixtureSchedule(f){
   const match=raw.match(/(?:^|\s)([01]?\d|2[0-3]):([0-5]\d)(?:\s|$)/),fromCalendar=match?match[1].padStart(2,'0')+':'+match[2]:null;
   return {date,time:stored||fromCalendar};
 }
+let dashboardDayOffset=0;
+function changeDashboardDay(delta){
+  if(!Number.isInteger(delta))return;
+  dashboardDayOffset=Math.max(0,Math.min(2,dashboardDayOffset+delta));
+  renderMatchOverview();
+}
+function dashboardDay(today,offset){
+  const date=new Date(today+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+offset);return date.toISOString().slice(0,10);
+}
 function renderMatchOverview(){
   const summary=document.getElementById('dashboardOverview'),upcoming=document.getElementById('dashboardUpcoming');if(!summary||!upcoming)return;
   const ligas=new Set(FIXTURES.map(f=>f.liga).filter(Boolean)),teamCount=TEAMS.length,logs=buildCombinedMatchLogs(),matchCount=Object.values(logs).reduce((n,a)=>n+a.length,0);
   summary.innerHTML=`<div class="dashboard-kpis"><div><strong>${ligas.size}</strong><span>Ligas con calendario</span></div><div><strong>${teamCount}</strong><span>Fichas de equipo</span></div><div><strong>${matchCount}</strong><span>Registros de partidos</span></div></div>`;
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Madrid',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-  const games=FIXTURES.map(f=>({f,...fixtureSchedule(f)})).filter(x=>x.date&&x.date>=today).sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'99:99').localeCompare(b.time||'99:99')||String(a.f.liga).localeCompare(String(b.f.liga))).slice(0,8);
-  upcoming.replaceChildren();if(!games.length){upcoming.textContent='No hay próximos partidos con fecha reconocible en los calendarios cargados.';return}
+  const selected=dashboardDay(today,dashboardDayOffset),dayLabel=['Hoy','Mañana','Pasado mañana'][dashboardDayOffset];
+  document.getElementById('dash-day-label').textContent=dayLabel+' · '+selected.split('-').reverse().join('/');
+  document.getElementById('dash-prev-day').disabled=dashboardDayOffset===0;document.getElementById('dash-next-day').disabled=dashboardDayOffset===2;
+  const games=FIXTURES.map(f=>({f,...fixtureSchedule(f)})).filter(x=>x.date===selected).sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99')||String(a.f.liga).localeCompare(String(b.f.liga)));
+  upcoming.replaceChildren();if(!games.length){upcoming.textContent='No hay partidos con fecha reconocible para este día en los calendarios cargados.';return}
   for(const {f,date,time} of games){const row=document.createElement('button');row.type='button';row.className='dashboard-fixture';const h=window.displayTeamName?.(f.local)||f.local,a=window.displayTeamName?.(f.visitante)||f.visitante;row.innerHTML=`<span>${escapeHtml(date.split('-').reverse().join('/'))} · ${time?escapeHtml(time)+' h':'Hora pendiente'} · ${escapeHtml(f.liga)} · Jornada ${escapeHtml(f.jornada)}</span><strong>${teamCrest(f.local,f.liga)} ${escapeHtml(h)} <small>vs</small> ${teamCrest(f.visitante,f.liga)} ${escapeHtml(a)}</strong><em>Ver estadísticas →</em>`;row.addEventListener('click',()=>{if(typeof window.openFixtureStats==='function')window.openFixtureStats(f.id);else switchToView('jornada')});upcoming.appendChild(row)}
 }
 function renderDashboard(){
@@ -4919,6 +4932,7 @@ boot();
 
 </body>
 </html>
+
 
 
 
