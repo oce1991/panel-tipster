@@ -176,6 +176,7 @@
   }
   .oddbtn.value{background:linear-gradient(90deg,#22C55E,#4ADE80); border-color:transparent; color:#052e12;}
 [hidden]{display:none !important;}
+.dashboard-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 15px}.dashboard-kpis>div{background:#2a3030;border:1px solid #445047;border-radius:12px;padding:16px}.dashboard-kpis strong,.dashboard-kpis span{display:block}.dashboard-kpis strong{color:#c8ff37;font-size:26px}.dashboard-kpis span{color:#d2d9d3;font-size:12px}.dashboard-fixture{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:#2a3030;border:1px solid #414c45;border-radius:10px;color:#f4f7f1;padding:12px;margin:8px 0;cursor:pointer}.dashboard-fixture span{color:#c0ccc2;font-size:12px;flex:1}.dashboard-fixture strong{flex:2;display:flex;align-items:center;gap:6px;justify-content:center}.dashboard-fixture small{color:#bdc7bd}.dashboard-fixture em{color:#c8ff37;font-size:12px;font-style:normal}@media(max-width:700px){.dashboard-kpis>div{padding:10px}.dashboard-kpis strong{font-size:21px}.dashboard-fixture{flex-wrap:wrap}.dashboard-fixture span{flex-basis:100%}.dashboard-fixture strong{justify-content:flex-start;flex:1 1 auto}}
 </style>
 <link rel="stylesheet" href="panel-redesign.css?v=20261126h">
 <style>.team-crest{width:26px;height:26px;object-fit:contain;vertical-align:middle;margin-right:7px;background:rgba(255,255,255,.08);border-radius:4px}</style>
@@ -221,7 +222,6 @@
 
 <nav class="tabs" id="tabs">
   <button data-view="dashboard" class="active"><span class="icon">📊</span>Panel</button>
-  <button data-view="teams"><span class="icon">⚽</span>Equipos</button>
   <button data-view="jornada"><span class="icon">📅</span>Jornada</button>
   <button data-view="standings"><span class="icon">🏆</span>Tabla</button>
   
@@ -233,7 +233,9 @@
   <!-- DASHBOARD -->
   <div class="view active" id="view-dashboard">
     <div class="dashboard-intro"><div><span class="eyebrow">Tu centro de análisis</span><h2>El fútbol, con más contexto.</h2><p>Consulta partidos y compara estadísticas de forma rápida.</p></div></div>
+    <div class="dashboard-overview" id="dashboardOverview" aria-live="polite"></div>
     <div class="quick-links" aria-label="Accesos rápidos"><button class="quick-link" type="button" onclick="switchToView('jornada')"><strong>Próximos partidos</strong><span>Consulta la jornada</span></button><button class="quick-link" type="button" onclick="document.querySelector('[data-view=stats]').click()"><strong>Estadísticas de equipos</strong><span>Compara mercados y tendencias</span></button></div>
+    <div class="card"><h2><span class="tag">Calendario</span> Próximos partidos</h2><p class="hint">Fechas del calendario cargado; pueden cambiar si el encuentro se reprograma.</p><div id="dashboardUpcoming"></div></div>
     <div id="dashHero" hidden style="text-align:center; padding:24px 10px 20px;">
       <div style="font-family:'Space Grotesk'; font-weight:700; font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:#D8B4FE; margin-bottom:6px;">Panel del Tipster</div>
       <div id="dashHeroNum" style="font-family:'Space Grotesk'; font-weight:800; font-size:44px; line-height:1; background:linear-gradient(90deg,#C4B5FD,#F9A8D4); -webkit-background-clip:text; background-clip:text; color:transparent;">—</div>
@@ -317,13 +319,7 @@
 
   <!-- TEAMS -->
   <div class="view" id="view-teams">
-    <div class="card collapsible collapsed">
-      <h2 onclick="toggleCard(this)"><span class="tag">Primera RFEF</span> Actualizar partidos desde CSV<span class="chevron">▾</span></h2>
-      <p class="hint">Sube el CSV original de FutPythonTrader del grupo y temporada actuales. Comprueba las diferencias antes de guardar. Los resultados sin coincidencia clara se omiten.</p>
-      <div class="grid2"><div><label for="rfef-group">Grupo</label><select id="rfef-group"><option value="1">Primera RFEF · Grupo I</option><option value="2">Primera RFEF · Grupo II</option></select></div><div><label for="rfef-file">Archivo CSV</label><input id="rfef-file" type="file" accept=".csv,text/csv"></div></div>
-      <button id="rfef-preview" class="btn">Analizar archivo</button> <button id="rfef-apply" class="btn amber" disabled>Guardar actualización</button>
-      <div id="rfef-review" class="result-box" style="display:block" aria-live="polite"></div>
-    </div>
+
 
     <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Todo en 1</span> Subir el Excel combinado de football-data.co.uk<span class="chevron">▾</span></h2>
@@ -642,7 +638,7 @@
   <div class="view" id="view-standings">
     <div class="card">
       <h2><span class="tag">Tabla</span> Clasificación por estadística</h2>
-      <p class="hint">Elige una liga y toca cualquier columna para ordenar por ella (vuelve a tocarla para invertir el orden). Solo cuenta la temporada 26/27 (incluidos los resultados metidos a mano) — sin mezclar con años anteriores. Se muestran los totales de la temporada y la media por partido, sin ningún ajuste del modelo.</p>
+      <p class="hint">Elige una liga y toca cualquier columna para ordenar por ella (vuelve a tocarla para invertir el orden). Los puntos se calculan a partir de los resultados guardados (3 por victoria y 1 por empate). «—» indica que faltan resultados. No incluyen sanciones ni correcciones oficiales; los empates se ordenan por diferencia de goles y goles a favor, que pueden no coincidir con el criterio de cada liga. Pulsa una columna para ordenar.</p>
       <label>Liga</label>
       <select id="st_liga" onchange="renderStandings()"></select>
       <div id="standingsDiag"></div>
@@ -720,6 +716,13 @@
 
   <!-- BANKROLL -->
   <div class="view" id="view-bankroll">
+    <div class="card collapsible collapsed">
+      <h2 onclick="toggleCard(this)"><span class="tag">Primera RFEF</span> Actualizar partidos desde CSV<span class="chevron">▾</span></h2>
+      <p class="hint">Sube el CSV original de FutPythonTrader del grupo y temporada actuales. Comprueba las diferencias antes de guardar. Los resultados sin coincidencia clara se omiten.</p>
+      <div class="grid2"><div><label for="rfef-group">Grupo</label><select id="rfef-group"><option value="1">Primera RFEF · Grupo I</option><option value="2">Primera RFEF · Grupo II</option></select></div><div><label for="rfef-file">Archivo CSV</label><input id="rfef-file" type="file" accept=".csv,text/csv"></div></div>
+      <button id="rfef-preview" class="btn">Analizar archivo</button> <button id="rfef-apply" class="btn amber" disabled>Guardar actualización</button>
+      <div id="rfef-review" class="result-box" style="display:block" aria-live="polite"></div>
+    </div>
     <div class="card">
       <h2><span class="tag">Acceso</span> Cuenta personal</h2>
       <p class="hint">Prepara tu acceso con un enlace enviado a tu correo. Mientras la protección de la base no esté activada, iniciar sesión no impide el acceso público.</p>
@@ -3357,7 +3360,11 @@ async function importFixtures(){
 }
 const STANDINGS_COLS = [
   {key:'name', label:'Equipo', sortable:false},
+  {key:'pts', label:'Pts', fmt:v=>v==null?'—':v.toFixed(0)},
   {key:'mp', label:'PJ', fmt:v=>v.toFixed(0)},
+  {key:'wins', label:'PG', fmt:v=>v==null?'—':v.toFixed(0)},
+  {key:'draws', label:'PE', fmt:v=>v==null?'—':v.toFixed(0)},
+  {key:'losses', label:'PP', fmt:v=>v==null?'—':v.toFixed(0)},
   {key:'gf', label:'GF', fmt:v=>v.toFixed(0)},
   {key:'gfAvg', label:'GF/P', fmt:v=>v.toFixed(2)},
   {key:'ga', label:'GC', fmt:v=>v.toFixed(0)},
@@ -3371,7 +3378,7 @@ const STANDINGS_COLS = [
   {key:'cra', label:'TC', fmt:v=>v.toFixed(0)},
   {key:'craAvg', label:'TC/P', fmt:v=>v.toFixed(2)},
 ];
-let STANDINGS_SORT = {key:'gf', dir:'desc'};
+let STANDINGS_SORT = {key:'pts', dir:'desc'};
 function isCurrentSeasonImport(imp){
   if(imp.temporada==='Manual') return true;
   const seasonCode = currentSeasonCode(); // ej. '2627'
@@ -3397,8 +3404,19 @@ function computeCurrentSeasonStandings(liga){
       a.cra += (g.home.cra||0)+(g.away.cra||0);
     });
   });
+  // Puntos calculados únicamente si el histórico cubre todos los partidos del equipo.
+  const names=Object.keys(acc), canonical=new Map();
+  for(const name of names){const n=normalizeTeamName(name);canonical.set(n,canonical.has(n)?null:name)}
+  const stats=Object.fromEntries(names.map(name=>[name,{n:0,wins:0,draws:0,losses:0,pts:0}])), games=new Map(), bad=new Set();
+  for(const imp of relevant) for(const m of imp.matchLog||[]){
+    if(!m || typeof m.h!=='string'||typeof m.a!=='string'||typeof m.d!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(m.d)||!Number.isInteger(m.hg)||!Number.isInteger(m.ag)||m.hg<0||m.ag<0) continue;
+    const h=canonical.get(normalizeTeamName(m.h)),a=canonical.get(normalizeTeamName(m.a));if(!h||!a||h===a)continue;
+    const code=currentSeasonCode(),first='20'+code.slice(0,2)+'-07-01',last='20'+code.slice(2)+'-07-01';if(m.d<first||m.d>=last)continue;
+    const key=[m.d,h,a].join('|'),old=games.get(key);if(old&&(old.hg!==m.hg||old.ag!==m.ag))bad.add(key);else if(!old)games.set(key,{h,a,hg:m.hg,ag:m.ag});
+  }
+  for(const [key,g] of games){if(bad.has(key))continue;const h=stats[g.h],a=stats[g.a];h.n++;a.n++;if(g.hg>g.ag){h.wins++;h.pts+=3;a.losses++}else if(g.hg<g.ag){a.wins++;a.pts+=3;h.losses++}else{h.draws++;a.draws++;h.pts++;a.pts++}}
   return Object.entries(acc).map(([name,a])=>({
-    name, mp:a.mp,
+    name, mp:a.mp, pts:stats[name].n===a.mp?stats[name].pts:null,wins:stats[name].n===a.mp?stats[name].wins:null,draws:stats[name].n===a.mp?stats[name].draws:null,losses:stats[name].n===a.mp?stats[name].losses:null,
     gf:a.gf, gfAvg: a.mp?a.gf/a.mp:0,
     ga:a.ga, gaAvg: a.mp?a.ga/a.mp:0,
     cf:a.cf, cfAvg: a.mp?a.cf/a.mp:0,
@@ -4549,8 +4567,19 @@ function renderLastUpdateInfo(){
   const stale = diffMin > 60*36; // mas de 36h sin actualizar ninguna liga -> probable fallo del Action diario
   el.innerHTML = `Datos actualizados ${rel} (${then.toLocaleDateString('es-ES')} ${then.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})})${stale ? ' <span style="color:#FB7185;">⚠ revisa el Action de GitHub</span>' : ''}`;
 }
+function renderMatchOverview(){
+  const summary=document.getElementById('dashboardOverview'),upcoming=document.getElementById('dashboardUpcoming');if(!summary||!upcoming)return;
+  const ligas=new Set(FIXTURES.map(f=>f.liga).filter(Boolean)),teamCount=TEAMS.length,logs=buildCombinedMatchLogs(),matchCount=Object.values(logs).reduce((n,a)=>n+a.length,0);
+  summary.innerHTML=`<div class="dashboard-kpis"><div><strong>${ligas.size}</strong><span>Ligas con calendario</span></div><div><strong>${teamCount}</strong><span>Fichas de equipo</span></div><div><strong>${matchCount}</strong><span>Registros de partidos</span></div></div>`;
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Madrid',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const readDate=f=>{const meta=MATCH_META[matchMetaKey(f)]?.fecha;if(meta)return meta;const raw=String(f.fecha||'').trim();if(/^\d{4}-\d{2}-\d{2}/.test(raw))return raw.slice(0,10);const m=raw.match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/);return m?m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'):null};
+  const games=FIXTURES.map(f=>({f,date:readDate(f)})).filter(x=>x.date&&x.date>=today).sort((a,b)=>a.date.localeCompare(b.date)||String(a.f.liga).localeCompare(String(b.f.liga))).slice(0,8);
+  upcoming.replaceChildren();if(!games.length){upcoming.textContent='No hay próximos partidos con fecha reconocible en los calendarios cargados.';return}
+  for(const {f,date} of games){const row=document.createElement('button');row.type='button';row.className='dashboard-fixture';const h=window.displayTeamName?.(f.local)||f.local,a=window.displayTeamName?.(f.visitante)||f.visitante;row.innerHTML=`<span>${escapeHtml(date.split('-').reverse().join('/'))} · ${escapeHtml(f.liga)} · Jornada ${escapeHtml(f.jornada)}</span><strong>${teamCrest(f.local,f.liga)} ${escapeHtml(h)} <small>vs</small> ${teamCrest(f.visitante,f.liga)} ${escapeHtml(a)}</strong><em>Ver estadísticas →</em>`;row.addEventListener('click',()=>{if(typeof window.openFixtureStats==='function')window.openFixtureStats(f.id);else switchToView('jornada')});upcoming.appendChild(row)}
+}
 function renderDashboard(){
   renderLastUpdateInfo();
+  renderMatchOverview();
   renderMyPicks();
   const settled = BETS.filter(b=>b.status==='win'||b.status==='loss');
   const totalStaked = settled.reduce((s,b)=>s+b.stake,0);
@@ -4882,6 +4911,7 @@ boot();
 
 </body>
 </html>
+
 
 
 
