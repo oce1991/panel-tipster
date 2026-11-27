@@ -15,9 +15,9 @@ const style=d.createElement('style');style.textContent=`
 const area=d.createElement('div');area.className='card';area.innerHTML='<h2>Analiza un partido de la jornada</h2><p class="hint">Selecciona una liga y una jornada para abrir la ficha con sus datos disponibles. Los partidos proceden de tus calendarios cargados.</p><div class="grid2"><div><label for="sj-league">Liga</label><select id="sj-league"></select></div><div><label for="sj-round">Jornada</label><select id="sj-round"></select></div><div><label for="sj-match">Partido</label><select id="sj-match"></select></div><div><label for="sj-window">Últimos partidos por condición</label><select id="sj-window"><option>5</option><option selected>10</option><option>20</option><option value="50">Hasta 50</option></select></div><div><label for="sj-venue">Condición de los partidos</label><select id="sj-venue"><option value="match">Local en casa y visitante fuera</option><option value="all">Todos los partidos</option><option value="home">Ambos equipos en casa</option><option value="away">Ambos equipos fuera</option></select></div><div><label for="sj-market">Mercado</label><select id="sj-market"><option value="corners">Córneres</option><option value="goals">Goles</option><option value="btts">Ambos marcan</option><option value="shots">Tiros</option><option value="target">Tiros a puerta</option><option value="fouls">Faltas</option><option value="cards">Tarjetas registradas</option></select></div><div id="sj-side-wrap"><label for="sj-side">Qué quieres analizar</label><select id="sj-side"><option value="total">Total del partido</option><option value="for">A favor del equipo</option><option value="against">En contra del equipo</option></select></div><div id="sj-line-wrap"><label for="sj-line">Línea: más de</label><input id="sj-line" type="number" min="0" max="100" step="0.5" value="9.5"></div></div><p class="hint" id="sj-status" aria-live="polite"></p><div id="sj-result"></div><p class="hint">Son frecuencias históricas, no probabilidades pronosticadas. Las tarjetas corresponden a las registradas en la fuente, no a puntos de una casa. Los datos ausentes no cuentan como cero.</p>';view.insertBefore(area,view.firstChild);
 const show=n=>root.displayTeamName?.(n)||n;function add(sel,value,text){let o=d.createElement('option');o.value=value;o.textContent=text;sel.append(o)}
 function fixtureId(f){return String(f.id)}
-function selectLeague(value){const s=$('sj-league'),old=value||s.value;s.replaceChildren();let ligas=[...new Set(FIXTURES.map(f=>f.liga).filter(Boolean))].sort((a,b)=>a.localeCompare(b));ligas.forEach(l=>add(s,l,l));if(ligas.includes(old))s.value=old;selectRound()}
-function selectRound(value){const league=$('sj-league').value,s=$('sj-round'),old=value||s.value;s.replaceChildren();let rounds=[...new Set(FIXTURES.filter(f=>f.liga===league).map(f=>String(f.jornada)))].sort((a,b)=>(Number(a)||0)-(Number(b)||0)||a.localeCompare(b));rounds.forEach(j=>add(s,j,'Jornada '+j));if(rounds.includes(old))s.value=old;else{const recent=typeof suggestCurrentJornada==='function'?suggestCurrentJornada(FIXTURES.filter(f=>f.liga===league),rounds):null;if(recent&&rounds.includes(String(recent)))s.value=String(recent)}selectMatch()}
-function selectMatch(value){const l=$('sj-league').value,j=$('sj-round').value,s=$('sj-match'),old=value||s.value;s.replaceChildren();let list=FIXTURES.filter(f=>f.liga===l&&String(f.jornada)===j);list.forEach(f=>{const sc=fixtureSchedule(f);add(s,fixtureId(f),show(f.local)+' — '+show(f.visitante)+(sc.date?' · '+sc.date.split('-').reverse().join('/'): '')+' · '+(sc.time?sc.time+' h':'Hora pendiente'))});if(list.some(f=>fixtureId(f)===String(old)))s.value=String(old);render()}
+function selectLeague(value,defer=false){const s=$('sj-league'),old=value||s.value;s.replaceChildren();let ligas=[...new Set(FIXTURES.map(f=>f.liga).filter(Boolean))].sort((a,b)=>a.localeCompare(b));ligas.forEach(l=>add(s,l,l));if(ligas.includes(old))s.value=old;if(!defer)selectRound()}
+function selectRound(value,defer=false){const league=$('sj-league').value,s=$('sj-round'),old=value||s.value;s.replaceChildren();let rounds=[...new Set(FIXTURES.filter(f=>f.liga===league).map(f=>String(f.jornada)))].sort((a,b)=>(Number(a)||0)-(Number(b)||0)||a.localeCompare(b));rounds.forEach(j=>add(s,j,'Jornada '+j));if(rounds.includes(old))s.value=old;else{const recent=typeof suggestCurrentJornada==='function'?suggestCurrentJornada(FIXTURES.filter(f=>f.liga===league),rounds):null;if(recent&&rounds.includes(String(recent)))s.value=String(recent)}if(!defer)selectMatch()}
+function selectMatch(value,defer=false){const l=$('sj-league').value,j=$('sj-round').value,s=$('sj-match'),old=value||s.value;s.replaceChildren();let list=FIXTURES.filter(f=>f.liga===l&&String(f.jornada)===j);list.forEach(f=>{const sc=fixtureSchedule(f);add(s,fixtureId(f),show(f.local)+' — '+show(f.visitante)+(sc.date?' · '+sc.date.split('-').reverse().join('/'): '')+' · '+(sc.time?sc.time+' h':'Hora pendiente'))});if(list.some(f=>fixtureId(f)===String(old)))s.value=String(old);if(!defer)render()}
 function resolve(name,league){let found=findTeamInLiga(name,league);return found&&typeof found.name==='string'?found.name:null}
 function makeNode(tag,text,cls){let x=d.createElement(tag);if(text!==undefined)x.textContent=text;if(cls)x.className=cls;return x}
 function render(){
@@ -26,17 +26,17 @@ function render(){
  $('sj-side-wrap').style.display=isBtts?'none':'';$('sj-line-wrap').style.display=isBtts?'none':'';
  if(!fixture){status.textContent='No hay partidos en esta jornada. Importa un calendario para consultarlos.';return}
  if(!isBtts&&(raw===''||!Number.isFinite(line)||line<0||line>100)){status.textContent='Introduce una línea entre 0 y 100.';return}
+ out.append(makeNode('h3',show(fixture.local)+' vs '+show(fixture.visitante),'sj-match-title'));
  let home=resolve(fixture.local,fixture.liga),away=resolve(fixture.visitante,fixture.liga);
- if(!home||!away||home===away){status.textContent='No se han podido relacionar ambos equipos con sus estadísticas. Revisa sus equivalencias y los datos cargados.';return}
+ if(!home||!away||home===away){status.textContent='Partido seleccionado, pero faltan datos o equivalencias para uno o ambos equipos. Revisa los datos cargados de esta liga.';return}
  let schedule=fixtureSchedule(fixture),date=schedule.date;
  let today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Madrid',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  let cutoff=date&&date<today?date:today,rows=buildCombinedMatchLogs()[fixture.liga]||[];
  let label=isBtts?'Ambos marcan':markets[market].title+' · '+({total:'total del partido',for:'a favor',against:'en contra'})[side]+' · más de '+line;
  status.textContent=(date?'Partido: '+date.split('-').reverse().join('/')+' · '+(schedule.time?schedule.time+' h':'hora pendiente')+' · ':'')+'Histórico anterior al '+cutoff+' · '+label+'.';
- out.append(makeNode('h3',show(fixture.local)+' vs '+show(fixture.visitante),'sj-match-title'));
  let overview=makeNode('div',undefined,'sj-grid');
  let grid=makeNode('div',undefined,'sj-grid');
- for(const [name,venue,venueLabel] of [[home,'home','Local en casa'],[away,'away','Visitante fuera']]){
+ for(let [name,venue,venueLabel] of [[home,'home','Local en casa'],[away,'away','Visitante fuera']]){
   const chosenVenue=$('sj-venue').value==='match'?venue:$('sj-venue').value;
   venueLabel=chosenVenue==='all'?'Todos los partidos':chosenVenue==='home'?'Partidos en casa':'Partidos fuera';
   let v=calculate(rows,name,chosenVenue,market,line,n,cutoff,side),box=makeNode('section',undefined,'sj-team-card');
@@ -58,8 +58,18 @@ function render(){
  out.append(grid)
 }
 $('sj-league').addEventListener('change',()=>selectRound());$('sj-round').addEventListener('change',()=>selectMatch());$('sj-match').addEventListener('change',render);$('sj-window').addEventListener('change',render);$('sj-venue').addEventListener('change',render);$('sj-market').addEventListener('change',()=>{let market=$('sj-market').value;if(market!=='btts')$('sj-line').value=$('sj-side').value==='total'?({corners:9.5,goals:2.5,shots:19.5,target:7.5,fouls:24.5,cards:4.5})[market]:markets[market].line;render()});$('sj-side').addEventListener('change',()=>{let market=$('sj-market').value;if(market!=='btts')$('sj-line').value=$('sj-side').value==='total'?({corners:9.5,goals:2.5,shots:19.5,target:7.5,fouls:24.5,cards:4.5})[market]:markets[market].line;render()});$('sj-line').addEventListener('input',render);d.querySelector('nav.tabs').addEventListener('click',e=>{if(e.target.closest('button')?.dataset.view==='stats')selectLeague()});
-root.openFixtureStats=function(id){const f=FIXTURES.find(x=>fixtureId(x)===String(id));if(!f)return;switchToView('stats');selectLeague(f.liga);selectRound(String(f.jornada));selectMatch(fixtureId(f));area.scrollIntoView({behavior:'smooth',block:'start'})};
+root.openFixtureStats=function(id){
+ const f=FIXTURES.find(x=>fixtureId(x)===String(id));if(!f)return;
+ switchToView('stats');
+ selectLeague(f.liga,true);selectRound(String(f.jornada),true);selectMatch(fixtureId(f),true);
+ if($('sj-league').value!==f.liga || $('sj-round').value!==String(f.jornada) || $('sj-match').value!==fixtureId(f)){
+  $('sj-result').replaceChildren();$('sj-result').append(makeNode('h3',show(f.local)+' vs '+show(f.visitante),'sj-match-title'));
+  $('sj-status').textContent='No se ha podido abrir este encuentro. Revisa el calendario cargado.';
+ }else render();
+ area.scrollIntoView({behavior:'smooth',block:'start'});
+};
 })(typeof window!=='undefined'?window:globalThis);
+
 
 
 
