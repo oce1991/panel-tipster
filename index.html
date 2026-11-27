@@ -175,6 +175,7 @@
     padding:7px 14px; display:inline-block;
   }
   .oddbtn.value{background:linear-gradient(90deg,#22C55E,#4ADE80); border-color:transparent; color:#052e12;}
+[hidden]{display:none !important;}
 </style>
 <link rel="stylesheet" href="panel-redesign.css?v=20261126h">
 <style>.team-crest{width:26px;height:26px;object-fit:contain;vertical-align:middle;margin-right:7px;background:rgba(255,255,255,.08);border-radius:4px}</style>
@@ -223,17 +224,17 @@
   <button data-view="teams"><span class="icon">⚽</span>Equipos</button>
   <button data-view="jornada"><span class="icon">📅</span>Jornada</button>
   <button data-view="standings"><span class="icon">🏆</span>Tabla</button>
-  <button data-view="bets"><span class="icon">💰</span>Apuestas</button>
-  <button data-view="bankroll"><span class="icon">🏦</span>Banca</button>
+  
+  <button data-view="bankroll"><span class="icon">⚙️</span>Ajustes</button>
 </nav>
 
 <main>
 
   <!-- DASHBOARD -->
   <div class="view active" id="view-dashboard">
-    <div class="dashboard-intro"><div><span class="eyebrow">Tu centro de análisis</span><h2>El fútbol, con más contexto.</h2><p>Consulta partidos, compara estadísticas y revisa tus apuestas desde un solo lugar.</p></div></div>
-    <div class="quick-links" aria-label="Accesos rápidos"><button class="quick-link" type="button" onclick="switchToView('jornada')"><strong>Próximos partidos</strong><span>Consulta la jornada</span></button><button class="quick-link" type="button" onclick="document.querySelector('[data-view=stats]').click()"><strong>Estadísticas de equipos</strong><span>Compara mercados y tendencias</span></button><button class="quick-link" type="button" onclick="switchToView('bets')"><strong>Mis apuestas</strong><span>Revisa tu seguimiento</span></button></div>
-    <div id="dashHero" style="text-align:center; padding:24px 10px 20px;">
+    <div class="dashboard-intro"><div><span class="eyebrow">Tu centro de análisis</span><h2>El fútbol, con más contexto.</h2><p>Consulta partidos y compara estadísticas de forma rápida.</p></div></div>
+    <div class="quick-links" aria-label="Accesos rápidos"><button class="quick-link" type="button" onclick="switchToView('jornada')"><strong>Próximos partidos</strong><span>Consulta la jornada</span></button><button class="quick-link" type="button" onclick="document.querySelector('[data-view=stats]').click()"><strong>Estadísticas de equipos</strong><span>Compara mercados y tendencias</span></button></div>
+    <div id="dashHero" hidden style="text-align:center; padding:24px 10px 20px;">
       <div style="font-family:'Space Grotesk'; font-weight:700; font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:#D8B4FE; margin-bottom:6px;">Panel del Tipster</div>
       <div id="dashHeroNum" style="font-family:'Space Grotesk'; font-weight:800; font-size:44px; line-height:1; background:linear-gradient(90deg,#C4B5FD,#F9A8D4); -webkit-background-clip:text; background-clip:text; color:transparent;">—</div>
       <div style="font-size:11px; color:var(--header-muted); text-transform:uppercase; letter-spacing:0.08em; margin-top:6px;">Banca actual</div>
@@ -243,35 +244,35 @@
     <div style="text-align:center; margin-bottom:14px;">
       <a href="https://github.com/oce1991/panel-tipster/actions/workflows/actualizar-datos.yml" target="_blank" rel="noopener" class="btn ghost" style="display:inline-block; text-decoration:none; font-size:11px;">🔄 Ir a actualizar ahora (GitHub → Run workflow)</a>
     </div>
-    <div class="statgrid" id="dashStats"></div>
-    <div class="card">
+    <div class="statgrid" id="dashStats" hidden></div>
+    <div class="card" hidden>
       <h2><span class="tag">Pendientes</span> Mis apuestas<span id="myPicksCount" style="float:right; font-family:'JetBrains Mono'; font-size:12px; color:var(--header-muted);"></span></h2>
       <p class="hint">Las apuestas que ya has registrado y siguen pendientes de resultado, juntas aquí sin tener que ir a la pestaña Apuestas.</p>
       <div id="myPicksList"></div>
       <div class="empty" id="myPicksEmpty" style="display:none;">No tienes ninguna apuesta pendiente ahora mismo.</div>
     </div>
-    <div class="card collapsible collapsed">
+    <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Evolución</span> Banca acumulada<span class="chevron">▾</span></h2>
       <canvas id="bankChart" height="140"></canvas>
     </div>
-    <div class="card collapsible collapsed">
+    <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Evolución</span> CLV por apuesta<span class="chevron">▾</span></h2>
       <p class="hint">Cada punto es una apuesta con cuota de cierre registrada. Por encima de 0% significa que conseguiste mejor cuota que el cierre del mercado — la señal más fiable de que tienes ventaja real, más que el resultado de un partido suelto.</p>
       <canvas id="clvChart" height="140"></canvas>
       <div class="empty" id="clvEmpty" style="display:none;">Aún no tienes apuestas con cuota de cierre registrada.</div>
     </div>
-    <div class="card collapsible collapsed">
+    <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Detalle</span> Rendimiento por mercado<span class="chevron">▾</span></h2>
       <table id="marketTable"><thead><tr><th>Mercado</th><th>Apuestas</th><th>Aciertos</th><th>ROI</th><th>CLV medio</th></tr></thead><tbody></tbody></table>
     </div>
-    <div class="card collapsible collapsed">
+    <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Calibración</span> ¿Acierta el modelo lo que dice?<span class="chevron">▾</span></h2>
       <p class="hint">Compara la probabilidad que calculó el modelo con lo que realmente pasó, agrupado en tramos de 10%. Si el modelo dice "60-70%" y de verdad acierta ~6-7 de cada 10 veces en ese tramo, está bien calibrado. Necesita bastantes apuestas resueltas para ser fiable — con pocas, ignóralo.</p>
       <canvas id="calibrationChart" height="160"></canvas>
       <table id="calibrationTable" style="margin-top:10px;"><thead><tr><th>Tramo predicho</th><th>Apuestas</th><th>Media predicha</th><th>Acierto real</th></tr></thead><tbody></tbody></table>
       <div class="empty" id="calibrationEmpty" style="display:none;">Aún no hay suficientes apuestas resueltas con probabilidad de modelo guardada.</div>
     </div>
-    <div class="card collapsible collapsed">
+    <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Backtest</span> Validación con cuotas históricas reales<span class="chevron">▾</span></h2>
       <p class="hint"><strong>Aviso importante:</strong> football-data.co.uk solo tiene cuotas históricas de <strong>goles</strong> (1X2 y Over/Under 2.5) — no de córners ni tarjetas, esos mercados nunca se han publicado en abierto. Así que esto valida solo el modelo de goles.</p>
       <p class="hint">Para que sea honesto, cada partido se predice usando <strong>solo los datos anteriores a esa fecha</strong> (nunca datos del futuro) — es decir, es una simulación real de "qué habría dicho el modelo en su momento", no una comparación con ventaja injusta. Usa un Poisson simple (sin Dixon-Coles, forma reciente ni shrinkage, para no sobrecomplicar el cálculo repetido partido a partido) y solo empieza a apostar cuando cada equipo ya tiene 6 partidos previos en su lado — con menos, no hay datos fiables.</p>
@@ -290,7 +291,7 @@
       <button class="btn ghost" onclick="renderGoalCandidates()" style="margin-top:10px;">Comparar forma reciente y fuerza de equipos (3 temporadas)</button>
       <div class="result-box" id="goalCandidatesResult" style="display:none;"></div>
     </div>
-    <div class="card collapsible collapsed">
+    <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Backtest</span> Calibración del modelo de córners<span class="chevron">▾</span></h2>
       <p class="hint">Aquí no hay cuotas históricas (nunca se han publicado en abierto), así que no calculamos ROI — pero sí podemos comprobar si tu modelo de córners está bien calibrado: cuando dice "60% de Over 9.5", ¿pasa el 60% de las veces de verdad? Igual que el otro backtest, cada partido se predice solo con datos anteriores a esa fecha.</p>
       <p class="hint">Incluye el ajuste por contexto de gol (igual que en Jornada/Partido), pero no el de tiros — ese dato no se guarda todavía en el histórico partido a partido, tendrías que reimportar de nuevo para activarlo aquí si te interesa.</p>
@@ -303,7 +304,7 @@
       <button class="btn ghost" onclick="renderCornersCandidates()" style="margin-top:10px;">Comparar dispersión de córners (3 temporadas)</button>
       <div class="result-box" id="cornersCandidatesResult" style="display:none;"></div>
     </div>
-    <div class="card collapsible collapsed">
+    <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Backtest</span> Calibración del modelo de Ambos marcan<span class="chevron">▾</span></h2>
       <p class="hint">Igual que el backtest de córners: sin cuotas históricas, comprueba si el modelo está bien calibrado — cuando dice "65% de que ambos marcan", ¿pasa el 65% de las veces de verdad? Cada partido se predice solo con datos anteriores a esa fecha (walk-forward). Aquí se usa Poisson simple, sin el ajuste Dixon-Coles que sí aplica Jornada/Partido — es una simplificación, así que trata el resultado como orientativo, no como el número exacto que verás en el análisis real.</p>
       <div class="grid2">
@@ -324,7 +325,7 @@
       <div id="rfef-review" class="result-box" style="display:block" aria-live="polite"></div>
     </div>
 
-    <div class="card collapsible collapsed">
+    <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Todo en 1</span> Subir el Excel combinado de football-data.co.uk<span class="chevron">▾</span></h2>
       <p class="hint">Football-data.co.uk publica un Excel con todas las ligas juntas, cada una en su propia hoja (identificada por su código, ej. "SP1" para Primera). Súbelo aquí y la app reparte cada hoja a la liga correspondiente automáticamente — sin depender de ningún servicio externo que pueda fallar.</p>
       <div class="grid2">
@@ -336,7 +337,7 @@
       <button class="btn amber" onclick="importCombinedExcel()">Repartir e importar todas las hojas</button>
       <div class="result-box" id="comboImportResult" style="display:none;"></div>
     </div>
-    <div class="card collapsible collapsed">
+    <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Auto</span> Importar temporada (CSV)<span class="chevron">▾</span></h2>
       <p class="hint">Sube el CSV de una temporada y calculamos las medias de córners y goles por equipo, casa/fuera, automáticamente. Se fusiona con lo que ya tengas guardado (media ponderada por partidos).</p>
       <p class="hint"><strong>Dónde conseguirlo:</strong> Primera/Segunda → football-data.co.uk (columnas HomeTeam, AwayTeam, FTHG, FTAG, HC, AC). 1ª RFEF Grupo 1 → footystats.org/es/spain/primera-division-rfef-group-1 (botón "Descargar datos en CSV"). Cualquier CSV con esas columnas (en inglés o español) sirve.</p>
@@ -357,7 +358,7 @@
       <table id="importsTable"><thead><tr><th>Liga</th><th>Temporada</th><th>Peso</th><th>Partidos</th><th></th></tr></thead><tbody></tbody></table>
       <div class="empty" id="importsEmpty" style="display:none;">Todavía no has importado ninguna temporada.</div>
     </div>
-    <div class="card collapsible collapsed">
+    <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Masivo</span> Importar fichas de equipo (Excel/CSV)<span class="chevron">▾</span></h2>
       <p class="hint">Para cargar de golpe las medias de córners y goles de todos los equipos de una liga (por ejemplo, transcritas de otra web). Columnas esperadas en la primera fila: <strong>Equipo, CF Casa, CA Casa, CF Fuera, CA Fuera, GF Casa, GA Casa, GF Fuera, GA Fuera</strong> (y opcionalmente <strong>TC Casa, TA Casa, TC Fuera, TA Fuera</strong> para tarjetas) — si el archivo trae una columna "Liga" por fila, se usa esa; si no, se aplica la liga que elijas abajo a todas las filas. Si un equipo ya existe con ese nombre en esa liga, se sustituye su ficha entera — no se promedia con lo anterior.</p>
       <div class="grid2">
@@ -369,7 +370,7 @@
       <button class="btn amber" onclick="importBulkTeams()">Importar fichas</button>
       <div class="result-box" id="bulkImportResult" style="display:none;"></div>
     </div>
-    <div class="card collapsible collapsed">
+    <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Nuevo</span> Ficha de equipo (manual)<span class="chevron">▾</span></h2>
       <p class="hint">Introduce medias por partido (no acumulados). Estas fichas alimentan directamente las calculadoras de Corners y Goles.</p>
       <div class="grid2">
@@ -422,7 +423,7 @@
       <div class="empty" id="teamsEmpty" style="display:none;">Aún no has añadido ningún equipo. Empieza por el que juegue este fin de semana.</div>
     </div>
 
-    <div class="card collapsible collapsed">
+    <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Ascensos/Descensos</span> Promocionar equipo entre ligas<span class="chevron">▾</span></h2>
       <p class="hint">Para un recién ascendido o descendido: coge sus datos de su liga anterior y mézclalos con la media de la liga nueva (regresión a la media), porque normalmente no rinde igual en la nueva categoría.</p>
       <div class="grid3">
@@ -437,7 +438,7 @@
       <div class="result-box" id="promoResult" style="display:none;"></div>
     </div>
 
-    <div class="card collapsible collapsed">
+    <div class="card collapsible collapsed" hidden>
       <h2 onclick="toggleCard(this)"><span class="tag">Peso</span> Ajustar peso de temporadas importadas<span class="chevron">▾</span></h2>
       <p class="hint">El modelo mezcla todas las temporadas que tengas cargadas de cada liga, ponderadas por este número — no solo por cuántos partidos lleva cada una. Al principio de temporada, con pocos partidos jugados del año actual, las temporadas viejas pueden pesar más de lo que deberían aunque bajes su peso a un número pequeño, simplemente porque tienen muchos más partidos. Sube el peso de la temporada actual y/o baja el de las antiguas para corregirlo.</p>
       <label>Liga</label>
@@ -457,7 +458,7 @@
   </div>
 
   <!-- MATCH ANALYSIS (CORNERS + GOALS UNIFIED) -->
-  <div class="view" id="view-corners">
+  <div class="view" id="view-corners" hidden>
     <button class="btn" onclick="switchToView('jornada')" style="margin-bottom:14px;">← Volver a Jornada</button>
     <div class="card">
       <h2><span class="tag">Partido</span> Selecciona equipos</h2>
@@ -593,7 +594,7 @@
 
     <div class="card">
       <h2><span class="tag">Próxima</span> Jornada a analizar</h2>
-      <p class="hint">Elige una liga concreta, o "Todas las ligas" para ver de golpe todos los partidos de ese número de jornada en cualquier liga que tengas cargada. Toca un partido para marcarlo/desmarcarlo como pick (se identifica con una estrella), o "Ver →" para entrar en su análisis completo (córners, goles, tarjetas, hándicap, historial directo...). Los partidos no se resaltan automáticamente; puedes marcar los que te interesen. Cuando hay cuota real disponible (ligas grandes, mercado de goles/1X2), se muestra debajo con su EV — la trae el sistema de alertas de Telegram una vez al día, no se actualiza al momento.</p>
+      <p class="hint">Elige una liga concreta, o "Todas las ligas" para ver de golpe todos los partidos de ese número de jornada en cualquier liga que tengas cargada. Toca «Estadísticas» para analizar los datos disponibles de cada partido. Puedes marcar los encuentros que te interesen.</p>
       <div class="grid2">
         <div><label>Liga</label><select id="jr_liga" onchange="refreshJornadaSelect()"></select></div>
         <div><label>Jornada</label><select id="jr_jornada" onchange="renderJornada()"></select></div>
@@ -656,7 +657,7 @@
   </div>
 
   <!-- BETS LOG -->
-  <div class="view" id="view-bets">
+  <div class="view" id="view-bets" hidden>
     <div class="card">
       <h2><span class="tag">Registro</span> Nueva apuesta</h2>
       <div class="grid3">
@@ -742,7 +743,7 @@
       <hr class="divider">
       <button class="btn ghost" style="color:var(--pitch); border-color:var(--pitch);" onclick="disconnectSupabase()">Cambiar de base de datos</button>
     </div>
-    <div class="card">
+    <div class="card" hidden>
       <h2><span class="tag">Config</span> Banca inicial</h2>
       <div class="grid3">
         <div><label>Banca inicial (€)</label><input id="bk_initial" type="number" step="10"></div>
@@ -754,7 +755,7 @@
       <p class="hint">Por debajo de este EV, el modelo lo trata como ruido estadístico, no como ventaja real — se usa para colorear los partidos de la Jornada.</p>
       <button class="btn" onclick="saveBankrollConfig()">Guardar</button>
     </div>
-    <div class="card">
+    <div class="card" hidden>
       <h2><span class="tag">Calculadora</span> Stake por Kelly</h2>
       <div class="grid3">
         <div><label>Probabilidad estimada (%)</label><input id="k_prob" type="number" step="1" placeholder="55"></div>
@@ -4072,8 +4073,6 @@ function renderJornada(){
       </div>
       <div class="jornada-acciones">
         <button class="btn detail-btn" onclick="event.stopPropagation(); openFixtureStats(&quot;${fx.id}&quot;)" style="flex-shrink:0; padding:8px 12px; font-size:11px;">Estadísticas</button>
-        ${!sinDatos ? `<button class="btn detail-btn" onclick="event.stopPropagation(); openMatchDetail('${fx.id}')" style="flex-shrink:0; padding:8px 12px; font-size:11px; white-space:nowrap;">Ver →</button>` : ''}
-        ${!sinDatos ? `<button class="btn detail-btn" onclick="event.stopPropagation(); prepareJornadaSelection('${fx.id}', '${goalFilter==='none'?'btts':goalFilter}')">Preparar selección</button>` : ''}
         ${resultToggleBtn}
         ${metaToggleBtn}
       </div>
@@ -4883,6 +4882,7 @@ boot();
 
 </body>
 </html>
+
 
 
 
